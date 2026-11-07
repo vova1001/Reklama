@@ -1,0 +1,235 @@
+<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=1440">
+<title>Охват — реклама у авторов видео с оплатой за результат</title>
+<link rel="stylesheet" href="fonts/inter/inter.css"><style>
+:root{--bg:#F3F2EE;--card:#FAF9F6;--dark:#1B1B1A;--dark-card:#262624;--ink:#1B1B1A;--on-dark:#EDECE8;--gray:#6F6E69;--gray-dark:#9A9994;--emerald:#0F7553;
+ --col:76px;--gut:24px;--wrap:1176px;--gap:144px;--head:64px;--line:rgba(27,27,26,0.1);--line-dark:rgba(237,236,232,0.1)}
+*{box-sizing:border-box;margin:0;padding:0}
+body{width:1440px;font-family:'Inter',system-ui,sans-serif;font-optical-sizing:auto;font-size:18px;line-height:1.45;letter-spacing:-.01em;color:var(--ink);background:var(--bg);-webkit-font-smoothing:antialiased;text-rendering:geometricPrecision}
+.w{width:var(--wrap);margin:0 auto;position:relative}
+.g12{display:grid;grid-template-columns:repeat(12,var(--col));column-gap:var(--gut)}
+a{color:inherit;text-decoration:none}
+ul{list-style:none}
+.ic{flex:none;display:block}
+h1,h2{font-weight:650}
+h2{font-size:60px;line-height:1.03;letter-spacing:-.04em}
+h3{font-weight:600;letter-spacing:-.02em}
+.lead{font-size:20px;line-height:1.45;color:var(--gray);margin-top:20px}
+.on-dark .lead{color:var(--gray-dark)}
+.blk+.blk{margin-top:var(--gap)}
+.hd+*{margin-top:var(--head)}
+
+/* зоны: светлая и тёмная, лист со скруглением наезжает на предыдущую */
+.zone{padding:var(--gap) 0 calc(var(--gap) + 44px)}
+.sheet{border-radius:44px 44px 0 0;margin-top:-44px;position:relative;z-index:1}
+.light{background:var(--bg)}
+.on-dark{background:var(--dark);color:var(--on-dark)}
+
+/* поверхности: одна карточка на светлом, одна на тёмном; обводка 1px */
+.cd{background:var(--card);box-shadow:inset 0 0 0 1px var(--line)}
+.on-dark .cd{background:var(--dark-card);box-shadow:inset 0 0 0 1px var(--line-dark)}
+.ring{border-radius:50%;display:flex;align-items:center;justify-content:center;flex:none;box-shadow:inset 0 0 0 1px var(--line)}
+.on-dark .ring{box-shadow:inset 0 0 0 1px rgba(237,236,232,0.16)}
+
+/* кнопки-пилюли */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;height:52px;padding:0 26px;border-radius:999px;font-size:18px;font-weight:500;letter-spacing:-.01em;white-space:nowrap}
+.b-l{background:var(--bg);color:var(--ink)}.b-d{background:var(--dark);color:var(--on-dark)}
+.b-ol{box-shadow:inset 0 0 0 1px rgba(237,236,232,0.24);color:var(--on-dark)}.b-od{box-shadow:inset 0 0 0 1px rgba(27,27,26,0.16);color:var(--ink)}
+
+/* шапка и первый экран */
+.logo{display:flex;align-items:center;gap:10px}.logo b{font-size:29px;font-weight:700;letter-spacing:-.04em;line-height:1}
+.bar{position:absolute;top:0;left:0;right:0;height:80px;z-index:5;background:rgba(27,27,26,.72);-webkit-backdrop-filter:saturate(180%) blur(20px);backdrop-filter:saturate(180%) blur(20px);border-bottom:1px solid rgba(237,236,232,0.08)}
+.nav{height:80px;display:grid;grid-template-columns:1fr auto 1fr;align-items:center}
+.nav ul{display:flex;gap:36px;font-size:18px;color:rgba(237,236,232,0.72)}
+.nav .r{display:flex;align-items:center;justify-content:flex-end;gap:24px;font-size:18px;color:rgba(237,236,232,0.72)}
+.nav .btn{height:42px;padding:0 20px;font-size:17px}
+.hero{padding:200px 0 calc(var(--gap) + 44px);position:relative}
+.hero h1{text-align:center;font-size:92px;line-height:1.02;letter-spacing:-.045em;font-weight:680}
+.hero h1 span{color:rgba(237,236,232,0.5)}
+.hero .sub{text-align:center;font-size:23px;line-height:1.45;font-weight:400;letter-spacing:-.015em;color:var(--gray-dark);margin:32px auto 0;max-width:820px}
+.hero .cta{display:flex;gap:12px;justify-content:center;margin-top:44px}
+.pics{margin-top:104px;row-gap:var(--gut)}
+.pic{grid-column:span 3;position:relative;height:400px;border-radius:28px;overflow:hidden;background:var(--dark-card);box-shadow:0 0 0 1px rgba(237,236,232,0.08)}
+.pic img{width:100%;height:100%;object-fit:cover;display:block}
+.pic span{position:absolute;left:16px;bottom:16px;display:inline-flex;align-items:center;gap:8px;height:42px;padding:0 16px 0 13px;border-radius:999px;background:rgba(27,27,26,.5);-webkit-backdrop-filter:saturate(160%) blur(16px);backdrop-filter:saturate(160%) blur(16px);box-shadow:inset 0 0 0 1px rgba(237,236,232,0.14);color:var(--on-dark);font-size:18px;font-weight:500}
+
+/* шаги */
+.steps{row-gap:var(--gut)}
+.st{grid-column:span 3;border-radius:28px;padding:32px 28px;display:flex;flex-direction:column;min-height:400px}
+.st .top{display:flex;justify-content:space-between;align-items:center}
+.st i{width:60px;height:60px}
+.st .nx{color:rgba(27,27,26,0.3)}
+.st h3{font-size:26px;line-height:1.15;letter-spacing:-.025em;margin-top:32px}
+.st p{font-size:18px;color:var(--gray);margin-top:10px}
+.chips{margin-top:auto;padding-top:24px;display:flex;flex-wrap:wrap;gap:8px}
+.chip{height:40px;padding:0 16px;border-radius:999px;box-shadow:inset 0 0 0 1px rgba(27,27,26,0.12);display:inline-flex;align-items:center;font-size:18px;font-weight:500}
+.chip-ok{background:var(--emerald);color:var(--on-dark);box-shadow:none;gap:8px;padding-left:12px}
+
+/* тарифы */
+.plans{row-gap:var(--gut)}
+.plan{grid-column:span 4;border-radius:28px;padding:40px;display:flex;flex-direction:column}
+.pl-h{display:flex;justify-content:space-between;align-items:center;min-height:40px}
+.plan h3{font-size:28px;letter-spacing:-.03em}
+.rec{height:36px;padding:0 16px;border-radius:999px;background:var(--emerald);color:var(--on-dark);display:inline-flex;align-items:center;font-size:18px;font-weight:500}
+.pl-s{font-size:18px;color:var(--gray);margin-top:8px}
+.price{white-space:nowrap;font-size:56px;line-height:1;font-weight:600;letter-spacing:-.045em;font-variant-numeric:tabular-nums;font-feature-settings:'tnum' 1;margin-top:32px;padding-bottom:32px;border-bottom:1px solid var(--line)}
+.price small{font-size:20px;font-weight:400;letter-spacing:-.01em;margin-left:10px;color:var(--gray)}
+.plan ul{margin:28px 0 36px;display:flex;flex-direction:column;gap:16px}
+.plan li{display:flex;gap:12px;font-size:18px;line-height:1.4}
+.plan li .ic{color:var(--emerald);margin-top:1px}
+.plan .btn{margin-top:auto;width:100%}
+/* выделенный тариф — инверсия: на светлом тёмная карточка, на тёмном светлая */
+.light .plan-on{background:var(--dark);color:var(--on-dark);box-shadow:none}
+.light .plan-on .pl-s,.light .plan-on .price small{color:var(--gray-dark)}.light .plan-on .price{border-color:var(--line-dark)}.light .plan-on li .ic{color:var(--on-dark)}
+.on-dark .pl-s,.on-dark .price small{color:var(--gray-dark)}.on-dark .price{border-color:var(--line-dark)}.on-dark li .ic{color:rgba(237,236,232,0.8)}
+.on-dark .plan-on{background:var(--card);color:var(--ink);box-shadow:none}
+.on-dark .plan-on .pl-s,.on-dark .plan-on .price small{color:var(--gray)}.on-dark .plan-on .price{border-color:var(--line)}.on-dark .plan-on li .ic{color:var(--emerald)}
+
+/* два вида заданий */
+.op{align-items:stretch}
+.op-pic{grid-column:8 / span 5;grid-row:1;border-radius:28px;overflow:hidden;min-height:580px}.op-pic img{width:100%;height:100%;object-fit:cover;display:block}
+.op-l{grid-column:1 / span 6;grid-row:1;display:flex;flex-direction:column}
+.kinds{display:grid;grid-template-columns:repeat(2,1fr);gap:var(--gut);margin:40px 0 var(--gut)}
+.kd{border-radius:28px;padding:28px 28px 30px}
+.kd i{width:52px;height:52px}
+.kd b{display:block;font-size:24px;font-weight:600;letter-spacing:-.02em;margin-top:22px}
+.kd span{display:block;font-size:18px;color:var(--gray-dark);margin-top:6px}
+.ex{margin-top:auto;border-radius:28px;padding:28px;display:flex;align-items:center;justify-content:space-between;gap:20px}
+.ex .tag{display:inline-flex;align-items:center;gap:8px;font-size:18px;color:var(--gray-dark)}
+.ex b{display:block;font-size:24px;font-weight:600;letter-spacing:-.02em;margin-top:6px}
+.ex .money{display:block;font-size:20px;margin-top:4px;color:rgba(237,236,232,0.86)}
+
+/* категории */
+.cgrid{row-gap:var(--gut)}
+.cat{grid-column:span 3;height:76px;border-radius:999px;display:flex;align-items:center;gap:14px;padding:0 20px 0 12px;font-size:20px;font-weight:550;letter-spacing:-.02em;white-space:nowrap}
+.cat i{width:52px;height:52px}
+.more{margin-top:40px}
+
+/* с чего начать: две колонки по 6 */
+.gogrid{row-gap:var(--gut)}.gogrid .tile{grid-column:span 6}
+.tile{border-radius:28px;padding:32px;display:grid;grid-template-columns:1fr auto;gap:0 24px;align-content:start;min-height:220px}
+.aud{display:inline-flex;align-items:center;gap:8px;height:40px;padding:0 16px 0 12px;border-radius:999px;box-shadow:inset 0 0 0 1px rgba(27,27,26,0.14);font-size:18px;font-weight:500;justify-self:start}
+.tile .txt{grid-column:1 / -1;align-self:start;margin-top:56px}
+.tile h3{font-size:34px;line-height:1.05;letter-spacing:-.035em;font-weight:650}
+.tile p{font-size:20px;color:var(--gray);margin-top:10px}
+.tile .ar{grid-column:2;grid-row:1}
+.ar{width:52px;height:52px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;background:var(--dark);color:var(--on-dark);flex:none}
+
+/* вопросы */
+.faq{align-items:start}
+.faq .side{grid-column:1 / span 4;display:flex;flex-direction:column;align-items:flex-start}
+.faq .side .btn{margin-top:40px}
+.qa{grid-column:6 / span 7;border-top:1px solid var(--line)}
+.q{border-bottom:1px solid var(--line);padding:28px 0}
+.q .h{display:flex;justify-content:space-between;align-items:center;gap:24px;font-size:22px;font-weight:600;letter-spacing:-.015em}
+.q .pm{width:44px;height:44px}
+.q-on .pm{background:var(--dark);color:var(--on-dark);box-shadow:none}
+.q p{font-size:18px;color:var(--gray);margin-top:12px;max-width:560px}
+
+/* финал: призыв + подвал на одном тёмном листе */
+.start{align-items:center}
+.start .txt{grid-column:1 / span 7}
+.start h2{font-size:72px;line-height:1.02;letter-spacing:-.045em}
+.start .lead{font-size:22px;margin-top:24px;max-width:540px}
+.start .cta{display:flex;gap:12px;margin-top:44px}
+.start .mk{grid-column:8 / span 5;display:flex;justify-content:flex-end}
+.foot{padding-bottom:40px}
+.foot .top{padding-top:var(--gap);border-top:1px solid var(--line-dark);row-gap:40px}
+.foot .about{grid-column:span 4}.foot .col{grid-column:span 2}
+.foot .about p{font-size:16px;line-height:1.5;color:var(--gray-dark);margin-top:24px;max-width:340px}
+.foot .about .mail{display:inline-block;margin-top:24px;font-size:16px;border-bottom:1px solid rgba(237,236,232,0.28);padding-bottom:4px}
+.foot h4{font-size:14px;font-weight:500;color:rgba(237,236,232,0.6);margin-bottom:18px}
+.foot .col a{display:block;font-size:16px;margin-bottom:12px}
+.foot .bot{display:flex;justify-content:space-between;align-items:center;margin-top:88px;padding-top:28px;border-top:1px solid var(--line-dark);font-size:14px;color:rgba(237,236,232,0.6)}
+.foot .bot b{color:var(--on-dark);font-weight:600}
+</style></head><body>
+
+<section class="hero on-dark"><header class="bar"><div class="w nav"><a class="logo" style="color:#EDECE8"><svg width="40" height="40" viewBox="0 0 48 48" aria-hidden="true">
+<path d="M24 13.05A13 13 0 0 1 24 34.95A13 13 0 0 1 24 13.05Z" fill="#0F7553"/>
+<circle cx="17" cy="24" r="13" fill="none" stroke="#EDECE8" stroke-width="5"/><circle cx="31" cy="24" r="13" fill="none" stroke="#EDECE8" stroke-width="5"/></svg><b>охват</b></a><ul><li>Бизнесу</li><li>Авторам</li><li>Тарифы</li><li>Вопросы</li></ul>
+  <div class="r"><span>Войти</span><a class="btn b-l">Разместить задание</a></div></div></header><div class="w">
+ <h1>Реклама у авторов видео<br>— оплата за результат</h1>
+ <p class="sub">Разместите задание с условиями.<br>Автор выполнит — сервис проверит и переведёт оплату.</p>
+ <div class="cta"><a class="btn b-l">Разместить задание</a><a class="btn b-ol">Найти заказы</a></div>
+ <div class="pics g12"><div class="pic"><img src="../assets/cafe.jpg" alt=""><span> <svg width="20" height="20" class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" > <path d="M10 2v2" /> <path d="M14 2v2" /> <path d="M16 8a1 1 0 0 1 1 1v8a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4V9a1 1 0 0 1 1-1h14a4 4 0 1 1 0 8h-1" /> <path d="M6 2v2" /> </svg> Кофейни</span></div><div class="pic"><img src="../assets/barber.jpg" alt=""><span> <svg width="20" height="20" class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" > <circle cx="6" cy="6" r="3" /> <path d="M8.12 8.12 12 12" /> <path d="M20 4 8.12 15.88" /> <circle cx="6" cy="18" r="3" /> <path d="M14.8 14.8 20 20" /> </svg> Барбершопы</span></div><div class="pic"><img src="../assets/florist.jpg" alt=""><span> <svg width="20" height="20" class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" > <path d="M12 5a3 3 0 1 1 3 3m-3-3a3 3 0 1 0-3 3m3-3v1M9 8a3 3 0 1 0 3 3M9 8h1m5 0a3 3 0 1 1-3 3m3-3h-1m-2 3v-1" /> <circle cx="12" cy="8" r="2" /> <path d="M12 10v12" /> <path d="M12 22c4.2 0 7-1.667 7-5-4.2 0-7 1.667-7 5Z" /> <path d="M12 22c-4.2 0-7-1.667-7-5 4.2 0 7 1.667 7 5Z" /> </svg> Цветочные</span></div><div class="pic"><img src="../assets/fitness.jpg" alt=""><span> <svg width="20" height="20" class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" > <path d="M14.4 14.4 9.6 9.6" /> <path d="M18.657 21.485a2 2 0 1 1-2.829-2.828l-1.767 1.768a2 2 0 1 1-2.829-2.829l6.364-6.364a2 2 0 1 1 2.829 2.829l-1.768 1.767a2 2 0 1 1 2.828 2.829z" /> <path d="m21.5 21.5-1.4-1.4" /> <path d="M3.9 3.9 2.5 2.5" /> <path d="M6.404 12.768a2 2 0 1 1-2.829-2.829l1.768-1.767a2 2 0 1 1-2.828-2.829l2.828-2.828a2 2 0 1 1 2.829 2.828l1.767-1.768a2 2 0 1 1 2.829 2.829z" /> </svg> Фитнес</span></div></div>
+</div></section>
+
+<section class="zone light sheet"><div class="w">
+ <div class="blk how"><div class="hd"><h2>Как это работает<br>для бизнеса</h2><p class="lead">Четыре шага — от тарифа до оплаты.</p></div>
+  <div class="steps g12"><div class="st cd"><div class="top"><i class="ring"> <svg width="26" height="26" class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" > <rect width="18" height="18" x="3" y="3" rx="2" /> <path d="M3 9a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2" /> <path d="M3 11h3c.8 0 1.6.3 2.1.9l1.1.9c1.6 1.6 4.1 1.6 5.7 0l1.1-.9c.5-.5 1.3-.9 2.1-.9H21" /> </svg> </i><span class="nx"> <svg width="24" height="24" class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" > <path d="M5 12h14" /> <path d="m12 5 7 7-7 7" /> </svg> </span></div>
+   <h3>Выберите тариф</h3><p>Срок размещения и место в&nbsp;ленте</p><div class="chips"><span class="chip">Бесплатный</span><span class="chip">Про</span><span class="chip">Максимум</span></div></div><div class="st cd"><div class="top"><i class="ring"> <svg width="26" height="26" class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" > <path d="M11 12H3" /> <path d="M16 6H3" /> <path d="M16 18H3" /> <path d="M18 9v6" /> <path d="M21 12h-6" /> </svg> </i><span class="nx"> <svg width="24" height="24" class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" > <path d="M5 12h14" /> <path d="m12 5 7 7-7 7" /> </svg> </span></div>
+   <h3>Опишите задание</h3><p>Темы, город и ТЗ: что показать в&nbsp;ролике</p><div class="chips"><span class="chip">кофейни</span><span class="chip">Казань</span><span class="chip">ТЗ</span></div></div><div class="st cd"><div class="top"><i class="ring"> <svg width="26" height="26" class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" > <circle cx="12" cy="12" r="10" /> <circle cx="12" cy="12" r="6" /> <circle cx="12" cy="12" r="2" /> </svg> </i><span class="nx"> <svg width="24" height="24" class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" > <path d="M5 12h14" /> <path d="m12 5 7 7-7 7" /> </svg> </span></div>
+   <h3>Задайте условия</h3><p>Просмотры, лайки и оплата. Пополните счёт</p><div class="chips"><span class="chip">10 000 просмотров</span><span class="chip">300 лайков</span></div></div><div class="st cd"><div class="top"><i class="ring"> <svg width="26" height="26" class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" > <path d="M3.85 8.62a4 4 0 0 1 4.78-4.77 4 4 0 0 1 6.74 0 4 4 0 0 1 4.78 4.78 4 4 0 0 1 0 6.74 4 4 0 0 1-4.77 4.78 4 4 0 0 1-6.75 0 4 4 0 0 1-4.78-4.77 4 4 0 0 1 0-6.76Z" /> <path d="m16 9-5.5 5.5L8 12" /> </svg> </i></div>
+   <h3>Автооплата</h3><p>Автор выполнил — сервис проверил и&nbsp;оплатил</p><div class="chips"><span class="chip chip-ok"> <svg width="20" height="20" class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" > <path d="M20 6 9 17l-5-5" /> </svg> Оплачено автору</span></div></div></div></div>
+ <div class="blk biz"><div class="hd"><h2>Тарифы для бизнеса</h2><p class="lead">Платите за размещение, а автору — только за результат.</p></div>
+  <div class="plans g12"><div class="cd plan ">
+ <div class="pl-h"><h3>Бесплатный</h3></div>
+ <p class="pl-s">Попробовать сервис</p>
+ <div class="price">0&nbsp;₽<small>/&nbsp;мес</small></div>
+ <ul><li> <svg width="22" height="22" class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" > <path d="M20 6 9 17l-5-5" /> </svg> <span>Размещение 7 дней</span></li><li> <svg width="22" height="22" class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" > <path d="M20 6 9 17l-5-5" /> </svg> <span>Обычная карточка задания</span></li></ul>
+ <a class="btn b-d">Начать бесплатно</a></div><div class="cd plan plan-on">
+ <div class="pl-h"><h3>Про</h3><span class="rec">Рекомендуем</span></div>
+ <p class="pl-s">Для регулярной рекламы</p>
+ <div class="price">3&nbsp;000 ₽<small>/&nbsp;мес</small></div>
+ <ul><li> <svg width="22" height="22" class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" > <path d="M20 6 9 17l-5-5" /> </svg> <span>Размещение 30 дней</span></li><li> <svg width="22" height="22" class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" > <path d="M20 6 9 17l-5-5" /> </svg> <span>Топ ленты 3 дня</span></li><li> <svg width="22" height="22" class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" > <path d="M20 6 9 17l-5-5" /> </svg> <span>Своё оформление карточки</span></li></ul>
+ <a class="btn b-l">Выбрать Про</a></div><div class="cd plan ">
+ <div class="pl-h"><h3>Максимум</h3></div>
+ <p class="pl-s">Охват и данные по максимуму</p>
+ <div class="price">10&nbsp;000 ₽<small>/&nbsp;мес</small></div>
+ <ul><li> <svg width="22" height="22" class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" > <path d="M20 6 9 17l-5-5" /> </svg> <span>Размещение 60 дней</span></li><li> <svg width="22" height="22" class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" > <path d="M20 6 9 17l-5-5" /> </svg> <span>Топ ленты 7 дней</span></li><li> <svg width="22" height="22" class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" > <path d="M20 6 9 17l-5-5" /> </svg> <span>Статистика: просмотры по городам, цена за 1000 просмотров, сравнение авторов</span></li><li> <svg width="22" height="22" class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" > <path d="M20 6 9 17l-5-5" /> </svg> <span>Выгрузка отчётов по заданиям</span></li><li> <svg width="22" height="22" class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" > <path d="M20 6 9 17l-5-5" /> </svg> <span>Личный подбор авторов</span></li></ul>
+ <a class="btn b-d">Выбрать Максимум</a></div></div></div>
+</div></section>
+
+<section class="zone on-dark sheet"><div class="w">
+ <div class="blk op g12"><div class="op-pic"><img src="../assets/creator.jpg" alt=""></div>
+  <div class="op-l"><div class="hd"><h2>Два вида заданий</h2><p class="lead">Деньги хранятся в безопасной сделке и&nbsp;уходят автору автоматически после проверки.</p></div>
+   <div class="kinds"><div class="kd cd"><i class="ring"> <svg width="24" height="24" class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" > <path d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z" /> </svg> </i><b>Открытое</b><span>Любой автор берёт заказ сразу</span></div><div class="kd cd"><i class="ring"> <svg width="24" height="24" class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" > <path d="M2 21a8 8 0 0 1 13.292-6" /> <circle cx="10" cy="8" r="5" /> <path d="m16 19 2 2 4-4" /> </svg> </i><b>С одобрением</b><span>Заявки идут вам, автора выбираете сами</span></div></div>
+   <div class="ex cd"><div><span class="tag"> <svg width="18" height="18" class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" > <path d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z" /> </svg> Кофейня · Казань</span><b>10 000 просмотров</b><span class="money">3 000 ₽ за выполнение</span></div><a class="btn b-l">Взять задание</a></div>
+  </div></div>
+ <div class="blk aut"><div class="hd"><h2>Тарифы для авторов</h2><p class="lead">Больше откликов — больше заказов.</p></div>
+  <div class="plans g12"><div class="cd plan ">
+ <div class="pl-h"><h3>Бесплатный</h3></div>
+ <p class="pl-s">Чтобы начать</p>
+ <div class="price">0&nbsp;₽<small>/&nbsp;мес</small></div>
+ <ul><li> <svg width="22" height="22" class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" > <path d="M20 6 9 17l-5-5" /> </svg> <span>10 откликов в месяц</span></li></ul>
+ <a class="btn b-ol">Начать бесплатно</a></div><div class="cd plan plan-on">
+ <div class="pl-h"><h3>Про</h3><span class="rec">Рекомендуем</span></div>
+ <p class="pl-s">Для тех, кто снимает часто</p>
+ <div class="price">3&nbsp;000 ₽<small>/&nbsp;мес</small></div>
+ <ul><li> <svg width="22" height="22" class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" > <path d="M20 6 9 17l-5-5" /> </svg> <span>50 откликов в месяц</span></li><li> <svg width="22" height="22" class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" > <path d="M20 6 9 17l-5-5" /> </svg> <span>Своё оформление профиля</span></li><li> <svg width="22" height="22" class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" > <path d="M20 6 9 17l-5-5" /> </svg> <span>Значок «Про» в каталоге</span></li></ul>
+ <a class="btn b-d">Выбрать Про</a></div><div class="cd plan ">
+ <div class="pl-h"><h3>Топ</h3></div>
+ <p class="pl-s">Больше всего заказов</p>
+ <div class="price">10&nbsp;000 ₽<small>/&nbsp;мес</small></div>
+ <ul><li> <svg width="22" height="22" class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" > <path d="M20 6 9 17l-5-5" /> </svg> <span>Отклики без лимита</span></li><li> <svg width="22" height="22" class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" > <path d="M20 6 9 17l-5-5" /> </svg> <span>Место в топе каталога</span></li><li> <svg width="22" height="22" class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" > <path d="M20 6 9 17l-5-5" /> </svg> <span>Ранний доступ к новым заданиям</span></li></ul>
+ <a class="btn b-ol">Выбрать Топ</a></div></div></div>
+</div></section>
+
+<section class="zone light sheet"><div class="w">
+ <div class="blk"><div class="hd"><h2>Задания в любой теме</h2><p class="lead">Выберите свою — и смотрите заказы по ней.</p></div>
+  <div class="cgrid g12"><a class="cat cd"><i class="ring"> <svg width="24" height="24" class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" > <path d="M10 2v2" /> <path d="M14 2v2" /> <path d="M16 8a1 1 0 0 1 1 1v8a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4V9a1 1 0 0 1 1-1h14a4 4 0 1 1 0 8h-1" /> <path d="M6 2v2" /> </svg> </i>Еда и кафе</a><a class="cat cd"><i class="ring"> <svg width="24" height="24" class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" > <circle cx="6" cy="6" r="3" /> <path d="M8.12 8.12 12 12" /> <path d="M20 4 8.12 15.88" /> <circle cx="6" cy="18" r="3" /> <path d="M14.8 14.8 20 20" /> </svg> </i>Красота и салоны</a><a class="cat cd"><i class="ring"> <svg width="24" height="24" class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" > <path d="M14.4 14.4 9.6 9.6" /> <path d="M18.657 21.485a2 2 0 1 1-2.829-2.828l-1.767 1.768a2 2 0 1 1-2.829-2.829l6.364-6.364a2 2 0 1 1 2.829 2.829l-1.768 1.767a2 2 0 1 1 2.828 2.829z" /> <path d="m21.5 21.5-1.4-1.4" /> <path d="M3.9 3.9 2.5 2.5" /> <path d="M6.404 12.768a2 2 0 1 1-2.829-2.829l1.768-1.767a2 2 0 1 1-2.828-2.829l2.828-2.828a2 2 0 1 1 2.829 2.828l1.767-1.768a2 2 0 1 1 2.829 2.829z" /> </svg> </i>Спорт и фитнес</a><a class="cat cd"><i class="ring"> <svg width="24" height="24" class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" > <path d="M12 5a3 3 0 1 1 3 3m-3-3a3 3 0 1 0-3 3m3-3v1M9 8a3 3 0 1 0 3 3M9 8h1m5 0a3 3 0 1 1-3 3m3-3h-1m-2 3v-1" /> <circle cx="12" cy="8" r="2" /> <path d="M12 10v12" /> <path d="M12 22c4.2 0 7-1.667 7-5-4.2 0-7 1.667-7 5Z" /> <path d="M12 22c-4.2 0-7-1.667-7-5 4.2 0 7 1.667 7 5Z" /> </svg> </i>Цветы и подарки</a><a class="cat cd"><i class="ring"> <svg width="24" height="24" class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" > <path d="M20.38 3.46 16 2a4 4 0 0 1-8 0L3.62 3.46a2 2 0 0 0-1.34 2.23l.58 3.47a1 1 0 0 0 .99.84H6v10c0 1.1.9 2 2 2h8a2 2 0 0 0 2-2V10h2.15a1 1 0 0 0 .99-.84l.58-3.47a2 2 0 0 0-1.34-2.23z" /> </svg> </i>Мода</a><a class="cat cd"><i class="ring"> <svg width="24" height="24" class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" > <path d="M9 12h.01" /> <path d="M15 12h.01" /> <path d="M10 16c.5.3 1.2.5 2 .5s1.5-.2 2-.5" /> <path d="M19 6.3a9 9 0 0 1 1.8 3.9 2 2 0 0 1 0 3.6 9 9 0 0 1-17.6 0 2 2 0 0 1 0-3.6A9 9 0 0 1 12 3c2 0 3.5 1.1 3.5 2.5s-.9 2.5-2 2.5c-.8 0-1.5-.4-1.5-1" /> </svg> </i>Дети</a><a class="cat cd"><i class="ring"> <svg width="24" height="24" class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" > <circle cx="11" cy="4" r="2" /> <circle cx="18" cy="8" r="2" /> <circle cx="20" cy="16" r="2" /> <path d="M9 10a5 5 0 0 1 5 5v3.5a3.5 3.5 0 0 1-6.84 1.045Q6.52 17.48 4.46 16.84A3.5 3.5 0 0 1 5.5 10Z" /> </svg> </i>Животные</a><a class="cat cd"><i class="ring"> <svg width="24" height="24" class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" > <rect width="14" height="20" x="5" y="2" rx="2" ry="2" /> <path d="M12 18h.01" /> </svg> </i>Техника</a><a class="cat cd"><i class="ring"> <svg width="24" height="24" class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" > <path d="M19 17h2c.6 0 1-.4 1-1v-3c0-.9-.7-1.7-1.5-1.9C18.7 10.6 16 10 16 10s-1.3-1.4-2.2-2.3c-.5-.4-1.1-.7-1.8-.7H5c-.6 0-1.1.4-1.4.9l-1.4 2.9A3.7 3.7 0 0 0 2 12v4c0 .6.4 1 1 1h2" /> <circle cx="7" cy="17" r="2" /> <path d="M9 17h6" /> <circle cx="17" cy="17" r="2" /> </svg> </i>Авто</a><a class="cat cd"><i class="ring"> <svg width="24" height="24" class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" > <path d="M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8" /> <path d="M3 10a2 2 0 0 1 .709-1.528l7-5.999a2 2 0 0 1 2.582 0l7 5.999A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" /> </svg> </i>Дом и ремонт</a><a class="cat cd"><i class="ring"> <svg width="24" height="24" class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" > <path d="M21.42 10.922a1 1 0 0 0-.019-1.838L12.83 5.18a2 2 0 0 0-1.66 0L2.6 9.08a1 1 0 0 0 0 1.832l8.57 3.908a2 2 0 0 0 1.66 0z" /> <path d="M22 10v6" /> <path d="M6 12.5V16a6 3 0 0 0 12 0v-3.5" /> </svg> </i>Образование</a><a class="cat cd"><i class="ring"> <svg width="24" height="24" class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" > <path d="M17.8 19.2 16 11l3.5-3.5C21 6 21.5 4 21 3c-1-.5-3 0-4.5 1.5L13 8 4.8 6.2c-.5-.1-.9.1-1.1.5l-.3.5c-.2.5-.1 1 .3 1.3L9 12l-2 3H4l-1 1 3 2 2 3 1-1v-3l3-2 3.5 5.3c.3.4.8.5 1.3.3l.5-.2c.4-.3.6-.7.5-1.2z" /> </svg> </i>Путешествия</a></div>
+  <a class="btn b-d more">Все категории  <svg width="20" height="20" class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" > <path d="M5 12h14" /> <path d="m12 5 7 7-7 7" /> </svg> </a></div>
+
+ <div class="blk go"><div class="hd"><h2>С чего начать</h2><p class="lead">Выберите, кто вы, — и сразу к делу.</p></div>
+  <div class="gogrid g12"><a class="tile cd"><span class="aud"> <svg width="20" height="20" class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" > <path d="m2 7 4.41-4.41A2 2 0 0 1 7.83 2h8.34a2 2 0 0 1 1.42.59L22 7" /> <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8" /> <path d="M15 22v-4a2 2 0 0 0-2-2h-2a2 2 0 0 0-2 2v4" /> <path d="M2 7h20" /> <path d="M22 7v3a2 2 0 0 1-2 2a2.7 2.7 0 0 1-1.59-.63.7.7 0 0 0-.82 0A2.7 2.7 0 0 1 16 12a2.7 2.7 0 0 1-1.59-.63.7.7 0 0 0-.82 0A2.7 2.7 0 0 1 12 12a2.7 2.7 0 0 1-1.59-.63.7.7 0 0 0-.82 0A2.7 2.7 0 0 1 8 12a2.7 2.7 0 0 1-1.59-.63.7.7 0 0 0-.82 0A2.7 2.7 0 0 1 4 12a2 2 0 0 1-2-2V7" /> </svg> Для бизнеса</span><span class="ar"> <svg width="22" height="22" class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" > <path d="M7 7h10v10" /> <path d="M7 17 17 7" /> </svg> </span><div class="txt"><h3>Разместить задание</h3><p>Опишите условия, платите только за&nbsp;результат</p></div></a><a class="tile cd"><span class="aud"> <svg width="20" height="20" class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" > <path d="m16 13 5.223 3.482a.5.5 0 0 0 .777-.416V7.87a.5.5 0 0 0-.752-.432L16 10.5" /> <rect x="2" y="6" width="14" height="12" rx="2" /> </svg> Для авторов</span><span class="ar"> <svg width="22" height="22" class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" > <path d="M7 7h10v10" /> <path d="M7 17 17 7" /> </svg> </span><div class="txt"><h3>Открытые задания</h3><p>Берите заказ сразу, оплата после проверки</p></div></a><a class="tile cd"><span class="aud"> <svg width="20" height="20" class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" > <path d="m2 7 4.41-4.41A2 2 0 0 1 7.83 2h8.34a2 2 0 0 1 1.42.59L22 7" /> <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8" /> <path d="M15 22v-4a2 2 0 0 0-2-2h-2a2 2 0 0 0-2 2v4" /> <path d="M2 7h20" /> <path d="M22 7v3a2 2 0 0 1-2 2a2.7 2.7 0 0 1-1.59-.63.7.7 0 0 0-.82 0A2.7 2.7 0 0 1 16 12a2.7 2.7 0 0 1-1.59-.63.7.7 0 0 0-.82 0A2.7 2.7 0 0 1 12 12a2.7 2.7 0 0 1-1.59-.63.7.7 0 0 0-.82 0A2.7 2.7 0 0 1 8 12a2.7 2.7 0 0 1-1.59-.63.7.7 0 0 0-.82 0A2.7 2.7 0 0 1 4 12a2 2 0 0 1-2-2V7" /> </svg> Для бизнеса</span><span class="ar"> <svg width="22" height="22" class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" > <path d="M7 7h10v10" /> <path d="M7 17 17 7" /> </svg> </span><div class="txt"><h3>Каталог авторов</h3><p>Найдите авторов по теме и&nbsp;городу</p></div></a><a class="tile cd"><span class="aud"> <svg width="20" height="20" class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" > <path d="m16 13 5.223 3.482a.5.5 0 0 0 .777-.416V7.87a.5.5 0 0 0-.752-.432L16 10.5" /> <rect x="2" y="6" width="14" height="12" rx="2" /> </svg> Для авторов</span><span class="ar"> <svg width="22" height="22" class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" > <path d="M7 7h10v10" /> <path d="M7 17 17 7" /> </svg> </span><div class="txt"><h3>Анкета автора</h3><p>Заполните один раз, получайте задания по&nbsp;своей&nbsp;теме</p></div></a></div></div>
+
+ <div class="blk faq g12"><div class="side"><h2>Частые вопросы</h2><p class="lead">Не нашли ответ — напишите нам.</p><a class="btn b-od">Все вопросы</a></div>
+  <div class="qa"><div class="q q-on"><div class="h">Как сервис проверяет выполнение?<span class="pm ring"> <svg width="20" height="20" class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" > <path d="M5 12h14" /> </svg> </span></div><p>Автор загружает ссылку на ролик. Сервис сверяет его с ТЗ и условиями — просмотры, лайки — и сам переводит оплату.</p></div><div class="q "><div class="h">Когда автор получает деньги?<span class="pm ring"> <svg width="20" height="20" class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" > <path d="M5 12h14" /> <path d="M12 5v14" /> </svg> </span></div></div><div class="q "><div class="h">Что если условия не выполнены?<span class="pm ring"> <svg width="20" height="20" class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" > <path d="M5 12h14" /> <path d="M12 5v14" /> </svg> </span></div></div><div class="q "><div class="h">Можно выбрать автора самому?<span class="pm ring"> <svg width="20" height="20" class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" > <path d="M5 12h14" /> <path d="M12 5v14" /> </svg> </span></div></div></div></div>
+</div></section>
+
+<footer class="foot on-dark sheet"><div class="w">
+ <div class="start g12" style="padding:var(--gap) 0"><div class="txt"><h2>Разместите первое задание</h2>
+   <p class="lead">Начните бесплатно — авторам платите только за&nbsp;результат.</p>
+   <div class="cta"><a class="btn b-l">Разместить задание</a><a class="btn b-ol">Я автор</a></div></div>
+  <div class="mk"><svg width="400" height="236" viewBox="2 11 44 26" aria-hidden="true">
+<path d="M24 13.765A12.4 12.4 0 0 1 24 34.235A12.4 12.4 0 0 1 24 13.765Z" fill="#0F7553"/>
+<circle cx="17" cy="24" r="12.4" fill="none" stroke="#EDECE8" stroke-width=".55"/><circle cx="31" cy="24" r="12.4" fill="none" stroke="#EDECE8" stroke-width=".55"/></svg></div></div>
+ <div class="top g12"><div class="about"><a class="logo" style="color:#EDECE8"><svg width="40" height="40" viewBox="0 0 48 48" aria-hidden="true">
+<path d="M24 13.05A13 13 0 0 1 24 34.95A13 13 0 0 1 24 13.05Z" fill="#0F7553"/>
+<circle cx="17" cy="24" r="13" fill="none" stroke="#EDECE8" stroke-width="5"/><circle cx="31" cy="24" r="13" fill="none" stroke="#EDECE8" stroke-width="5"/></svg><b>охват</b></a><p>Реклама у авторов видео с оплатой за результат: бизнес размещает задания, авторы выполняют, сервис проверяет.</p><a class="mail">[УТОЧНИТЬ: почта поддержки]</a></div>
+  <div class="col"><h4>Бизнесу</h4><a>Разместить задание</a><a>Тарифы</a><a>Каталог авторов</a><a>Как это работает</a></div>
+  <div class="col"><h4>Авторам</h4><a>Открытые задания</a><a>Создать анкету</a><a>Тарифы для авторов</a></div>
+  <div class="col"><h4>Темы</h4><a>Еда и кафе</a><a>Красота и салоны</a><a>Спорт и фитнес</a><a>Цветы и подарки</a><a>Все категории</a></div>
+  <div class="col"><h4>Документы</h4><a>Пользовательское соглашение</a><a>Политика конфиденциальности</a><a>Согласие на обработку данных</a><a>Правила площадки</a></div></div>
+ <div class="bot"><span>© 2026 <b>Охват</b>. Все права защищены.</span><span>[УТОЧНИТЬ: юрлицо и ИНН]</span></div>
+</div></footer>
+</body></html>
