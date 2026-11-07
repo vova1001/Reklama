@@ -1,0 +1,27 @@
+{
+  "name": "ohvat-frontend",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "astro dev",
+    "build": "astro build",
+    "start": "node ./dist/server/entry.mjs",
+    "check": "astro check",
+    "gen:api": "openapi-typescript ../backend/api/openapi.yaml -o src/lib/api.gen.ts",
+    "e2e": "playwright test",
+    "screens": "node scripts/screens.mjs"
+  },
+  "dependencies": {
+    "@astrojs/node": "^11.1.11",
+    "@tailwindcss/vite": "^4.3.5",
+    "astro": "^7.4.7",
+    "tailwindcss": "^4.3.5"
+  },
+  "devDependencies": {
+    "@astrojs/check": "^0.9.12",
+    "@playwright/test": "1.63.0",
+    "@types/node": "^22.20.5",
+    "openapi-typescript": "^7.13.0",
+    "typescript": "5.9"
+  }
+}

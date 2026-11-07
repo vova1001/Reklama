@@ -1,0 +1,109 @@
+openapi: 3.0.3
+info:
+  title: Охват API
+  version: 0.1.0
+  description: |
+    API площадки «Охват». Сейчас — данные главной страницы (темы, тарифы, вопросы).
+    Все ответы — JSON в UTF-8. Ошибки — в едином формате `Error`.
+servers:
+  - url: http://localhost:8000
+paths:
+  /healthz:
+    get:
+      summary: Живость сервера и базы
+      operationId: health
+      responses:
+        "200":
+          description: Сервер и база работают
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Health" }
+        "503":
+          description: База недоступна
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+  /api/home:
+    get:
+      summary: Данные главной страницы
+      description: Темы, тарифы бизнеса и авторов, частые вопросы — одним запросом.
+      operationId: getHome
+      responses:
+        "200":
+          description: Данные главной
+          headers:
+            Cache-Control:
+              schema: { type: string, example: "public, max-age=60" }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Home" }
+        "500":
+          description: Внутренняя ошибка
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+components:
+  schemas:
+    Health:
+      type: object
+      required: [status]
+      properties:
+        status: { type: string, enum: [ok] }
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code: { type: string, example: internal, description: Машинный код ошибки }
+            message: { type: string, example: Что-то пошло не так. Попробуйте позже., description: Понятный текст для человека }
+    Home:
+      type: object
+      required: [categories, businessPlans, creatorPlans, faq]
+      properties:
+        categories:
+          type: array
+          items: { $ref: "#/components/schemas/Category" }
+        businessPlans:
+          type: array
+          description: Тарифы бизнеса по возрастанию цены
+          items: { $ref: "#/components/schemas/Plan" }
+        creatorPlans:
+          type: array
+          description: Тарифы авторов по возрастанию цены
+          items: { $ref: "#/components/schemas/Plan" }
+        faq:
+          type: array
+          items: { $ref: "#/components/schemas/Question" }
+    Category:
+      type: object
+      required: [slug, title, icon]
+      properties:
+        slug: { type: string, example: food }
+        title: { type: string, example: Еда и кафе }
+        icon: { type: string, description: Имя иконки Lucide, example: coffee }
+    Plan:
+      type: object
+      required: [slug, audience, name, subtitle, priceKopecks, priceText, period, recommended, features, cta]
+      properties:
+        slug: { type: string, example: pro }
+        audience: { type: string, enum: [business, creator] }
+        name: { type: string, example: Про }
+        subtitle: { type: string, example: Для регулярной рекламы }
+        priceKopecks: { type: integer, format: int64, minimum: 0, example: 300000 }
+        priceText: { type: string, description: Цена для показа (неразрывные пробелы), example: "3 000 ₽" }
+        period: { type: string, enum: [month], description: Период оплаты }
+        recommended: { type: boolean }
+        features:
+          type: array
+          items: { type: string }
+        cta: { type: string, description: Подпись кнопки, example: Выбрать Про }
+    Question:
+      type: object
+      required: [id, question, answer]
+      properties:
+        id: { type: integer, format: int64 }
+        question: { type: string }
+        answer: { type: string }

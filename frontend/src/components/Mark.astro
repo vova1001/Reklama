@@ -1,0 +1,10 @@
+---
+// Знак «два круга»: изумрудное пересечение и два кольца.
+interface Props { size?: number }
+const { size = 40 } = Astro.props;
+---
+<svg width={size} height={size} viewBox="0 0 48 48" aria-hidden="true">
+  <path d="M24 13.05A13 13 0 0 1 24 34.95A13 13 0 0 1 24 13.05Z" fill="var(--color-emerald)" />
+  <circle cx="17" cy="24" r="13" fill="none" stroke="currentColor" stroke-width="5" />
+  <circle cx="31" cy="24" r="13" fill="none" stroke="currentColor" stroke-width="5" />
+</svg>

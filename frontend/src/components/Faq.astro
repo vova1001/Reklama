@@ -1,0 +1,29 @@
+---
+import type { Question } from '../lib/api';
+interface Props { faq: Question[] }
+const { faq } = Astro.props;
+---
+<div class="blk faq g12" id="faq">
+  <div class="side" data-reveal>
+    <h2>Частые вопросы</h2>
+    <p class="lead">Не нашли ответ — напишите нам.</p>
+    <a class="btn b-od" href="/faq">Все вопросы</a>
+  </div>
+  <div class="qa" data-accordion>
+    {faq.map((q, i) => (
+      <div class:list={['q', { 'q-on': i === 0 }]} data-reveal style={`--i:${i}`}>
+        <h3><button class="h" type="button" aria-expanded={i === 0 ? 'true' : 'false'} aria-controls={`qa-${q.id}`} id={`qh-${q.id}`}>
+          <span>{q.question}</span>
+          <span class="pm ring" aria-hidden="true">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" class="ic">
+              <path d="M5 12h14" /><path class="v" d="M12 5v14" />
+            </svg>
+          </span>
+        </button></h3>
+        <div class="a" id={`qa-${q.id}`} role="region" aria-labelledby={`qh-${q.id}`}>
+          <div><p>{q.answer}</p></div>
+        </div>
+      </div>
+    ))}
+  </div>
+</div>

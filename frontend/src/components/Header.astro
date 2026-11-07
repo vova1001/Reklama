@@ -1,0 +1,27 @@
+---
+import Logo from './Logo.astro';
+import Icon from './Icon.astro';
+import { NAV } from '../content/home';
+---
+<header class="bar" data-bar>
+  <div class="w nav">
+    <Logo />
+    <ul>{NAV.map((n) => <li><a class="lnk" href={n.href}>{n.title}</a></li>)}</ul>
+    <div class="r">
+      <a class="login lnk" href="/login">Войти</a>
+      <a class="btn b-l" href="/tasks/new">Разместить задание</a>
+      <button class="burger ring" type="button" aria-label="Меню" aria-expanded="false" aria-controls="menu" data-burger>
+        <Icon name="menu" size={22} class="ic-menu" /><Icon name="x" size={22} class="ic-x" />
+      </button>
+    </div>
+  </div>
+</header>
+<nav class="menu" id="menu" aria-label="Меню" data-menu>
+  <div class="w">
+    <ul>
+      {NAV.map((n) => <li><a href={n.href}>{n.title}</a></li>)}
+      <li><a href="/login">Войти</a></li>
+    </ul>
+    <div class="cta"><a class="btn b-l" href="/tasks/new">Разместить задание</a><a class="btn b-ol" href="/tasks">Найти заказы</a></div>
+  </div>
+</nav>

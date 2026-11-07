@@ -1,0 +1,32 @@
+---
+import Logo from './Logo.astro';
+import BigMark from './BigMark.astro';
+import type { Category } from '../lib/api';
+import { FOOTER } from '../content/home';
+interface Props { categories: Category[] }
+const { categories } = Astro.props;
+const topics: [string, string][] = [
+  ...categories.slice(0, 4).map((c) => [c.title, `/tasks?topic=${c.slug}`] as [string, string]),
+  ['Все категории', '/categories'],
+];
+const cols = [FOOTER.cols[0], FOOTER.cols[1], { title: 'Темы', links: topics }, FOOTER.cols[2]];
+---
+<footer class="foot on-dark sheet">
+  <div class="w">
+    <div class="start g12">
+      <div class="txt" data-reveal>
+        <h2>Разместите первое задание</h2>
+        <p class="lead">Начните бесплатно — авторам платите только за&nbsp;результат.</p>
+        <div class="cta"><a class="btn b-l" href="/tasks/new">Разместить задание</a><a class="btn b-ol" href="/creators/new">Я автор</a></div>
+      </div>
+      <div class="mk" data-reveal><BigMark /></div>
+    </div>
+    <div class="top g12">
+      <div class="about"><Logo /><p>{FOOTER.about}</p><a class="mail" href="/faq">{FOOTER.mail}</a></div>
+      {cols.map((c) => (
+        <div class="col"><h4>{c.title}</h4>{c.links.map(([t, href]) => <a href={href}>{t}</a>)}</div>
+      ))}
+    </div>
+    <div class="bot"><span>© 2026 <b>Охват</b>. Все права защищены.</span><span>{FOOTER.legal}</span></div>
+  </div>
+</footer>

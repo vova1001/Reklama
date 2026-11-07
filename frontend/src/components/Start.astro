@@ -1,0 +1,17 @@
+---
+import Icon from './Icon.astro';
+import Head from './Head.astro';
+import { GO, AUD } from '../content/home';
+---
+<div class="blk go">
+  <Head title="С чего начать" lead="Выберите, кто вы, — и сразу к делу." />
+  <div class="gogrid g12">
+    {GO.map((t, i) => (
+      <a class="tile cd" href={t.href} data-reveal style={`--i:${i}`}>
+        <span class="aud"><Icon name={AUD[t.aud].icon} size={20} />{AUD[t.aud].title}</span>
+        <span class="ar"><Icon name="arrow-up-right" size={22} /></span>
+        <div class="txt"><h3>{t.title}</h3><p set:html={t.text} /></div>
+      </a>
+    ))}
+  </div>
+</div>

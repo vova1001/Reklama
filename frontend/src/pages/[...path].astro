@@ -1,0 +1,25 @@
+---
+// Будущие разделы — заглушка «Скоро»; неизвестный адрес — 404.
+import Base from '../layouts/Base.astro';
+import Header from '../components/Header.astro';
+import { SOON } from '../lib/routes';
+
+const path = (Astro.params.path ?? '').replace(/\/+$/, '');
+const title = SOON[path];
+if (!title) Astro.response.status = 404;
+const heading = title ? 'Скоро' : 'Страница не найдена';
+const text = title
+  ? `Раздел «${title}» сейчас в работе. А пока — посмотрите, как устроен сервис.`
+  : 'Такого адреса нет. Возможно, ссылка устарела.';
+---
+<Base title={`${title ?? 'Нет страницы'} — Охват`} description={text} noindex>
+  <Header />
+  <main class="on-dark soon">
+    <div class="w">
+      <p class="lead" style="margin:0 0 16px">{title ?? '404'}</p>
+      <h1>{heading}</h1>
+      <p>{text}</p>
+      <div class="cta"><a class="btn b-l" href="/">На главную</a><a class="btn b-ol" href="/#faq">Частые вопросы</a></div>
+    </div>
+  </main>
+</Base>

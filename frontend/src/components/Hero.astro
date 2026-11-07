@@ -1,0 +1,35 @@
+---
+import Icon from './Icon.astro';
+import { HERO } from '../content/home';
+let n = 0;
+---
+<section class="hero on-dark">
+  <div class="w">
+    <h1>
+      {HERO.title.map((line, li) => (
+        <>
+          {line.map((word) => <><span class="wd" style={`--i:${n++}`}>{word}</span>{' '}</>)}
+          {li < HERO.title.length - 1 && <br class="br-lg" />}
+        </>
+      ))}
+    </h1>
+    <p class="sub">{HERO.sub[0]}<br class="br-md" /> {HERO.sub[1]}</p>
+    <div class="cta">
+      <a class="btn b-l" href="/tasks/new">Разместить задание</a>
+      <a class="btn b-ol" href="/tasks">Найти заказы</a>
+    </div>
+    <div class="pics g12" data-parallax>
+      {HERO.photos.map((p, i) => (
+        <div class="pic" style={`--i:${i}`}>
+          <img
+            src={`/img/${p.file}-564.webp`}
+            srcset={`/img/${p.file}-282.webp 282w, /img/${p.file}-564.webp 564w`}
+            sizes="(min-width: 1200px) 276px, (min-width: 768px) 24vw, 48vw"
+            width="564" height="800" alt="" fetchpriority={i < 2 ? 'high' : 'auto'} decoding="async"
+          />
+          <span><Icon name={p.icon} size={20} />{p.title}</span>
+        </div>
+      ))}
+    </div>
+  </div>
+</section>

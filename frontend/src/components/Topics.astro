@@ -1,0 +1,19 @@
+---
+import Icon from './Icon.astro';
+import Head from './Head.astro';
+import type { Category } from '../lib/api';
+import { hasIcon } from '../lib/icons';
+interface Props { categories: Category[] }
+const { categories } = Astro.props;
+---
+<div class="blk" id="topics">
+  <Head title="Задания в любой теме" lead="Выберите свою — и смотрите заказы по ней." />
+  <div class="cgrid">
+    {categories.map((c, i) => (
+      <a class="cat cd" href={`/tasks?topic=${c.slug}`} data-reveal style={`--i:${i % 4 + Math.floor(i / 4)}`}>
+        <i class="ring"><Icon name={hasIcon(c.icon) ? c.icon : 'tags'} size={24} /></i>{c.title}
+      </a>
+    ))}
+  </div>
+  <a class="btn b-d more" href="/categories" data-reveal>Все категории <Icon name="arrow-right" size={20} /></a>
+</div>

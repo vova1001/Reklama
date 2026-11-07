@@ -1,0 +1,9 @@
+---
+// Заголовок раздела + одна строка подзаголовка.
+interface Props { title: string; lead?: string; id?: string }
+const { title, lead, id } = Astro.props;
+---
+<div class="hd" data-reveal>
+  <h2 id={id} set:html={title} />
+  {lead && <p class="lead" set:html={lead} />}
+</div>

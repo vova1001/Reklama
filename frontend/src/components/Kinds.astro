@@ -1,0 +1,29 @@
+---
+import Icon from './Icon.astro';
+import Head from './Head.astro';
+import { KINDS } from '../content/home';
+---
+<div class="blk op g12" id="creators">
+  <div class="op-pic" data-reveal>
+    <img src="/img/creator-1040.webp" srcset="/img/creator-560.webp 560w, /img/creator-1040.webp 1040w"
+      sizes="(min-width: 1200px) 476px, 100vw" width="1040" height="1160" alt="" loading="lazy" decoding="async" />
+  </div>
+  <div class="op-l">
+    <Head title="Два вида заданий" lead="Деньги хранятся в безопасной сделке и&nbsp;уходят автору автоматически после проверки." />
+    <div class="kinds">
+      {KINDS.map((k, i) => (
+        <div class="kd cd" data-reveal style={`--i:${i}`}>
+          <i class="ring"><Icon name={k.icon} size={24} /></i><b>{k.title}</b><span>{k.text}</span>
+        </div>
+      ))}
+    </div>
+    <div class="ex cd" data-reveal style="--i:2">
+      <div>
+        <span class="tag"><Icon name="zap" size={18} />Кофейня · Казань</span>
+        <b>10&nbsp;000 просмотров</b>
+        <span class="money">3&nbsp;000&nbsp;₽ за выполнение</span>
+      </div>
+      <a class="btn b-l" href="/tasks">Взять задание</a>
+    </div>
+  </div>
+</div>
