@@ -25,7 +25,7 @@ document.addEventListener('keydown', (e) => {
     burger?.focus();
   }
 });
-window.matchMedia('(min-width: 1024px)').addEventListener('change', (m) => m.matches && setMenu(false));
+window.matchMedia('(min-width: 1200px)').addEventListener('change', (m) => m.matches && setMenu(false));
 
 // Появление блоков при прокрутке (fade + сдвиг; у карточек — по очереди через --i)
 const items = document.querySelectorAll<HTMLElement>('[data-reveal]');

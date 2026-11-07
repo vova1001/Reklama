@@ -80,7 +80,7 @@ test('нет горизонтальной прокрутки', async ({ page }) 
 });
 
 test('мобильное меню открывается и закрывается', async ({ page, isMobile }) => {
-  test.skip(!isMobile, 'меню — только на телефоне');
+  test.skip(!isMobile, 'меню проверяем на телефоне');
   await page.goto('/');
   const burger = page.locator('[data-burger]');
   await burger.click();

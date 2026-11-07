@@ -1,0 +1,90 @@
+# «Охват»: всё в Docker. Запуск: docker compose up --build  →  http://localhost:8000
+name: ohvat
+
+services:
+  db:
+    image: ${REGISTRY:-docker.io/library}/postgres:16-alpine
+    environment:
+      POSTGRES_DB: ohvat
+      POSTGRES_USER: ohvat
+      # Только для локального запуска; на сервере задаётся в .env.
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-local-only}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ohvat -d ohvat"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  backend:
+    build:
+      context: ./backend
+      args:
+        REGISTRY: ${REGISTRY:-docker.io/library}
+    environment:
+      DATABASE_URL: postgres://ohvat:${POSTGRES_PASSWORD:-local-only}@db:5432/ohvat?sslmode=disable
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        REGISTRY: ${REGISTRY:-docker.io/library}
+    environment:
+      BACKEND_URL: http://backend:8080
+      PUBLIC_URL: ${PUBLIC_URL:-http://localhost:8000}
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+
+  web:
+    image: ${REGISTRY:-docker.io/library}/nginx:1.27-alpine
+    ports:
+      - "${WEB_PORT:-8000}:80"
+    volumes:
+      - ./deploy/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      frontend:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # ---- только для make test: тесты бэка на настоящей PostgreSQL (в памяти) ----
+  db-test:
+    profiles: [test]
+    image: ${REGISTRY:-docker.io/library}/postgres:16-alpine
+    environment:
+      POSTGRES_DB: test
+      POSTGRES_USER: test
+      POSTGRES_PASSWORD: test
+    tmpfs: /var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U test -d test"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  backend-test:
+    profiles: [test]
+    build:
+      context: ./backend
+      target: build
+      args:
+        REGISTRY: ${REGISTRY:-docker.io/library}
+    environment:
+      TEST_DATABASE_URL: postgres://test:test@db-test:5432/test?sslmode=disable
+    command: >
+      sh -c "go vet ./... &&
+             go test -count=1 -p 1 -coverpkg=./internal/service,./internal/repository,./internal/httpapi -coverprofile=/tmp/c.out ./... &&
+             go tool cover -func=/tmp/c.out | tail -1"
+    depends_on:
+      db-test:
+        condition: service_healthy
+
+volumes:
+  pgdata:

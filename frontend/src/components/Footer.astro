@@ -24,7 +24,7 @@ const cols = [FOOTER.cols[0], FOOTER.cols[1], { title: 'Темы', links: topics
     <div class="top g12">
       <div class="about"><Logo /><p>{FOOTER.about}</p><a class="mail" href="/faq">{FOOTER.mail}</a></div>
       {cols.map((c) => (
-        <div class="col"><h4>{c.title}</h4>{c.links.map(([t, href]) => <a href={href}>{t}</a>)}</div>
+        <div class="col"><h3>{c.title}</h3>{c.links.map(([t, href]) => <a href={href}>{t}</a>)}</div>
       ))}
     </div>
     <div class="bot"><span>© 2026 <b>Охват</b>. Все права защищены.</span><span>{FOOTER.legal}</span></div>

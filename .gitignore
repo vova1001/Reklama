@@ -1,7 +1,11 @@
+.env
 node_modules/
 dist/
 .astro/
-test-results/
-playwright-report/
-.env
-*.local
+backend/certs/*
+frontend/certs/*
+!backend/certs/.gitkeep
+!frontend/certs/.gitkeep
+frontend/test-results/
+frontend/playwright-report/
+*.out
