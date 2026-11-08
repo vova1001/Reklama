@@ -14,4 +14,4 @@ services:
       - key: DATABASE_URL # Neon → Connect → строка подключения (без -pooler), с ?sslmode=require
         sync: false
       - key: PUBLIC_URL
-        value: https://ohvat.onrender.com
+        value: https://ohvat-jif6.onrender.com
