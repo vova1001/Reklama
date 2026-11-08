@@ -1,5 +1,5 @@
 ---
-// «Зачем это»: мысль подсвечивается по словам при прокрутке, схема прорисовывается линией, три тезиса.
+// «Зачем это»: мысль подсвечивается по словам, схема прорисовывается отрезками между кругами, три тезиса.
 import Icon from './Icon.astro';
 import { WHY } from '../content/home';
 const words = WHY.thought.split(' ');
@@ -10,13 +10,13 @@ const words = WHY.thought.split(' ');
     <h2 class="thought" id="why-h" data-words data-progress="0.92,0.42" style={`--n:${words.length}`}>
       {words.map((w, i) => <><span class="tw" style={`--w:${i}`}>{w}</span>{' '}</>)}
     </h2>
-    <div class="flow" data-flow data-progress="0.88,0.45" aria-label="Как проходит сделка">
-      <div class="track" aria-hidden="true"><span class="fill"></span><span class="tip"><b></b></span></div>
+    <div class="flow" data-flow data-progress="0.88,0.45" aria-label="Как проходит сделка" style={`--n:${WHY.flow.length - 1}`}>
       <ol>
         {WHY.flow.map((s, i) => (
-          <li class="node" data-node style={`--i:${i}`}>
+          <li class="node" data-node style={`--k:${i}`}>
             <i class="ring"><Icon name={s.icon} size={26} /></i>
-            <div><b>{s.title}</b><span>{s.text}</span></div>
+            <b>{s.title}</b>
+            {i < WHY.flow.length - 1 && <span class="seg" aria-hidden="true"><span></span></span>}
           </li>
         ))}
       </ol>

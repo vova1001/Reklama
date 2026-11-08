@@ -43,7 +43,7 @@ Astro.response.headers.set('Cache-Control', 'public, max-age=60');
         <How />
         <Promo />
         <div class="blk biz" id="pricing">
-          <Head level={3} title="Тарифы для бизнеса" lead="Платите за размещение, а автору — только за результат." />
+          <Head level={3} title="Тарифы для бизнеса" />
           <Plans plans={home.businessPlans} />
         </div>
       </div>
@@ -54,7 +54,7 @@ Astro.response.headers.set('Cache-Control', 'public, max-age=60');
         <AutHow />
         <AutFeatures />
         <div class="blk aut" id="creator-pricing">
-          <Head level={3} title="Тарифы для авторов" lead="Больше откликов — больше заказов." />
+          <Head level={3} title="Тарифы для авторов" />
           <Plans plans={home.creatorPlans} dark />
         </div>
       </div>

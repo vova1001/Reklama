@@ -79,30 +79,16 @@ if (pics && !reduce.matches) {
 // data-progress="начало,конец" — доли высоты экрана, где находится верх элемента в начале и в конце.
 const clamp01 = (v: number) => Math.min(Math.max(v, 0), 1);
 const progressEls = [...document.querySelectorAll<HTMLElement>('[data-progress]')];
-const pxEls = [...document.querySelectorAll<HTMLElement>('[data-px]')];
 const zoneNav = document.querySelector<HTMLElement>('[data-zonenav]');
 const zones = [...document.querySelectorAll<HTMLElement>('[data-zone]')];
 const zoneLinks = new Map([...document.querySelectorAll<HTMLElement>('[data-zone-link]')].map((a) => [a.dataset.zoneLink!, a]));
 
+// круг загорается, когда до него дошёл отрезок линии (--n отрезков, у круга — номер k)
 const lightNodes = (flow: HTMLElement, p: number) => {
-  const track = flow.querySelector<HTMLElement>('.track');
-  if (!track) return;
-  const t = track.getBoundingClientRect();
-  const across = t.width > t.height;
-  flow.querySelectorAll<HTMLElement>('[data-node]').forEach((n) => {
-    const r = n.querySelector('i')!.getBoundingClientRect();
-    const pos = across ? (r.left + r.width / 2 - t.left) / t.width : (r.top + r.height / 2 - t.top) / t.height;
-    n.classList.toggle('on', p >= pos - 0.02);
-  });
+  const nodes = flow.querySelectorAll<HTMLElement>('[data-node]');
+  const n = nodes.length - 1;
+  nodes.forEach((node, k) => node.classList.toggle('on', p * n >= k - 0.02));
 };
-
-// вертикальная линия шагов автора заканчивается в центре последнего кружка
-const fitTracks = () => document.querySelectorAll<HTMLElement>('.vflow').forEach((f) => {
-  const last = f.querySelector<HTMLElement>('[data-node]:last-child');
-  if (last) f.style.setProperty('--tb', `${last.offsetHeight - 32}px`);
-});
-fitTracks();
-window.addEventListener('resize', fitTracks);
 
 const updateZones = (vh: number) => {
   if (!zoneNav || zones.length < 2) return;
@@ -134,12 +120,6 @@ const onFrame = () => {
       el.style.setProperty('--p', p.toFixed(3));
       if (el.hasAttribute('data-flow')) lightNodes(el, p);
     }
-    for (const img of pxEls) {
-      const r = img.parentElement!.getBoundingClientRect();
-      if (r.bottom < 0 || r.top > vh) continue;
-      const p = clamp01((vh - r.top) / (vh + r.height));
-      img.style.transform = `translate3d(0, ${((0.5 - p) * 48).toFixed(1)}px, 0)`;
-    }
   }
   updateZones(vh);
 };
@@ -153,32 +133,6 @@ if (reduce.matches) document.querySelectorAll('[data-node]').forEach((n) => n.cl
 window.addEventListener('scroll', queue, { passive: true });
 window.addEventListener('resize', queue);
 onFrame();
-
-// «Своё оформление»: цвет акцента меняется сам, пока превью на экране; после нажатия — только по выбору человека
-const brand = document.querySelector<HTMLElement>('[data-brand]');
-if (brand) {
-  const btns = [...brand.querySelectorAll<HTMLButtonElement>('[data-acc]')];
-  let idx = 0;
-  let timer = 0;
-  let manual = false;
-  const pick = (i: number) => {
-    idx = i;
-    brand.style.setProperty('--acc', btns[i].dataset.acc!);
-    btns.forEach((b, k) => b.setAttribute('aria-pressed', String(k === i)));
-  };
-  const stop = () => window.clearInterval(timer);
-  btns.forEach((b, i) => b.addEventListener('click', () => {
-    stop();
-    manual = true;
-    pick(i);
-  }));
-  if ('IntersectionObserver' in window && !reduce.matches) {
-    new IntersectionObserver(([e]) => {
-      stop();
-      if (e.isIntersecting && !manual) timer = window.setInterval(() => pick((idx + 1) % btns.length), 2600);
-    }, { threshold: 0.4 }).observe(brand);
-  }
-}
 
 // Вопросы: плавное раскрытие (высота — через grid-template-rows в CSS)
 document.querySelectorAll<HTMLElement>('[data-accordion] .q').forEach((q) => {

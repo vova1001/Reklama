@@ -7,7 +7,7 @@ interface Props { categories: Category[] }
 const { categories } = Astro.props;
 ---
 <div class="blk" id="topics">
-  <Head title="Задания в любой теме" lead="Выберите свою — и смотрите заказы по ней." />
+  <Head title="Задания в любой теме" />
   <div class="cgrid">
     {categories.map((c, i) => (
       <a class="cat cd" href={`/tasks?topic=${c.slug}`} data-reveal style={`--i:${i % 4 + Math.floor(i / 4)}`}>

@@ -4,7 +4,7 @@ import Head from './Head.astro';
 import { STEPS } from '../content/home';
 ---
 <div class="blk how">
-  <Head level={3} title="Как это работает" lead="Четыре шага — от тарифа до оплаты." />
+  <Head level={3} title="Как это работает" />
   <ol class="steps g12">
     {STEPS.map((s, n) => (
       <li class="st cd" data-reveal style={`--i:${n}`}>
@@ -14,11 +14,6 @@ import { STEPS } from '../content/home';
         </div>
         <h4>{s.title}</h4>
         <p set:html={s.text} />
-        <div class="chips">
-          {s.chips
-            ? s.chips.map((c) => <span class="chip">{c}</span>)
-            : <span class="chip chip-ok"><Icon name="check" size={20} />Оплачено автору</span>}
-        </div>
       </li>
     ))}
   </ol>

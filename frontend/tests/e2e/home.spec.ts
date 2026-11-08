@@ -17,7 +17,7 @@ test('главная открывается, все блоки на месте, 
   await expect(page.locator('h1')).toHaveCount(1);
   await expect(page.locator('h1')).toContainText('Реклама у авторов видео');
   // логика страницы: зачем это → для бизнеса → для авторов → темы, вопросы, призыв
-  for (const h of ['Охват соединяет бизнес', 'на ваших условиях', 'с оплатой после проверки', 'Задания в любой теме', 'Частые вопросы', 'Разместите первое задание']) {
+  for (const h of ['Охват соединяет бизнес', 'на ваших условиях', 'Заказы по вашей теме', 'Задания в любой теме', 'Частые вопросы', 'Разместите первое задание']) {
     await expect(page.getByRole('heading', { level: 2, name: new RegExp(h) })).toBeAttached();
   }
   for (const h of ['Как это работает', 'Инструменты продвижения', 'Тарифы для бизнеса', 'Возможности для авторов', 'Тарифы для авторов']) {
@@ -25,10 +25,12 @@ test('главная открывается, все блоки на месте, 
   }
   const order = await page.locator('#why, #business, #creators, #topics, #faq').evaluateAll((els) => els.map((e) => e.id));
   expect(order).toEqual(['why', 'business', 'creators', 'topics', 'faq']);
-  await expect(page.locator('.flow [data-node]')).toHaveCount(5);
+  await expect(page.locator('.why .flow [data-node]')).toHaveCount(5);
   await expect(page.locator('.why .points li')).toHaveCount(3);
   await expect(page.locator('.promo .pr')).toHaveCount(6);
-  await expect(page.locator('.af-list li')).toHaveCount(6);
+  await expect(page.locator('.af-list li')).toHaveCount(4);
+  await expect(page.locator('.flow3 [data-node]')).toHaveCount(3);
+  await expect(page.locator('.flow3 .seg')).toHaveCount(2);
   await expect(page.locator('.pic img')).toHaveCount(4);
   await expect(page.locator('.st')).toHaveCount(4);
   // прокрутка до конца — подгружаются фото, проявляются блоки
@@ -132,20 +134,10 @@ test('переключатель зон виден внутри зон и пок
 
 test('схема «Зачем это» прорисовывается при прокрутке', async ({ page }) => {
   await page.goto('/');
-  const nodes = page.locator('.flow [data-node]');
+  const nodes = page.locator('.why .flow [data-node]');
   await expect(nodes.last()).not.toHaveClass(/\bon\b/);
   await page.locator('.why .points').scrollIntoViewIfNeeded();
   await expect(nodes.last()).toHaveClass(/\bon\b/);
-});
-
-test('цвет оформления карточки меняется по нажатию', async ({ page }) => {
-  await page.goto('/');
-  const card = page.locator('[data-brand]');
-  await card.scrollIntoViewIfNeeded();
-  const btn = card.locator('[data-acc]').nth(2);
-  await btn.click();
-  await expect(btn).toHaveAttribute('aria-pressed', 'true');
-  await expect(card).toHaveAttribute('style', /--acc:\s*#3446a8/);
 });
 
 test.describe('уменьшение движения', () => {
@@ -154,7 +146,7 @@ test.describe('уменьшение движения', () => {
     await page.goto('/');
     const op = await page.locator('.cat').first().evaluate((el) => getComputedStyle(el).opacity);
     expect(op).toBe('1');
-    await expect(page.locator('.flow [data-node].on')).toHaveCount(5);
+    await expect(page.locator('.why .flow [data-node].on')).toHaveCount(5);
     const tw = await page.locator('.thought .tw').last().evaluate((el) => getComputedStyle(el).opacity);
     expect(tw).toBe('1');
     const word = await page.locator('.hero h1 .wd').first().evaluate((el) => getComputedStyle(el).opacity);

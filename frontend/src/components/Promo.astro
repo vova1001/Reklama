@@ -2,12 +2,12 @@
 // Инструменты продвижения для бизнеса: «Топ ленты» и «Своё оформление» — с живыми мини-превью, остальные — с мини-примером.
 import Icon from './Icon.astro';
 import Head from './Head.astro';
-import { BIZ, FEED, ACCENTS } from '../content/home';
+import { BIZ, FEED } from '../content/home';
 const small = [BIZ.stats, BIZ.kinds, BIZ.deal, BIZ.report];
 const thumb = (f: string) => ({ src: `/img/${f}-282.webp`, width: 282, height: 400 });
 ---
 <div class="blk promo-blk">
-  <Head level={3} title="Инструменты продвижения" lead="Сделайте задание заметнее и следите за результатом." />
+  <Head level={3} title="Инструменты продвижения" />
   <div class="promo g12">
     <!-- Топ ленты: выделенная карточка поднимается на первое место -->
     <article class="pr pr-big pr-top cd" data-reveal>
@@ -29,28 +29,29 @@ const thumb = (f: string) => ({ src: `/img/${f}-282.webp`, width: 282, height: 4
       </div>
     </article>
 
-    <!-- Своё оформление: обложка, цвет акцента, бейдж; цвет меняется сам или по нажатию -->
-    <article class="pr pr-big pr-brand cd" data-reveal data-brand style={`--acc:${ACCENTS[0].value}`}>
+    <!-- Своё оформление: в палитре сайта — обложка-фото, изумрудная рамка и отметка «Выделено», свой бейдж, крупный заголовок.
+         Под ней — обычная карточка ленты для сравнения. -->
+    <article class="pr pr-big pr-brand cd" data-reveal>
       <div class="pr-h"><i class="ring"><Icon name={BIZ.brand.icon} size={24} /></i><span class="ptag">{BIZ.brand.tag}</span></div>
       <h4>{BIZ.brand.title}</h4>
       <p>{BIZ.brand.text}</p>
-      <div class="stage">
-        <div class="bc" aria-hidden="true">
+      <div class="stage" aria-hidden="true">
+        <div class="bc">
           <div class="cover">
             <img src="/img/cafe-564.webp" width="564" height="800" alt="" loading="lazy" decoding="async" />
-            <em class="badge">Сезонное меню</em>
+            <em class="own">Сезонное меню</em>
+            <em class="sel"><Icon name="badge-check" size={16} />Выделено</em>
           </div>
           <div class="bc-b">
             <span class="bc-tag">{FEED[0].tag}</span>
             <b>{FEED[0].title}</b>
-            <div class="bc-r"><span class="chip">{FEED[0].goal}</span><strong>{FEED[0].pay}</strong></div>
-            <span class="bc-btn">Взять задание</span>
+            <div class="bc-r"><span>{FEED[0].goal}</span><strong>{FEED[0].pay}</strong></div>
           </div>
         </div>
-        <div class="sw" role="group" aria-label="Цвет акцента карточки">
-          {ACCENTS.map((a, i) => (
-            <button type="button" aria-label={a.name} aria-pressed={i === 0 ? 'true' : 'false'} style={`--c:${a.value}`} data-acc={a.value}><span></span></button>
-          ))}
+        <div class="fc plain">
+          <img src={`/img/${FEED[1].photo}-282.webp`} width="282" height="400" alt="" loading="lazy" decoding="async" />
+          <div class="fc-t"><span>{FEED[1].tag}</span><b>{FEED[1].title}</b></div>
+          <div class="fc-p"><b>{FEED[1].pay}</b></div>
         </div>
       </div>
     </article>
