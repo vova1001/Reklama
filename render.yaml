@@ -1,5 +1,5 @@
-# Render Blueprint: один бесплатный веб-сервис (nginx + Astro + Go в одном контейнере) и бесплатная PostgreSQL.
-# Секретов в файле нет: строку подключения к базе Render подставляет сам.
+# Render Blueprint: один бесплатный веб-сервис (nginx + Astro + Go в одном контейнере).
+# База — Neon (бесплатная PostgreSQL). Строку подключения вводит владелец в настройках Render (sync: false), в файлах её нет.
 services:
   - type: web
     name: ohvat
@@ -11,13 +11,7 @@ services:
     healthCheckPath: /healthz
     autoDeploy: true
     envVars:
-      - key: DATABASE_URL
-        fromDatabase:
-          name: ohvat-db
-          property: connectionString
+      - key: DATABASE_URL # Neon → Connect → строка подключения (без -pooler), с ?sslmode=require
+        sync: false
       - key: PUBLIC_URL
         value: https://ohvat.onrender.com
-databases:
-  - name: ohvat-db
-    plan: free
-    region: frankfurt
