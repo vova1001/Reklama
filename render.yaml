@@ -1,0 +1,23 @@
+# Render Blueprint: один бесплатный веб-сервис (nginx + Astro + Go в одном контейнере) и бесплатная PostgreSQL.
+# Секретов в файле нет: строку подключения к базе Render подставляет сам.
+services:
+  - type: web
+    name: ohvat
+    runtime: docker
+    dockerfilePath: ./deploy/render/Dockerfile
+    dockerContext: .
+    plan: free
+    region: frankfurt
+    healthCheckPath: /healthz
+    autoDeploy: true
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: ohvat-db
+          property: connectionString
+      - key: PUBLIC_URL
+        value: https://ohvat.onrender.com
+databases:
+  - name: ohvat-db
+    plan: free
+    region: frankfurt
