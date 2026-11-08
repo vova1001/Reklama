@@ -4,7 +4,9 @@
 Образ: `deploy/render/Dockerfile` (nginx + Astro + Go в одном контейнере).
 
 ## База Neon — один раз
-1. https://neon.tech → Sign up (удобно через GitHub) → Create project: имя `ohvat`, регион **Frankfurt (eu-central-1)**, Postgres 16.
+База создана: Neon, проект `ohvat` (Frankfurt), подключена к Render (DATABASE_URL в настройках сервиса). Ниже — как пересоздать вручную.
+
+1. https://neon.tech → Sign up → Create project: имя `ohvat`, регион **Frankfurt (eu-central-1)**, Postgres 16.
 2. На странице проекта → **Connect** → выключить «Connection pooling» → скопировать строку подключения
    (`postgresql://…neon.tech/neondb?sslmode=require`).
 3. Render → сервис `ohvat` → **Environment** → Add Environment Variable:
