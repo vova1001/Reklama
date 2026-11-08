@@ -62,6 +62,8 @@ export const FEED = [
   { photo: 'fitness', tag: 'Фитнес · Самара', title: 'Пробная тренировка', goal: '8 000 просмотров', pay: '2 500 ₽' },
 ];
 
+export const TAGS = { free: 'Бесплатно', pro: 'Про', top: 'Топ' } as const;
+
 export const AUT = {
   eyebrow: 'Для авторов',
   title: 'Заказы по вашей теме',
@@ -71,12 +73,15 @@ export const AUT = {
     { icon: 'briefcase', title: 'Задание', text: 'Открытое — сразу, остальные — по заявке' },
     { icon: 'wallet', title: 'Оплата', text: 'Сразу после проверки ролика' },
   ],
-  // только названия; метка тарифа — одна справа в строке
+  // только названия; метка тарифа справа: сначала бесплатное, затем Про и Топ
   features: [
-    { icon: 'palette', title: 'Оформление профиля', tag: 'Про' },
-    { icon: 'badge-check', title: 'Значок «Про»', tag: 'Про' },
-    { icon: 'trending-up', title: 'Место в топе каталога', tag: 'Топ' },
-    { icon: 'bell-ring', title: 'Ранний доступ к заданиям', tag: 'Топ' },
+    { icon: 'map-pin', title: 'Задания по теме и городу', tag: 'free' },
+    { icon: 'wallet', title: 'Оплата после проверки', tag: 'free' },
+    { icon: 'briefcase', title: '10 откликов в месяц', tag: 'free' },
+    { icon: 'palette', title: 'Оформление профиля', tag: 'pro' },
+    { icon: 'badge-check', title: 'Значок «Про»', tag: 'pro' },
+    { icon: 'trending-up', title: 'Место в топе каталога', tag: 'top' },
+    { icon: 'bell-ring', title: 'Ранний доступ к заданиям', tag: 'top' },
   ],
 };
 

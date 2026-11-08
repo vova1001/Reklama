@@ -5,17 +5,20 @@
 
 /* ===== токены (имена = токены макета) ===== */
 @theme static {
-  --color-bg: #f3f2ee;
-  --color-card: #faf9f6;
+  /* светлая лестница: фон зоны → белая карточка → тёплая вложенная панель */
+  --color-bg: #e9e7e1;
+  --color-card: #ffffff;
+  --color-panel: #f3f1ec;
   --color-dark: #1b1b1a;
-  --color-dark-card: #262624;
+  --color-dark-card: #2b2b29;
   --color-ink: #1b1b1a;
   --color-on-dark: #edece8;
-  --color-gray: #6f6e69;
+  --color-gray: #605f5a;
   --color-gray-dark: #9a9994;
   --color-emerald: #0f7553;
-  --color-line: rgba(27, 27, 26, 0.1);
-  --color-line-dark: rgba(237, 236, 232, 0.1);
+  --color-line: #dcd9d2;
+  --color-line-dark: rgba(237, 236, 232, 0.16);
+  --color-tint: rgba(15, 117, 83, 0.1);
   --font-sans: 'Inter', system-ui, sans-serif;
   --radius-card: 28px;
   --radius-photo: 28px;
@@ -107,8 +110,10 @@ h2 { font-size: clamp(34px, 4.4vw + 18px, 60px); line-height: 1.03; letter-spaci
 .on-dark { background: var(--color-dark); color: var(--color-on-dark); }
 
 /* поверхности: одна карточка на светлом, одна на тёмном; обводка 1px */
-.cd { background: var(--color-card); box-shadow: inset 0 0 0 1px var(--color-line); }
+.cd { background: var(--color-card); box-shadow: inset 0 0 0 1px var(--color-line), 0 1px 2px rgba(var(--k), 0.04), 0 10px 28px -16px rgba(var(--k), 0.18); }
 .on-dark .cd { background: var(--color-dark-card); box-shadow: inset 0 0 0 1px var(--color-line-dark); }
+/* иконка в изумрудном кружке-тинте (в светлых карточках и тезисах) */
+.light .cd .ring, .points li i { background: var(--color-tint); color: var(--color-emerald); box-shadow: none; }
 .ring { border-radius: 50%; display: flex; align-items: center; justify-content: center; flex: none; box-shadow: inset 0 0 0 1px var(--color-line); }
 .on-dark .ring { box-shadow: inset 0 0 0 1px rgba(var(--l), 0.16); }
 
@@ -121,7 +126,7 @@ h2 { font-size: clamp(34px, 4.4vw + 18px, 60px); line-height: 1.03; letter-spaci
   transition: transform 0.35s var(--ease-out-soft), box-shadow 0.35s var(--ease-out-soft), background-color 0.25s ease, color 0.25s ease;
 }
 .btn .ic { transition: transform 0.35s var(--ease-out-soft); }
-.b-l { background: var(--color-bg); color: var(--color-ink); }
+.b-l { background: var(--color-panel); color: var(--color-ink); }
 .b-d { background: var(--color-dark); color: var(--color-on-dark); }
 .b-ol { box-shadow: inset 0 0 0 1px rgba(var(--l), 0.24); color: var(--color-on-dark); }
 .b-od { box-shadow: inset 0 0 0 1px rgba(var(--k), 0.16); color: var(--color-ink); }
@@ -304,7 +309,7 @@ h2 { font-size: clamp(34px, 4.4vw + 18px, 60px); line-height: 1.03; letter-spaci
 .st { grid-column: span 12; border-radius: var(--radius-card); padding: 28px 24px; display: flex; flex-direction: column; }
 .st .top { display: flex; justify-content: space-between; align-items: center; }
 .st i { width: 60px; height: 60px; }
-.st .num { font-size: 18px; font-weight: 600; color: rgba(var(--k), 0.4); font-variant-numeric: tabular-nums; letter-spacing: 0; }
+.st .num { font-size: 18px; font-weight: 650; color: var(--color-emerald); font-variant-numeric: tabular-nums; letter-spacing: 0; }
 .st h4 { font-size: 24px; line-height: 1.15; letter-spacing: -0.025em; margin-top: 24px; }
 .st p { font-size: 18px; color: var(--color-gray); margin-top: 10px; }
 @media (min-width: 640px) {
@@ -395,7 +400,7 @@ h2 { font-size: clamp(34px, 4.4vw + 18px, 60px); line-height: 1.03; letter-spaci
 .flow { position: relative; margin-top: calc(var(--head) + 16px); --p: 1; }
 .flow ol { display: grid; gap: 36px; }
 .flow .node { position: relative; display: flex; align-items: center; gap: 18px; min-height: 64px; }
-.flow .node i { width: 64px; height: 64px; background: var(--color-bg); color: rgba(var(--k), 0.5); transition: background-color 0.5s ease, color 0.5s ease, box-shadow 0.5s ease; }
+.flow .node i { width: 64px; height: 64px; background: var(--color-card); color: rgba(var(--k), 0.55); box-shadow: inset 0 0 0 1px var(--color-line); transition: background-color 0.5s ease, color 0.5s ease, box-shadow 0.5s ease; }
 .flow .node b { font-size: 22px; font-weight: 600; letter-spacing: -0.02em; color: rgba(var(--k), 0.7); transition: color 0.5s ease; }
 .flow .node.on i { background: var(--color-dark); color: var(--color-on-dark); box-shadow: none; }
 .flow .node.on b { color: var(--color-ink); }
@@ -462,13 +467,13 @@ h2 { font-size: clamp(34px, 4.4vw + 18px, 60px); line-height: 1.03; letter-spaci
 }
 
 /* превью ленты: выделенная карточка — первая, поднята, с изумрудной обводкой и бейджем «Топ» */
-.feed { margin-top: 28px; border-radius: 22px; background: var(--color-bg); box-shadow: inset 0 0 0 1px var(--color-line); padding: 14px 12px 12px; }
+.feed { margin-top: 28px; border-radius: 22px; background: var(--color-panel); box-shadow: inset 0 0 0 1px var(--color-line); padding: 14px 12px 12px; }
 .feed-h { display: flex; justify-content: space-between; font-size: 16px; color: var(--color-gray); padding: 0 6px 12px; }
 .slots { --fh: 76px; --fg: 10px; position: relative; height: calc(3 * var(--fh) + 2 * var(--fg)); }
 .fc {
   position: absolute; left: 0; right: 0; top: 0; height: var(--fh);
   display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 12px;
-  padding: 0 14px 0 10px; border-radius: 18px; background: #fff; box-shadow: inset 0 0 0 1px var(--color-line);
+  padding: 0 14px 0 10px; border-radius: 18px; background: #fff; box-shadow: inset 0 0 0 1px var(--color-line), 0 4px 12px -8px rgba(var(--k), 0.2);
   transform: translateY(calc(var(--s) * (var(--fh) + var(--fg))));
   transition: transform 1.1s var(--ease-pill), box-shadow 0.6s ease, opacity 0.6s ease;
 }
@@ -493,7 +498,7 @@ h2 { font-size: clamp(34px, 4.4vw + 18px, 60px); line-height: 1.03; letter-spaci
 }
 @media (max-width: 399px) { .fc-p span { display: none; } }
 .fc.hot { z-index: 2; box-shadow: inset 0 0 0 2px var(--color-emerald), 0 18px 36px -18px rgba(15, 117, 83, 0.55); }
-.fc:not(.hot) { opacity: 0.72; }
+
 .fc .badge {
   position: absolute; top: -11px; right: 14px; display: inline-flex; align-items: center; gap: 4px;
   height: 26px; padding: 0 10px 0 7px; border-radius: 999px; overflow: hidden;
@@ -510,7 +515,7 @@ h2 { font-size: clamp(34px, 4.4vw + 18px, 60px); line-height: 1.03; letter-spaci
 }
 
 /* превью оформления: только палитра сайта — фото-обложка, изумрудная рамка и «Выделено», свой бейдж, крупный заголовок */
-.stage { margin-top: 28px; border-radius: 22px; background: var(--color-bg); box-shadow: inset 0 0 0 1px var(--color-line); padding: 16px; display: flex; flex-direction: column; gap: 12px; flex: 1; justify-content: center; }
+.stage { margin-top: 28px; border-radius: 22px; background: var(--color-panel); box-shadow: inset 0 0 0 1px var(--color-line); padding: 16px; display: flex; flex-direction: column; gap: 12px; flex: 1; justify-content: center; }
 .bc { position: relative; border-radius: 20px; background: #fff; overflow: hidden; box-shadow: 0 0 0 2px var(--color-emerald), 0 22px 40px -24px rgba(15, 117, 83, 0.55); transition: box-shadow 0.8s ease 0.3s; }
 .bc .cover { position: relative; aspect-ratio: 16 / 10; overflow: hidden; background: var(--color-dark-card); }
 .bc .cover img { width: 100%; height: 100%; object-fit: cover; object-position: 50% 24%; display: block; }
@@ -524,7 +529,7 @@ h2 { font-size: clamp(34px, 4.4vw + 18px, 60px); line-height: 1.03; letter-spaci
 .bc-r span { white-space: nowrap; }
 @media (max-width: 399px) { .bc-r span { display: none; } }
 .bc-r strong { font-size: 22px; font-weight: 650; letter-spacing: -0.03em; color: var(--color-emerald); white-space: nowrap; }
-.fc.plain { position: relative; transform: none; height: 76px; opacity: 0.7; }
+.fc.plain { position: relative; transform: none; height: 76px; }
 @media (min-width: 640px) { .stage { padding: 20px; } .bc .cover { aspect-ratio: 16 / 7; } }
 
 /* мини-примеры у малых карточек */
@@ -536,7 +541,7 @@ h2 { font-size: clamp(34px, 4.4vw + 18px, 60px); line-height: 1.03; letter-spaci
 .bar-r i b { display: block; height: 100%; border-radius: 8px; background: var(--color-emerald); transform-origin: left; transform: scaleX(var(--v)); transition: transform 1.2s var(--ease-pill); transition-delay: calc(0.3s + var(--k) * 0.12s); }
 .bar-r:not(:first-child) i b { background: rgba(15, 117, 83, 0.45); }
 .kinds2 { display: grid; gap: 8px; }
-.kinds2 span { display: flex; align-items: center; gap: 10px; height: 46px; padding: 0 14px; border-radius: 14px; font-size: 17px; font-weight: 500; box-shadow: inset 0 0 0 1px var(--color-line); }
+.kinds2 span { display: flex; align-items: center; gap: 10px; height: 46px; padding: 0 14px; border-radius: 14px; font-size: 17px; font-weight: 500; box-shadow: inset 0 0 0 1px var(--color-line); background: var(--color-panel); }
 .kinds2 span.on { background: var(--color-dark); color: var(--color-on-dark); box-shadow: none; }
 .deal { display: grid; gap: 0; position: relative; }
 .deal li { position: relative; display: flex; align-items: center; gap: 12px; height: 40px; font-size: 17px; color: var(--color-gray); }
@@ -546,7 +551,7 @@ h2 { font-size: clamp(34px, 4.4vw + 18px, 60px); line-height: 1.03; letter-spaci
 .deal li:not(.ok) b { box-shadow: inset 0 0 0 6px var(--color-dark); }
 .deal li.ok { color: var(--color-ink); font-weight: 600; }
 .deal li.ok b { background: var(--color-emerald); box-shadow: none; color: #fff; }
-.file { display: flex; align-items: center; gap: 12px; height: 60px; padding: 0 8px 0 14px; border-radius: 16px; box-shadow: inset 0 0 0 1px var(--color-line); background: var(--color-bg); font-size: 17px; font-weight: 500; }
+.file { display: flex; align-items: center; gap: 12px; height: 60px; padding: 0 8px 0 14px; border-radius: 16px; box-shadow: inset 0 0 0 1px var(--color-line); background: var(--color-panel); font-size: 17px; font-weight: 500; }
 .file > .ic { color: var(--color-emerald); }
 .file span { flex: 1; min-width: 0; }
 .file b { width: 44px; height: 44px; border-radius: 50%; background: var(--color-dark); color: var(--color-on-dark); display: grid; place-items: center; }
@@ -554,11 +559,16 @@ h2 { font-size: clamp(34px, 4.4vw + 18px, 60px); line-height: 1.03; letter-spaci
 /* ===== зона «Для авторов» ===== */
 /* возможности для авторов + превью каталога */
 .af { row-gap: 40px; align-items: start; }
-.af-list { grid-column: span 12; border-top: 1px solid var(--color-line-dark); }
-.af-list li { display: grid; grid-template-columns: 48px minmax(0, 1fr) auto; align-items: center; gap: 20px; height: 84px; border-bottom: 1px solid var(--color-line-dark); }
-.af-list i { width: 48px; height: 48px; color: #7fd3b1; }
-.af-list h4 { font-size: 20px; line-height: 1.2; letter-spacing: -0.02em; }
-.af-list .ptag { justify-self: end; min-width: 56px; justify-content: center; }
+.af-list { grid-column: span 12; border-radius: var(--radius-card); background: var(--color-dark-card); box-shadow: inset 0 0 0 1px var(--color-line-dark); padding: 4px 20px; }
+.af-list li { display: grid; grid-template-columns: 44px minmax(0, 1fr) auto; align-items: center; gap: 16px; height: 76px; }
+.af-list li + li { border-top: 1px solid var(--color-line-dark); }
+.af-list i { width: 44px; height: 44px; background: rgba(95, 196, 157, 0.12); color: #7fd3b1; box-shadow: none; }
+.af-list h4 { font-size: 19px; line-height: 1.2; letter-spacing: -0.02em; }
+.af-list .ptag { justify-self: end; min-width: 64px; justify-content: center; }
+/* метки тарифов: Бесплатно — нейтральная, Про — изумрудный контур, Топ — изумрудная заливка */
+.on-dark .ptag.t-free { background: rgba(var(--l), 0.1); color: var(--color-on-dark); }
+.on-dark .ptag.t-pro { background: transparent; color: #7fd3b1; box-shadow: inset 0 0 0 1.5px rgba(127, 211, 177, 0.6); }
+.on-dark .ptag.t-top { background: var(--color-emerald); color: #fff; }
 .cat-pv { grid-column: span 12; border-radius: var(--radius-card); background: var(--color-dark-card); box-shadow: inset 0 0 0 1px var(--color-line-dark); padding: 16px 14px 14px; }
 .cat-pv .feed-h { color: var(--color-gray-dark); }
 .pf { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 12px; padding: 14px; border-radius: 18px; }
@@ -589,8 +599,9 @@ h2 { font-size: clamp(34px, 4.4vw + 18px, 60px); line-height: 1.03; letter-spaci
   .pf.hot .pf-r { padding-top: 0; }
 }
 @media (min-width: 640px) {
-  .af-list h4 { font-size: 22px; }
-  .af-list li { height: 92px; }
+  .af-list { padding: 4px 28px; }
+  .af-list h4 { font-size: 21px; }
+  .af-list li { height: 80px; }
   .cat-pv { padding: 20px; }
 }
 @media (min-width: 1024px) {

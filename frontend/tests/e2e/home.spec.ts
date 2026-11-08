@@ -28,7 +28,8 @@ test('главная открывается, все блоки на месте, 
   await expect(page.locator('.why .flow [data-node]')).toHaveCount(5);
   await expect(page.locator('.why .points li')).toHaveCount(3);
   await expect(page.locator('.promo .pr')).toHaveCount(6);
-  await expect(page.locator('.af-list li')).toHaveCount(4);
+  await expect(page.locator('.af-list li')).toHaveCount(7);
+  await expect(page.locator('.af-list .t-free')).toHaveCount(3);
   await expect(page.locator('.flow3 [data-node]')).toHaveCount(3);
   await expect(page.locator('.flow3 .seg')).toHaveCount(2);
   await expect(page.locator('.pic img')).toHaveCount(4);

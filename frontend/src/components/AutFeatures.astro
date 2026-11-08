@@ -2,7 +2,7 @@
 // Возможности для авторов: ровный список с разделителями (название + тариф справа) и превью выделенного профиля в каталоге.
 import Icon from './Icon.astro';
 import Head from './Head.astro';
-import { AUT, CATALOG } from '../content/home';
+import { AUT, CATALOG, TAGS } from '../content/home';
 ---
 <div class="blk aut-feat">
   <Head level={3} title="Возможности для авторов" />
@@ -12,7 +12,7 @@ import { AUT, CATALOG } from '../content/home';
         <li data-reveal style={`--i:${i}`}>
           <i class="ring"><Icon name={f.icon} size={22} /></i>
           <h4>{f.title}</h4>
-          <span class="ptag">{f.tag}</span>
+          <span class={`ptag t-${f.tag}`}>{TAGS[f.tag as keyof typeof TAGS]}</span>
         </li>
       ))}
     </ul>
