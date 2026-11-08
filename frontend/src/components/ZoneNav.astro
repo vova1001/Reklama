@@ -1,0 +1,8 @@
+---
+import Icon from './Icon.astro';
+---
+<!-- Переключатель зон «Для бизнеса / Для авторов»: виден внутри зон, у каждой — полоска прогресса -->
+<nav class="zn" aria-label="Разделы для бизнеса и авторов" data-zonenav>
+  <a href="#business" data-zone-link="business"><Icon name="store" size={18} /><span>Для бизнеса</span><i aria-hidden="true"></i></a>
+  <a href="#creators" data-zone-link="creators"><Icon name="video" size={18} /><span>Для авторов</span><i aria-hidden="true"></i></a>
+</nav>

@@ -3,16 +3,16 @@ import Icon from './Icon.astro';
 import Head from './Head.astro';
 import { STEPS } from '../content/home';
 ---
-<div class="blk how" id="business">
-  <Head title="Как это работает<br>для бизнеса" lead="Четыре шага — от тарифа до оплаты." />
+<div class="blk how">
+  <Head level={3} title="Как это работает" lead="Четыре шага — от тарифа до оплаты." />
   <ol class="steps g12">
     {STEPS.map((s, n) => (
       <li class="st cd" data-reveal style={`--i:${n}`}>
         <div class="top">
           <i class="ring"><Icon name={s.icon} size={26} /></i>
-          {n < STEPS.length - 1 && <span class="nx"><Icon name="arrow-right" size={24} /></span>}
+          <span class="num" aria-hidden="true">0{n + 1}</span>
         </div>
-        <h3>{s.title}</h3>
+        <h4>{s.title}</h4>
         <p set:html={s.text} />
         <div class="chips">
           {s.chips

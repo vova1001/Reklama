@@ -1,0 +1,42 @@
+---
+// Возможности для авторов: список + живое превью выделенного профиля в каталоге.
+import Icon from './Icon.astro';
+import Head from './Head.astro';
+import { AUT, CATALOG } from '../content/home';
+---
+<div class="blk aut-feat">
+  <Head level={3} title="Возможности для авторов" lead="Больше заметности и заказов — с тарифами Про и Топ." />
+  <div class="af g12">
+    <ul class="af-list">
+      {AUT.features.map((f, i) => (
+        <li data-reveal style={`--i:${i % 2 + Math.floor(i / 2)}`}>
+          <i class="ring"><Icon name={f.icon} size={24} /></i>
+          <div>
+            <h4>{f.title}</h4>
+            <p>{f.text}</p>
+            {f.tag && <span class="ptag">Тариф {f.tag}</span>}
+          </div>
+        </li>
+      ))}
+    </ul>
+    <div class="cat-pv" data-reveal aria-hidden="true">
+      <div class="feed-h"><span>Каталог авторов</span><span>Казань</span></div>
+      {CATALOG.map((c, i) => (
+        <div class:list={['pf', { hot: i === 0 }]}>
+          {i === 0 && <div class="pf-cover"></div>}
+          {i === 0
+            ? <img src="/img/creator-560.webp" width="560" height="625" alt="" loading="lazy" decoding="async" />
+            : <span class="av">{c.name[0]}</span>}
+          <div class="pf-t">
+            <b>{c.name}{i === 0 && <em class="pro"><Icon name="badge-check" size={16} />Про</em>}</b>
+            <span>{c.city} · {c.topics.join(', ')}</span>
+          </div>
+          <div class="pf-r">
+            {i === 0 && <em class="intop"><Icon name="trending-up" size={16} />В топе</em>}
+            <span>{c.done}</span>
+          </div>
+        </div>
+      ))}
+    </div>
+  </div>
+</div>

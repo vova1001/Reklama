@@ -9,7 +9,7 @@ const btn = (hot: boolean) => (dark ? (hot ? 'b-d' : 'b-ol') : hot ? 'b-l' : 'b-
 <div class="plans g12">
   {plans.map((p, i) => (
     <div class:list={['cd plan', { 'plan-on': p.recommended }]} data-reveal style={`--i:${i}`}>
-      <div class="pl-h"><h3>{p.name}</h3>{p.recommended && <span class="rec">Рекомендуем</span>}</div>
+      <div class="pl-h"><h4>{p.name}</h4>{p.recommended && <span class="rec">Рекомендуем</span>}</div>
       <p class="pl-s">{p.subtitle}</p>
       <div class="price">{p.priceText}<small>/&nbsp;мес</small></div>
       <ul>{p.features.map((f) => <li><Icon name="check" size={22} /><span>{f}</span></li>)}</ul>

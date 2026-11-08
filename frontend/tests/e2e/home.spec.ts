@@ -16,9 +16,19 @@ test('главная открывается, все блоки на месте, 
   await expect(page).toHaveTitle(/Охват/);
   await expect(page.locator('h1')).toHaveCount(1);
   await expect(page.locator('h1')).toContainText('Реклама у авторов видео');
-  for (const h of ['Как это работает', 'Тарифы для бизнеса', 'Два вида заданий', 'Тарифы для авторов', 'Задания в любой теме', 'С чего начать', 'Частые вопросы', 'Разместите первое задание']) {
+  // логика страницы: зачем это → для бизнеса → для авторов → темы, вопросы, призыв
+  for (const h of ['Охват соединяет бизнес', 'на ваших условиях', 'с оплатой после проверки', 'Задания в любой теме', 'Частые вопросы', 'Разместите первое задание']) {
     await expect(page.getByRole('heading', { level: 2, name: new RegExp(h) })).toBeAttached();
   }
+  for (const h of ['Как это работает', 'Инструменты продвижения', 'Тарифы для бизнеса', 'Возможности для авторов', 'Тарифы для авторов']) {
+    await expect(page.getByRole('heading', { level: 3, name: h }).first()).toBeAttached();
+  }
+  const order = await page.locator('#why, #business, #creators, #topics, #faq').evaluateAll((els) => els.map((e) => e.id));
+  expect(order).toEqual(['why', 'business', 'creators', 'topics', 'faq']);
+  await expect(page.locator('.flow [data-node]')).toHaveCount(5);
+  await expect(page.locator('.why .points li')).toHaveCount(3);
+  await expect(page.locator('.promo .pr')).toHaveCount(6);
+  await expect(page.locator('.af-list li')).toHaveCount(6);
   await expect(page.locator('.pic img')).toHaveCount(4);
   await expect(page.locator('.st')).toHaveCount(4);
   // прокрутка до конца — подгружаются фото, проявляются блоки
@@ -40,7 +50,7 @@ test('данные главной приходят из API', async ({ page, req
   await expect(page.locator('.biz .plan')).toHaveCount(home.businessPlans.length);
   await expect(page.locator('.aut .plan')).toHaveCount(home.creatorPlans.length);
   await expect(page.locator('.q')).toHaveCount(home.faq.length);
-  await expect(page.locator('.biz .plan-on h3')).toHaveText(home.businessPlans.find((p: { recommended: boolean }) => p.recommended).name);
+  await expect(page.locator('.biz .plan-on h4')).toHaveText(home.businessPlans.find((p: { recommended: boolean }) => p.recommended).name);
   await expect(page.locator('.cat').first()).toContainText(home.categories[0].title);
 });
 
@@ -90,20 +100,63 @@ test('мобильное меню открывается и закрываетс
   await expect(burger).toHaveAttribute('aria-expanded', 'false');
 });
 
-test('шапка уплотняется при прокрутке', async ({ page }) => {
+test('шапка сворачивается в «пилюлю» и разворачивается у верха', async ({ page }) => {
   await page.goto('/');
   const bar = page.locator('[data-bar]');
-  await expect(bar).not.toHaveClass(/is-scrolled/);
-  await page.mouse.wheel(0, 600);
-  await expect(bar).toHaveClass(/is-scrolled/);
+  const shell = bar.locator('.shell');
+  await expect(bar).not.toHaveClass(/is-pill/);
+  const full = await shell.boundingBox();
+  await page.evaluate(() => window.scrollTo(0, 900));
+  await expect(bar).toHaveClass(/is-pill/);
+  await page.waitForTimeout(900);
+  const pill = await shell.boundingBox();
+  expect(pill!.width).toBeLessThan(full!.width);
+  expect(pill!.y).toBeGreaterThan(0);
+  expect(await shell.evaluate((el) => parseFloat(getComputedStyle(el).borderTopLeftRadius))).toBeGreaterThan(20);
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await expect(bar).not.toHaveClass(/is-pill/);
+});
+
+test('переключатель зон виден внутри зон и показывает текущую', async ({ page }) => {
+  await page.goto('/');
+  const zn = page.locator('[data-zonenav]');
+  await expect(zn).not.toHaveClass(/is-on/);
+  await page.locator('#business .promo').scrollIntoViewIfNeeded();
+  await expect(zn).toHaveClass(/is-on/);
+  await expect(zn.locator('[data-zone-link="business"]')).toHaveClass(/on/);
+  await page.locator('#creators .af').scrollIntoViewIfNeeded();
+  await expect(zn.locator('[data-zone-link="creators"]')).toHaveClass(/on/);
+  await zn.locator('[data-zone-link="business"]').click();
+  await expect(zn.locator('[data-zone-link="business"]')).toHaveClass(/on/);
+});
+
+test('схема «Зачем это» прорисовывается при прокрутке', async ({ page }) => {
+  await page.goto('/');
+  const nodes = page.locator('.flow [data-node]');
+  await expect(nodes.last()).not.toHaveClass(/\bon\b/);
+  await page.locator('.why .points').scrollIntoViewIfNeeded();
+  await expect(nodes.last()).toHaveClass(/\bon\b/);
+});
+
+test('цвет оформления карточки меняется по нажатию', async ({ page }) => {
+  await page.goto('/');
+  const card = page.locator('[data-brand]');
+  await card.scrollIntoViewIfNeeded();
+  const btn = card.locator('[data-acc]').nth(2);
+  await btn.click();
+  await expect(btn).toHaveAttribute('aria-pressed', 'true');
+  await expect(card).toHaveAttribute('style', /--acc:\s*#3446a8/);
 });
 
 test.describe('уменьшение движения', () => {
   test.use({ reducedMotion: 'reduce' });
   test('всё видно сразу, без анимаций', async ({ page }) => {
     await page.goto('/');
-    const op = await page.locator('.tile').first().evaluate((el) => getComputedStyle(el).opacity);
+    const op = await page.locator('.cat').first().evaluate((el) => getComputedStyle(el).opacity);
     expect(op).toBe('1');
+    await expect(page.locator('.flow [data-node].on')).toHaveCount(5);
+    const tw = await page.locator('.thought .tw').last().evaluate((el) => getComputedStyle(el).opacity);
+    expect(tw).toBe('1');
     const word = await page.locator('.hero h1 .wd').first().evaluate((el) => getComputedStyle(el).opacity);
     expect(word).toBe('1');
   });

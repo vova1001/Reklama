@@ -1,9 +1,10 @@
 ---
-// Заголовок раздела + одна строка подзаголовка.
-interface Props { title: string; lead?: string; id?: string }
-const { title, lead, id } = Astro.props;
+// Заголовок раздела (h2) или подраздела зоны (h3, class="sub") + одна строка подзаголовка.
+interface Props { title: string; lead?: string; id?: string; level?: 2 | 3 }
+const { title, lead, id, level = 2 } = Astro.props;
+const H = level === 3 ? 'h3' : 'h2';
 ---
-<div class="hd" data-reveal>
-  <h2 id={id} set:html={title} />
+<div class:list={['hd', { sub: level === 3 }]} data-reveal>
+  <H id={id} set:html={title} />
   {lead && <p class="lead" set:html={lead} />}
 </div>

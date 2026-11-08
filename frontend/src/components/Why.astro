@@ -1,0 +1,33 @@
+---
+// «Зачем это»: мысль подсвечивается по словам при прокрутке, схема прорисовывается линией, три тезиса.
+import Icon from './Icon.astro';
+import { WHY } from '../content/home';
+const words = WHY.thought.split(' ');
+---
+<section class="zone light sheet why" id="why" aria-labelledby="why-h">
+  <div class="w">
+    <p class="eyebrow" data-reveal>Зачем это</p>
+    <h2 class="thought" id="why-h" data-words data-progress="0.92,0.42" style={`--n:${words.length}`}>
+      {words.map((w, i) => <><span class="tw" style={`--w:${i}`}>{w}</span>{' '}</>)}
+    </h2>
+    <div class="flow" data-flow data-progress="0.88,0.45" aria-label="Как проходит сделка">
+      <div class="track" aria-hidden="true"><span class="fill"></span><span class="tip"><b></b></span></div>
+      <ol>
+        {WHY.flow.map((s, i) => (
+          <li class="node" data-node style={`--i:${i}`}>
+            <i class="ring"><Icon name={s.icon} size={26} /></i>
+            <div><b>{s.title}</b><span>{s.text}</span></div>
+          </li>
+        ))}
+      </ol>
+    </div>
+    <ul class="points g12">
+      {WHY.points.map((p, i) => (
+        <li data-reveal style={`--i:${i}`}>
+          <i class="ring"><Icon name={p.icon} size={24} /></i>
+          <p>{p.text}</p>
+        </li>
+      ))}
+    </ul>
+  </div>
+</section>

@@ -3,8 +3,9 @@ import Logo from './Logo.astro';
 import Icon from './Icon.astro';
 import { NAV } from '../content/home';
 ---
+<!-- Шапка: во всю ширину на первом экране; при прокрутке сворачивается в стеклянную «пилюлю» по центру -->
 <header class="bar" data-bar>
-  <div class="w nav">
+  <div class="shell">
     <Logo />
     <ul>{NAV.map((n) => <li><a class="lnk" href={n.href}>{n.title}</a></li>)}</ul>
     <div class="r">

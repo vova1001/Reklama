@@ -5,12 +5,17 @@ import Hero from '../components/Hero.astro';
 import How from '../components/How.astro';
 import Head from '../components/Head.astro';
 import Plans from '../components/Plans.astro';
-import Kinds from '../components/Kinds.astro';
 import Topics from '../components/Topics.astro';
-import Start from '../components/Start.astro';
+import Why from '../components/Why.astro';
+import ZoneHead from '../components/ZoneHead.astro';
+import ZoneNav from '../components/ZoneNav.astro';
+import Promo from '../components/Promo.astro';
+import AutHow from '../components/AutHow.astro';
+import AutFeatures from '../components/AutFeatures.astro';
 import Faq from '../components/Faq.astro';
 import Footer from '../components/Footer.astro';
 import { getHome } from '../lib/api';
+import { BIZ, AUT } from '../content/home';
 
 let home;
 try {
@@ -28,22 +33,28 @@ Astro.response.headers.set('Cache-Control', 'public, max-age=60');
   description="Разместите задание с условиями: автор снимет ролик, сервис проверит просмотры и лайки и сам переведёт оплату. Начните бесплатно."
 >
   <Header />
+  <ZoneNav />
   <main>
     <Hero />
-    <section class="zone light sheet">
+    <Why />
+    <section class="zone light biz-zone" id="business" data-zone="business" aria-label="Для бизнеса">
       <div class="w">
+        <ZoneHead icon="store" eyebrow={BIZ.eyebrow} title={BIZ.title} lead={BIZ.lead} />
         <How />
+        <Promo />
         <div class="blk biz" id="pricing">
-          <Head title="Тарифы для бизнеса" lead="Платите за размещение, а автору — только за результат." />
+          <Head level={3} title="Тарифы для бизнеса" lead="Платите за размещение, а автору — только за результат." />
           <Plans plans={home.businessPlans} />
         </div>
       </div>
     </section>
-    <section class="zone on-dark sheet">
+    <section class="zone on-dark sheet aut-zone" id="creators" data-zone="creators" aria-label="Для авторов">
       <div class="w">
-        <Kinds />
+        <ZoneHead icon="video" eyebrow={AUT.eyebrow} title={AUT.title} lead={AUT.lead} />
+        <AutHow />
+        <AutFeatures />
         <div class="blk aut" id="creator-pricing">
-          <Head title="Тарифы для авторов" lead="Больше откликов — больше заказов." />
+          <Head level={3} title="Тарифы для авторов" lead="Больше откликов — больше заказов." />
           <Plans plans={home.creatorPlans} dark />
         </div>
       </div>
@@ -51,7 +62,6 @@ Astro.response.headers.set('Cache-Control', 'public, max-age=60');
     <section class="zone light sheet">
       <div class="w">
         <Topics categories={home.categories} />
-        <Start />
         <Faq faq={home.faq} />
       </div>
     </section>

@@ -1,0 +1,11 @@
+---
+// Начало зоны «Для бизнеса» / «Для авторов»: метка, крупный заголовок, ценность в 1–2 строки.
+import Icon from './Icon.astro';
+interface Props { icon: string; eyebrow: string; title: string; lead: string }
+const { icon, eyebrow, title, lead } = Astro.props;
+---
+<div class="zh g12">
+  <p class="eyebrow" data-reveal><Icon name={icon} size={20} />{eyebrow}</p>
+  <h2 data-reveal style="--i:1">{title}</h2>
+  <p class="lead" data-reveal style="--i:2">{lead}</p>
+</div>

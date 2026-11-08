@@ -1,0 +1,89 @@
+---
+// Инструменты продвижения для бизнеса: «Топ ленты» и «Своё оформление» — с живыми мини-превью, остальные — с мини-примером.
+import Icon from './Icon.astro';
+import Head from './Head.astro';
+import { BIZ, FEED, ACCENTS } from '../content/home';
+const small = [BIZ.stats, BIZ.kinds, BIZ.deal, BIZ.report];
+const thumb = (f: string) => ({ src: `/img/${f}-282.webp`, width: 282, height: 400 });
+---
+<div class="blk promo-blk">
+  <Head level={3} title="Инструменты продвижения" lead="Сделайте задание заметнее и следите за результатом." />
+  <div class="promo g12">
+    <!-- Топ ленты: выделенная карточка поднимается на первое место -->
+    <article class="pr pr-big pr-top cd" data-reveal>
+      <div class="pr-h"><i class="ring"><Icon name={BIZ.top.icon} size={24} /></i><span class="ptag">{BIZ.top.tag}</span></div>
+      <h4>{BIZ.top.title}</h4>
+      <p>{BIZ.top.text}</p>
+      <div class="feed" aria-hidden="true">
+        <div class="feed-h"><span>Лента заданий</span><span>Сегодня</span></div>
+        <div class="slots">
+          {FEED.map((f, i) => (
+            <div class:list={['fc', { hot: i === 0 }]} style={`--s:${i};--s0:${(i + 2) % 3}`}>
+              <img {...thumb(f.photo)} alt="" loading="lazy" decoding="async" />
+              <div class="fc-t"><span>{f.tag}</span><b>{f.title}</b></div>
+              <div class="fc-p"><b>{f.pay}</b><span>{f.goal}</span></div>
+              {i === 0 && <em class="badge"><Icon name="arrow-up" size={16} />Топ</em>}
+            </div>
+          ))}
+        </div>
+      </div>
+    </article>
+
+    <!-- Своё оформление: обложка, цвет акцента, бейдж; цвет меняется сам или по нажатию -->
+    <article class="pr pr-big pr-brand cd" data-reveal data-brand style={`--acc:${ACCENTS[0].value}`}>
+      <div class="pr-h"><i class="ring"><Icon name={BIZ.brand.icon} size={24} /></i><span class="ptag">{BIZ.brand.tag}</span></div>
+      <h4>{BIZ.brand.title}</h4>
+      <p>{BIZ.brand.text}</p>
+      <div class="stage">
+        <div class="bc" aria-hidden="true">
+          <div class="cover">
+            <img src="/img/cafe-564.webp" width="564" height="800" alt="" loading="lazy" decoding="async" />
+            <em class="badge">Сезонное меню</em>
+          </div>
+          <div class="bc-b">
+            <span class="bc-tag">{FEED[0].tag}</span>
+            <b>{FEED[0].title}</b>
+            <div class="bc-r"><span class="chip">{FEED[0].goal}</span><strong>{FEED[0].pay}</strong></div>
+            <span class="bc-btn">Взять задание</span>
+          </div>
+        </div>
+        <div class="sw" role="group" aria-label="Цвет акцента карточки">
+          {ACCENTS.map((a, i) => (
+            <button type="button" aria-label={a.name} aria-pressed={i === 0 ? 'true' : 'false'} style={`--c:${a.value}`} data-acc={a.value}><span></span></button>
+          ))}
+        </div>
+      </div>
+    </article>
+
+    {small.map((f, i) => (
+      <article class="pr pr-s cd" data-reveal style={`--i:${i}`}>
+        <div class="pr-h"><i class="ring"><Icon name={f.icon} size={22} /></i>{'tag' in f && f.tag && <span class="ptag">{f.tag}</span>}</div>
+        <h4>{f.title}</h4>
+        <p>{f.text}</p>
+        <div class="mini" aria-hidden="true">
+          {i === 0 && (
+            <div class="bars">
+              {[['Казань', 100, '12,4 тыс.'], ['Москва', 64, '8 тыс.'], ['Самара', 30, '3,7 тыс.']].map(([c, v, t], k) => (
+                <div class="bar-r" style={`--v:${Number(v) / 100};--k:${k}`}><span>{c}</span><span>{t}</span><i><b></b></i></div>
+              ))}
+            </div>
+          )}
+          {i === 1 && (
+            <div class="kinds2">
+              <span><Icon name="zap" size={18} />Открытое</span>
+              <span class="on"><Icon name="user-round-check" size={18} />С одобрением</span>
+            </div>
+          )}
+          {i === 2 && (
+            <ol class="deal">
+              <li><b></b>На счёте</li><li><b></b>Проверено</li><li class="ok"><b><Icon name="check" size={14} /></b>Оплачено</li>
+            </ol>
+          )}
+          {i === 3 && (
+            <div class="file"><Icon name="file-text" size={22} /><span>Отчёт по заданиям</span><b><Icon name="download" size={18} /></b></div>
+          )}
+        </div>
+      </article>
+    ))}
+  </div>
+</div>
