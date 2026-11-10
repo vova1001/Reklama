@@ -88,7 +88,7 @@ func TestBotStatus(t *testing.T) {
 	}
 	// ждём
 	a := &fakeAuth{}
-	srv := New(fakeHome{}, fakeDB{}, a, &fakeProfiles{}, Options{Origin: testOrigin, SecureCookies: true, BotWait: 3 * time.Second})
+	srv := New(Services{Home: fakeHome{}, Health: fakeDB{}, Auth: a, Profiles: &fakeProfiles{}}, Options{Origin: testOrigin, SecureCookies: true, BotWait: 3 * time.Second})
 	rec := serve(srv, req())
 	if rec.Code != 200 || strings.TrimSpace(rec.Body.String()) != `{"status":"pending"}` || cookie(rec, sessionCookie) != nil {
 		t.Fatalf("%d %s", rec.Code, rec.Body.String())
@@ -141,7 +141,7 @@ func TestBotStatus(t *testing.T) {
 func TestWebhookMount(t *testing.T) {
 	var hit int
 	hook := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { hit++; w.WriteHeader(200) })
-	srv := New(fakeHome{}, fakeDB{}, &fakeAuth{}, &fakeProfiles{}, Options{Origin: testOrigin, TelegramWebhook: hook,
+	srv := New(Services{Home: fakeHome{}, Health: fakeDB{}, Auth: &fakeAuth{}, Profiles: &fakeProfiles{}}, Options{Origin: testOrigin, TelegramWebhook: hook,
 		APILimiter: newMemLimiter(0.001, 1), AuthLimiter: newMemLimiter(0.001, 1)})
 	for i := 0; i < 5; i++ {
 		r := httptest.NewRequest(http.MethodPost, "/api/telegram/webhook", strings.NewReader(`{}`))

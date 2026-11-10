@@ -25,6 +25,26 @@ type Category struct {
 	Position  int32
 	IsActive  bool
 	CreatedAt pgtype.Timestamptz
+	Status    string
+	AuthorID  pgtype.Int8
+	Norm      string
+}
+
+type CreatorCard struct {
+	UserID       int64
+	Status       string
+	RejectReason string
+	Name         string
+	City         string
+	Topics       []string
+	Platforms    []byte
+	Blocks       []byte
+	Avatar       pgtype.Text
+	Works        []string
+	CreatedAt    pgtype.Timestamptz
+	UpdatedAt    pgtype.Timestamptz
+	SubmittedAt  pgtype.Timestamptz
+	PublishedAt  pgtype.Timestamptz
 }
 
 type CreatorProfile struct {
@@ -67,6 +87,37 @@ type LoginCode struct {
 	ConsumedAt pgtype.Timestamptz
 }
 
+type MediaBlob struct {
+	Key         string
+	ContentType string
+	Data        []byte
+	CreatedAt   pgtype.Timestamptz
+}
+
+type Medium struct {
+	ID        string
+	OwnerID   int64
+	Purpose   string
+	Width     int32
+	Height    int32
+	Bytes     int64
+	Subject   pgtype.Text
+	SubjectID pgtype.Int8
+	CreatedAt pgtype.Timestamptz
+	TouchedAt pgtype.Timestamptz
+}
+
+type ModerationLog struct {
+	ID         int64
+	Subject    string
+	SubjectID  int64
+	FromStatus string
+	ToStatus   string
+	Reason     string
+	ActorID    pgtype.Int8
+	CreatedAt  pgtype.Timestamptz
+}
+
 type Plan struct {
 	ID           int64
 	Audience     string
@@ -94,6 +145,30 @@ type Session struct {
 	CreatedAt  pgtype.Timestamptz
 	ExpiresAt  pgtype.Timestamptz
 	LastSeenAt pgtype.Timestamptz
+}
+
+type Task struct {
+	ID            int64
+	OwnerID       int64
+	Status        string
+	RejectReason  string
+	Title         string
+	City          string
+	Nationwide    bool
+	Category      pgtype.Text
+	Formats       []string
+	Access        string
+	MinViews      int64
+	MinLikes      int64
+	RewardKopecks int64
+	PublishBy     pgtype.Date
+	Blocks        []byte
+	Cover         pgtype.Text
+	Photos        []string
+	CreatedAt     pgtype.Timestamptz
+	UpdatedAt     pgtype.Timestamptz
+	SubmittedAt   pgtype.Timestamptz
+	PublishedAt   pgtype.Timestamptz
 }
 
 type TelegramChat struct {

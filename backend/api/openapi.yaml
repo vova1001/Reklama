@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: Охват API
-  version: 0.4.0
+  version: 0.5.0
   description: |
     API площадки «Охват»: данные главной, регистрация и вход (почта с кодом, Telegram, Google), приложение после входа:
     один аккаунт — два режима («Бизнес» и «Автор»), профили режимов заполняются, когда понадобятся.
@@ -14,7 +14,14 @@ info:
     Ограничение частоты (токен-бакеты; память процесса или Redis по `REDIS_URL`): весь `/api` — на адрес
     (`RATE_LIMIT_API_*`); вход `/api/auth/*` (кроме config и logout) — строже, на адрес (`RATE_LIMIT_*`);
     `/api/me*` — на пользователя (`RATE_LIMIT_USER_*`); вебхук бота — общий лимит (`TELEGRAM_WEBHOOK_*`).
-    Превышение — 429 `rate_limited` с заголовком `Retry-After`.
+    Превышение — 429 `rate_limited` с заголовком `Retry-After`. Загрузка фото — ещё и по пользователю
+    (`RATE_LIMIT_UPLOAD_*`).
+
+    Задания бизнеса и анкеты авторов проходят модерацию: `draft` → `pending_review` → `published` | `rejected`
+    (с причиной). Черновик сохраняется неполным; полноту сервер проверяет при отправке на проверку
+    (ошибки — в `fields`, у блоков и площадок — `blocks.<n>`, `platforms.<n>`). Отправок на проверку — до
+    `MODERATION_SUBMITS_PER_DAY` в сутки (429 `rate_limited`), заданий — до `TASKS_MAX_PER_USER` (409 `tasks_limit`).
+    Решение модератора — сервисный метод (админки пока нет); каждая смена статуса пишется в журнал.
 servers:
   - url: http://localhost:8000
 paths:
@@ -395,6 +402,401 @@ paths:
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "429": { $ref: "#/components/responses/TooMany" }
+  /api/tasks:
+    get:
+      summary: Лента опубликованных заданий
+      description: Новые сверху. Курсор `next` из ответа — в параметр `cursor` следующего запроса.
+      operationId: getFeed
+      tags: [tasks]
+      parameters:
+        - { name: cursor, in: query, schema: { type: string } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 50, default: 20 } }
+      responses:
+        "200":
+          description: Страница ленты
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Feed" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "429": { $ref: "#/components/responses/TooMany" }
+  /api/me/tasks:
+    get:
+      summary: Мои задания (все статусы)
+      operationId: listMyTasks
+      tags: [tasks]
+      security: [{ session: [] }]
+      responses:
+        "200":
+          description: Задания, недавно изменённые сверху (до 100)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TaskList" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+    post:
+      summary: Новый черновик задания
+      operationId: createTask
+      tags: [tasks]
+      security: [{ session: [] }]
+      parameters: [{ $ref: "#/components/parameters/CSRF" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/TaskInput" }
+      responses:
+        "201":
+          description: Черновик создан
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Task" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "429": { $ref: "#/components/responses/TooMany" }
+  /api/me/tasks/{id}:
+    parameters: [{ $ref: "#/components/parameters/TaskID" }]
+    get:
+      summary: Моё задание
+      operationId: getMyTask
+      tags: [tasks]
+      security: [{ session: [] }]
+      responses:
+        "200":
+          description: Задание
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Task" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    put:
+      summary: Сохранить черновик (или правку отклонённого)
+      operationId: updateTask
+      tags: [tasks]
+      security: [{ session: [] }]
+      parameters: [{ $ref: "#/components/parameters/CSRF" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/TaskInput" }
+      responses:
+        "200":
+          description: Сохранено
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Task" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+    delete:
+      summary: Удалить черновик или отклонённое
+      operationId: deleteTask
+      tags: [tasks]
+      security: [{ session: [] }]
+      parameters: [{ $ref: "#/components/parameters/CSRF" }]
+      responses:
+        "204": { description: Удалено }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+  /api/me/tasks/{id}/submit:
+    parameters: [{ $ref: "#/components/parameters/TaskID" }]
+    post:
+      summary: Отправить на проверку
+      description: |
+        Из `draft` или `rejected` в `pending_review`. Обязательно: название 5–100, город (или «Вся Россия»), сфера,
+        формат, просмотры или лайки, оплата от 100 ₽, срок — от завтра до полугода (по Москве), хотя бы один
+        блок с пунктами.
+      operationId: submitTask
+      tags: [tasks]
+      security: [{ session: [] }]
+      parameters: [{ $ref: "#/components/parameters/CSRF" }]
+      responses:
+        "200":
+          description: На проверке
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Task" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "429": { $ref: "#/components/responses/TooMany" }
+  /api/me/tasks/{id}/withdraw:
+    parameters: [{ $ref: "#/components/parameters/TaskID" }]
+    post:
+      summary: Вернуть с проверки в черновик
+      operationId: withdrawTask
+      tags: [tasks]
+      security: [{ session: [] }]
+      parameters: [{ $ref: "#/components/parameters/CSRF" }]
+      responses:
+        "200":
+          description: Черновик
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Task" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+  /api/me/card:
+    get:
+      summary: Моя анкета автора
+      operationId: getCard
+      tags: [cards]
+      security: [{ session: [] }]
+      responses:
+        "200":
+          description: Анкета (null — ещё нет)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CardResult" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+    put:
+      summary: Сохранить черновик анкеты
+      operationId: saveCard
+      tags: [cards]
+      security: [{ session: [] }]
+      parameters: [{ $ref: "#/components/parameters/CSRF" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CardInput" }
+      responses:
+        "200":
+          description: Сохранено
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CardResult" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
+  /api/me/card/submit:
+    post:
+      summary: Отправить анкету на проверку
+      description: Обязательно — имя, город, 1–5 тем (своих — до 3), площадки с подписчиками, хотя бы один блок с пунктами.
+      operationId: submitCard
+      tags: [cards]
+      security: [{ session: [] }]
+      parameters: [{ $ref: "#/components/parameters/CSRF" }]
+      responses:
+        "200":
+          description: На проверке
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CardResult" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "429": { $ref: "#/components/responses/TooMany" }
+  /api/me/card/withdraw:
+    post:
+      summary: Вернуть анкету с проверки в черновик
+      operationId: withdrawCard
+      tags: [cards]
+      security: [{ session: [] }]
+      parameters: [{ $ref: "#/components/parameters/CSRF" }]
+      responses:
+        "200":
+          description: Черновик
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CardResult" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+  /api/me/categories:
+    get:
+      summary: Общие категории и свои
+      operationId: listCategories
+      tags: [categories]
+      security: [{ session: [] }]
+      responses:
+        "200":
+          description: Общий справочник и свои категории пользователя (на проверке и отклонённые)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CategoryList" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+    post:
+      summary: Своя категория
+      description: |
+        2–40 символов, без ссылок и брани. Если такая уже есть (без учёта регистра, «ё» и пробелов) — общая или
+        своя — вернётся она (`created: false`, 200). Новая — «на проверке» (201): сразу доступна автору в его
+        задании и анкете, после модерации может стать общей. Своих на проверке — до 10, в одной анкете — до 3.
+      operationId: createCategory
+      tags: [categories]
+      security: [{ session: [] }]
+      parameters: [{ $ref: "#/components/parameters/CSRF" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [title]
+              additionalProperties: false
+              properties:
+                title: { type: string, minLength: 2, maxLength: 40 }
+      responses:
+        "200":
+          description: Такая уже есть
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CategoryCreated" }
+        "201":
+          description: Создана, на проверке
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CategoryCreated" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /api/me/categories/similar:
+    get:
+      summary: Похожие категории (подсказки при вводе)
+      description: До 6 — общие и свои на проверке; совпадение, начало, вхождение, опечатка в 1–2 буквы.
+      operationId: similarCategories
+      tags: [categories]
+      security: [{ session: [] }]
+      parameters:
+        - { name: q, in: query, required: true, schema: { type: string, maxLength: 200 } }
+      responses:
+        "200":
+          description: Подсказки
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items: { type: array, items: { $ref: "#/components/schemas/CategoryItem" } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+  /api/me/media:
+    post:
+      summary: Загрузить фото
+      description: |
+        `multipart/form-data`: `purpose`, `file`, необязательно `crop` — «x,y,w,h» в долях кадра (после поворота
+        по EXIF). Тип — по содержимому: JPEG, PNG, WebP, HEIC (SVG, GIF и анимация — нет); до `MEDIA_MAX_MB`
+        (10 МБ) и 40 Мп. Сервер удаляет метаданные (EXIF, геометки), поворачивает по EXIF, обрезает под
+        пропорции назначения (аватар 1:1, обложка 16:9; без `crop` — по центру) и хранит WebP 320/800/1600.
+        Неприкреплённое к заданию, анкете или профилю удаляется через сутки.
+      operationId: uploadMedia
+      tags: [media]
+      security: [{ session: [] }]
+      parameters: [{ $ref: "#/components/parameters/CSRF" }]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [purpose, file]
+              properties:
+                purpose: { $ref: "#/components/schemas/MediaPurpose" }
+                crop: { type: string, example: "0.1,0,0.8,0.9" }
+                file: { type: string, format: binary }
+      responses:
+        "201":
+          description: Загружено
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Media" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "413":
+          description: image_too_large — больше 10 МБ или 40 Мп
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "415":
+          description: image_type — не JPEG/PNG/WebP/HEIC
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "429": { $ref: "#/components/responses/TooMany" }
+        "503":
+          description: busy — очередь обработки полна (Retry-After)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+  /api/me/media/{id}:
+    delete:
+      summary: Удалить своё неприкреплённое фото
+      operationId: deleteMedia
+      tags: [media]
+      security: [{ session: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/CSRF" }
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "204": { description: Удалено }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /api/me/avatar:
+    put:
+      summary: Аватар профиля
+      description: "Из загруженного фото назначения `avatar`; `mediaId: null` — убрать."
+      operationId: setAvatar
+      tags: [account]
+      security: [{ session: [] }]
+      parameters: [{ $ref: "#/components/parameters/CSRF" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [mediaId]
+              additionalProperties: false
+              properties:
+                mediaId: { type: string, nullable: true }
+      responses:
+        "200":
+          description: Адрес аватара ("" — убран)
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [avatarUrl]
+                properties:
+                  avatarUrl: { type: string }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /media/{id}/{size}.webp:
+    get:
+      summary: Файл фото
+      description: |
+        Аватар профиля и фото опубликованных заданий и анкет — всем (`public, max-age=31536000, immutable`);
+        остальное — только владельцу (`private`), чужое закрытое — 404. ETag — id и размер (304 по If-None-Match).
+      operationId: getMedia
+      tags: [media]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, pattern: "^[A-Za-z0-9_-]{22}$" } }
+        - { name: size, in: path, required: true, schema: { type: integer, enum: [320, 800, 1600] } }
+      responses:
+        "200":
+          description: WebP
+          content:
+            image/webp:
+              schema: { type: string, format: binary }
+        "304": { description: Не изменилось }
+        "404": { description: Нет или нет доступа }
 components:
   securitySchemes:
     session: { type: apiKey, in: cookie, name: ohvat_session }
@@ -405,6 +807,11 @@ components:
       required: true
       schema: { type: string }
       description: Значение из `GET /api/auth/config` (равно cookie `ohvat_csrf`)
+    TaskID:
+      name: id
+      in: path
+      required: true
+      schema: { type: integer, format: int64 }
   responses:
     LoggedIn:
       description: Вошли — cookie сессии установлена
@@ -432,6 +839,16 @@ components:
       description: "rate_limited (retryAfter) | too_many_attempts"
       headers:
         Retry-After: { schema: { type: integer }, description: Секунд до следующей попытки }
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    NotFound:
+      description: not_found — нет или чужое
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    Conflict:
+      description: "wrong_status — статус уже другой | tasks_limit | media_quota"
       content:
         application/json:
           schema: { $ref: "#/components/schemas/Error" }
@@ -685,3 +1102,163 @@ components:
           type: array
           items: { $ref: "#/components/schemas/Step" }
         completion: { type: integer, minimum: 0, maximum: 100, description: "Прогресс заполнения для активного режима, %" }
+    Status:
+      type: string
+      enum: [draft, pending_review, published, rejected]
+      description: "Черновик | на проверке | опубликовано | отклонено (с причиной)"
+    Block:
+      type: object
+      required: [kind, title, items]
+      additionalProperties: false
+      description: "Динамический блок: text — абзацы, list — пункты, links — ссылки https://…"
+      properties:
+        kind: { type: string, enum: [text, list, links] }
+        title: { type: string, maxLength: 60 }
+        items: { type: array, maxItems: 15, items: { type: string, maxLength: 1000 } }
+    Photo:
+      type: object
+      required: [id, thumb, src, large]
+      properties:
+        id: { type: string }
+        thumb: { type: string, description: "320 px" }
+        src: { type: string, description: "800 px" }
+        large: { type: string, description: "1600 px" }
+    TaskFormat:
+      type: string
+      enum: [reels, shorts, youtube, vk_clips, tiktok, telegram]
+    TaskInput:
+      type: object
+      required: [title, city, nationwide, category, formats, access, minViews, minLikes, rewardKopecks, publishBy, blocks, cover, photos]
+      additionalProperties: false
+      description: Черновик может быть неполным; ограничения формы проверяются всегда, обязательность — при отправке.
+      properties:
+        title: { type: string, maxLength: 100 }
+        city: { type: string, maxLength: 80 }
+        nationwide: { type: boolean, description: "«Вся Россия»" }
+        category: { type: string, description: "slug общей или своей категории; \"\" — не выбрана" }
+        formats: { type: array, items: { $ref: "#/components/schemas/TaskFormat" } }
+        access: { type: string, enum: [open, approval, ""] }
+        minViews: { type: integer, format: int64, minimum: 0, maximum: 1000000000 }
+        minLikes: { type: integer, format: int64, minimum: 0, maximum: 1000000000 }
+        rewardKopecks: { type: integer, format: int64, minimum: 0, maximum: 100000000 }
+        publishBy: { type: string, description: "ГГГГ-ММ-ДД или \"\"" }
+        blocks: { type: array, maxItems: 8, items: { $ref: "#/components/schemas/Block" } }
+        cover: { type: string, description: "id фото task_cover или \"\"" }
+        photos: { type: array, maxItems: 6, items: { type: string }, description: id фото task_photo по порядку }
+    Task:
+      type: object
+      required: [id, status, rejectReason, title, city, nationwide, category, formats, access, minViews, minLikes, rewardKopecks, publishBy, blocks, cover, photos, createdAt, updatedAt, submittedAt, publishedAt]
+      properties:
+        id: { type: integer, format: int64 }
+        status: { $ref: "#/components/schemas/Status" }
+        rejectReason: { type: string }
+        title: { type: string }
+        city: { type: string }
+        nationwide: { type: boolean }
+        category: { type: string }
+        categoryTitle: { type: string, description: Только в ленте }
+        formats: { type: array, items: { $ref: "#/components/schemas/TaskFormat" } }
+        access: { type: string, enum: [open, approval] }
+        minViews: { type: integer, format: int64 }
+        minLikes: { type: integer, format: int64 }
+        rewardKopecks: { type: integer, format: int64 }
+        publishBy: { type: string, format: date, nullable: true }
+        blocks: { type: array, items: { $ref: "#/components/schemas/Block" } }
+        cover: { nullable: true, allOf: [{ $ref: "#/components/schemas/Photo" }] }
+        photos: { type: array, items: { $ref: "#/components/schemas/Photo" } }
+        brand: { type: string, description: Название бизнеса (только в ленте) }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+        submittedAt: { type: string, format: date-time, nullable: true }
+        publishedAt: { type: string, format: date-time, nullable: true }
+    TaskList:
+      type: object
+      required: [tasks]
+      properties:
+        tasks: { type: array, items: { $ref: "#/components/schemas/Task" } }
+    Feed:
+      type: object
+      required: [tasks, next]
+      properties:
+        tasks: { type: array, items: { $ref: "#/components/schemas/Task" } }
+        next: { type: string, nullable: true, description: Курсор следующей страницы }
+    PlatformInput:
+      type: object
+      required: [url, followers]
+      additionalProperties: false
+      properties:
+        url: { type: string, maxLength: 300, description: "https://… (http повышается)" }
+        followers: { type: integer, format: int64, minimum: 0, maximum: 1000000000 }
+    Platform:
+      type: object
+      required: [kind, url, followers]
+      properties:
+        kind: { type: string, enum: [telegram, youtube, vk, tiktok, instagram, dzen, rutube, other], description: По домену }
+        url: { type: string }
+        followers: { type: integer, format: int64 }
+    CardInput:
+      type: object
+      required: [name, city, topics, platforms, blocks, avatar, works]
+      additionalProperties: false
+      properties:
+        name: { type: string, maxLength: 80 }
+        city: { type: string, maxLength: 80 }
+        topics: { type: array, maxItems: 5, items: { type: string }, description: "slug; своих — до 3" }
+        platforms: { type: array, maxItems: 6, items: { $ref: "#/components/schemas/PlatformInput" } }
+        blocks: { type: array, maxItems: 8, items: { $ref: "#/components/schemas/Block" } }
+        avatar: { type: string, description: "id фото card_avatar или \"\"" }
+        works: { type: array, maxItems: 9, items: { type: string }, description: id фото card_work по порядку }
+    Card:
+      type: object
+      required: [status, rejectReason, name, city, topics, platforms, blocks, avatar, works, updatedAt, submittedAt]
+      properties:
+        status: { $ref: "#/components/schemas/Status" }
+        rejectReason: { type: string }
+        name: { type: string }
+        city: { type: string }
+        topics: { type: array, items: { type: string } }
+        platforms: { type: array, items: { $ref: "#/components/schemas/Platform" } }
+        blocks: { type: array, items: { $ref: "#/components/schemas/Block" } }
+        avatar: { nullable: true, allOf: [{ $ref: "#/components/schemas/Photo" }] }
+        works: { type: array, items: { $ref: "#/components/schemas/Photo" } }
+        updatedAt: { type: string, format: date-time }
+        submittedAt: { type: string, format: date-time, nullable: true }
+    CardResult:
+      type: object
+      required: [card]
+      properties:
+        card: { nullable: true, allOf: [{ $ref: "#/components/schemas/Card" }] }
+    CategoryItem:
+      type: object
+      required: [slug, title, icon, status, own]
+      properties:
+        slug: { type: string }
+        title: { type: string }
+        icon: { type: string }
+        status: { type: string, enum: [approved, pending_review, rejected] }
+        own: { type: boolean, description: Своя (ещё не общая) }
+    CategoryList:
+      type: object
+      required: [common, own]
+      properties:
+        common: { type: array, items: { $ref: "#/components/schemas/CategoryItem" } }
+        own: { type: array, items: { $ref: "#/components/schemas/CategoryItem" } }
+    CategoryCreated:
+      type: object
+      required: [category, created]
+      properties:
+        category: { $ref: "#/components/schemas/CategoryItem" }
+        created: { type: boolean }
+    MediaPurpose:
+      type: string
+      enum: [avatar, task_cover, task_photo, card_avatar, card_work]
+      description: "Аватар 1:1 | обложка задания 16:9 | пример к заданию | аватар анкеты 1:1 | пример работы"
+    Media:
+      allOf:
+        - { $ref: "#/components/schemas/Photo" }
+        - type: object
+          required: [purpose, width, height]
+          properties:
+            purpose: { $ref: "#/components/schemas/MediaPurpose" }
+            width: { type: integer }
+            height: { type: integer }

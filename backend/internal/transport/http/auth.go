@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"context"
 	"crypto/subtle"
 	"encoding/json"
 	"errors"
@@ -217,8 +218,11 @@ const AppPath = "/app"
 func nextPath(domain.User) string { return AppPath }
 
 // decode читает JSON тела (до 16 КБ, без лишних полей); ошибка — ответ 400.
-func decode(w http.ResponseWriter, r *http.Request, v any) bool {
-	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxBody))
+func decode(w http.ResponseWriter, r *http.Request, v any) bool { return decodeN(w, r, v, maxBody) }
+
+// decodeN — тело JSON не больше n байт, без неизвестных полей.
+func decodeN(w http.ResponseWriter, r *http.Request, v any, n int64) bool {
+	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, n))
 	dec.DisallowUnknownFields()
 	if err := dec.Decode(v); err != nil {
 		writeError(w, http.StatusBadRequest, "bad_request", "Не удалось прочитать данные формы. Обновите страницу и попробуйте снова.")
@@ -282,16 +286,39 @@ func (s *Server) fail(w http.ResponseWriter, r *http.Request, err error) {
 		writeError(w, http.StatusGone, "login_expired", "Ссылка для входа устарела. Нажмите «Войти через Telegram» ещё раз.")
 	case errors.Is(err, service.ErrBotLoginCancelled):
 		writeError(w, http.StatusGone, "login_cancelled", "Вход отменён в Telegram.")
+	case isNotFound(err):
+		writeError(w, http.StatusNotFound, "not_found", "Не найдено. Обновите страницу.")
+	case errors.Is(err, service.ErrWrongStatus):
+		writeError(w, http.StatusConflict, "wrong_status", "Статус уже изменился. Обновите страницу.")
+	case errors.Is(err, service.ErrTooManyTasks):
+		writeError(w, http.StatusConflict, "tasks_limit", "Заданий слишком много. Удалите ненужные черновики.")
+	case errors.Is(err, service.ErrImageType):
+		writeError(w, http.StatusUnsupportedMediaType, "image_type", "Подойдёт фото JPEG, PNG, WebP или HEIC.")
+	case errors.Is(err, service.ErrImageTooLarge):
+		writeError(w, http.StatusRequestEntityTooLarge, "image_too_large", "Фото слишком большое: до 10 МБ и 40 Мп.")
+	case errors.Is(err, service.ErrMediaQuota):
+		writeError(w, http.StatusConflict, "media_quota", "Место для фото закончилось. Удалите ненужные.")
+	case errors.Is(err, service.ErrBusy):
+		w.Header().Set("Retry-After", "30")
+		writeJSON(w, http.StatusServiceUnavailable, errorDTO{Error: errorBody{Code: "busy", Message: "Много загрузок. Попробуйте через минуту.", RetryAfter: 30}})
+	case errors.Is(err, context.Canceled):
+		slog.InfoContext(r.Context(), "запрос отменён клиентом", "path", r.URL.Path)
+		writeError(w, http.StatusServiceUnavailable, "cancelled", "Запрос отменён.")
 	default:
 		slog.ErrorContext(r.Context(), "ошибка запроса", "path", r.URL.Path, "err", err)
 		writeError(w, http.StatusInternalServerError, "internal", "Что-то пошло не так. Попробуйте позже.")
 	}
 }
 
+// isNotFound — нет такого (или чужое — неотличимо).
+func isNotFound(err error) bool { return errors.Is(err, domain.ErrNotFound) }
+
 func limitMessage(reason string, sec int) string {
 	switch reason {
 	case "email_cooldown":
 		return fmt.Sprintf("Новый код можно запросить через %d с.", sec)
+	case "submits_daily":
+		return fmt.Sprintf("На сегодня отправок на проверку достаточно. Попробуйте через %s.", minutes(sec))
 	case "email_hourly":
 		return fmt.Sprintf("На эту почту ушло много писем. Попробуйте через %s или войдите другим способом.", minutes(sec))
 	default:

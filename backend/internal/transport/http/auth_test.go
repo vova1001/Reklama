@@ -111,11 +111,11 @@ func (f *fakeAuth) WaitTelegramBot(ctx context.Context, secret string, wait time
 }
 
 func newSrv(home HomeService, health HealthService) *Server {
-	return New(home, health, &fakeAuth{}, &fakeProfiles{}, Options{Origin: testOrigin, SecureCookies: true})
+	return New(Services{Home: home, Health: health, Auth: &fakeAuth{}, Profiles: &fakeProfiles{}}, Options{Origin: testOrigin, SecureCookies: true})
 }
 
 func authSrv(a *fakeAuth) *Server {
-	return New(fakeHome{}, fakeDB{}, a, &fakeProfiles{}, Options{Origin: testOrigin, SecureCookies: true, AuthLimiter: newMemLimiter(100, 100)})
+	return New(Services{Home: fakeHome{}, Health: fakeDB{}, Auth: a, Profiles: &fakeProfiles{}}, Options{Origin: testOrigin, SecureCookies: true, AuthLimiter: newMemLimiter(100, 100)})
 }
 
 func withCSRF(r *http.Request) {

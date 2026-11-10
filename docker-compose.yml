@@ -128,7 +128,7 @@ services:
       TEST_REDIS_URL: redis://redis-test:6379/0
     command: >
       sh -c "go vet ./... &&
-             go test -count=1 -p 1 -race -coverpkg=./internal/service,./internal/repository,./internal/transport/...,./internal/gateway/telegram,./internal/ratelimit -coverprofile=/tmp/c.out ./... &&
+             go test -count=1 -p 1 -race -coverpkg=./internal/service,./internal/repository,./internal/transport/...,./internal/gateway/telegram,./internal/gateway/imaging,./internal/gateway/storage,./internal/ratelimit -coverprofile=/tmp/c.out ./... &&
              go tool cover -func=/tmp/c.out | tail -1"
     depends_on:
       db-test:

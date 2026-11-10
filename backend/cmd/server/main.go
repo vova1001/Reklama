@@ -18,7 +18,9 @@ import (
 
 	"ohvat/backend/internal/config"
 	"ohvat/backend/internal/gateway/google"
+	"ohvat/backend/internal/gateway/imaging"
 	"ohvat/backend/internal/gateway/mail"
+	"ohvat/backend/internal/gateway/storage"
 	tggw "ohvat/backend/internal/gateway/telegram"
 	"ohvat/backend/internal/logx"
 	"ohvat/backend/internal/ratelimit"
@@ -106,6 +108,25 @@ func run(log *slog.Logger) error {
 	})
 	profiles := service.NewProfiles(repository.NewProfiles(pool), authRepo)
 
+	// задания, анкеты, свои категории, фото: обработка — пул воркеров, файлы — PostgreSQL или S3 (MEDIA_STORE)
+	listRepo := repository.NewListings(pool)
+	catRepo := repository.NewCategories(pool)
+	mediaRepo := repository.NewMedia(pool)
+	imgPool := imaging.NewPool(imaging.Processor{}, imaging.PoolOptions{Workers: cfg.MediaWorkers}, log)
+	defer imgPool.Close()
+	go imaging.Warm()
+	media := service.NewMedia(mediaRepo, newBlobStore(cfg, pool, log), imgPool, service.MediaConfig{
+		MaxBytes: int64(cfg.MediaMaxMB) << 20, QuotaBytes: int64(cfg.MediaQuotaMB) << 20, MaxFiles: cfg.MediaMaxFiles,
+	}, log)
+	deps := service.ListingDeps{
+		Categories: catRepo, Submits: listRepo, Media: mediaRepo,
+		Limits: service.ListingLimits{MaxTasks: cfg.TasksMax, SubmitsPerDay: cfg.SubmitsPerDay},
+	}
+	tasks := service.NewTasks(listRepo, deps)
+	cards := service.NewCards(listRepo, deps)
+	// модерация — без админки: сервис готов, транспорт появится вместе с ней
+	_ = service.NewModeration(moderationRepo{listRepo, catRepo})
+
 	// лимиты: Redis (REDIS_URL) — общие для всех серверов, при сбое Redis — в памяти; без Redis — в памяти
 	lims := newLimiters(ctx, cfg, log)
 	defer lims.close()
@@ -113,7 +134,7 @@ func run(log *slog.Logger) error {
 	var hook *tgtransport.Handler
 	opts := httpapi.Options{
 		Origin: cfg.Origin(), SecureCookies: cfg.SecureCookies(),
-		APILimiter: lims.api, AuthLimiter: lims.auth, UserLimiter: lims.user,
+		APILimiter: lims.api, AuthLimiter: lims.auth, UserLimiter: lims.user, UploadLimiter: lims.upload,
 	}
 	if cfg.BotEnabled() {
 		bot = service.NewBot(service.BotDeps{Auth: auth, Users: authRepo, Chats: tgRepo, Messenger: outbox, Log: log},
@@ -121,13 +142,10 @@ func run(log *slog.Logger) error {
 		hook = tgtransport.New(bot, tgtransport.Options{Secret: cfg.TelegramSecret, Limiter: lims.webhook, Log: log})
 		opts.TelegramWebhook = hook
 	}
-	api := httpapi.New(
-		service.NewHome(repository.NewHome(pool)),
-		service.NewHealth(repository.NewHealth(pool)),
-		auth,
-		profiles,
-		opts,
-	)
+	api := httpapi.New(httpapi.Services{
+		Home: service.NewHome(repository.NewHome(pool)), Health: service.NewHealth(repository.NewHealth(pool)),
+		Auth: auth, Profiles: profiles, Tasks: tasks, Cards: cards, Categories: service.NewCategories(catRepo), Media: media,
+	}, opts)
 	srv := &http.Server{
 		Addr:              cfg.HTTPAddr,
 		Handler:           api.Routes(),
@@ -157,6 +175,7 @@ func run(log *slog.Logger) error {
 		g.Go(func() error { queue.Run(gctx); return nil })
 	}
 	g.Go(func() error { auth.RunCleanup(gctx, 10*time.Minute); return nil })
+	g.Go(func() error { media.RunCleanup(gctx, time.Hour); return nil })
 	for _, m := range lims.memory {
 		g.Go(func() error { m.Run(gctx, time.Minute); return nil })
 	}
@@ -178,9 +197,9 @@ func run(log *slog.Logger) error {
 
 // limiters — ограничители частоты по правилам; memory — бакеты в памяти (их чистит фоновая задача).
 type limiters struct {
-	api, auth, user, webhook ratelimit.Limiter
-	memory                   []*ratelimit.Memory
-	rdb                      *redis.Client
+	api, auth, user, webhook, upload ratelimit.Limiter
+	memory                           []*ratelimit.Memory
+	rdb                              *redis.Client
 }
 
 func (l *limiters) close() {
@@ -214,7 +233,24 @@ func newLimiters(ctx context.Context, cfg config.Config, log *slog.Logger) *limi
 	out.auth = mk("auth:", ratelimit.Rate{RPS: cfg.RateRPS, Burst: cfg.RateBurst})
 	out.user = mk("user:", ratelimit.Rate{RPS: cfg.UserRPS, Burst: cfg.UserBurst})
 	out.webhook = mk("tg:", ratelimit.Rate{RPS: cfg.WebhookRPS, Burst: cfg.WebhookBurst})
+	out.upload = mk("up:", ratelimit.Rate{RPS: cfg.UploadRPS, Burst: cfg.UploadBurst})
 	return out
+}
+
+// moderationRepo — хранилище для модерации: задания и анкеты + категории.
+type moderationRepo struct {
+	*repository.Listings
+	*repository.Categories
+}
+
+// newBlobStore — где лежат файлы фото: S3-совместимое (MEDIA_STORE=s3) или PostgreSQL (на хостинге без диска).
+func newBlobStore(cfg config.Config, pool *pgxpool.Pool, log *slog.Logger) service.BlobStore {
+	if cfg.MediaStore == config.MediaS3 {
+		log.Info("фото: S3", "endpoint", cfg.StorageEndpoint, "bucket", cfg.StorageBucket)
+		return storage.NewS3(cfg.StorageEndpoint, cfg.StorageBucket, cfg.StorageRegion, cfg.StorageKey, cfg.StorageSecret)
+	}
+	log.Info("фото: PostgreSQL")
+	return storage.NewPostgres(pool)
 }
 
 // newSender — способ отправки писем по MAIL_PROVIDER.

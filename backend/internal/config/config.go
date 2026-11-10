@@ -76,8 +76,30 @@ type Config struct {
 	RedisURL     string        // REDIS_URL — общие лимиты для нескольких серверов; пусто — лимиты в памяти процесса
 	MailWorkers  int           // MAIL_WORKERS, 2
 
+	TasksMax      int // TASKS_MAX_PER_USER — заданий на пользователя, 50
+	SubmitsPerDay int // MODERATION_SUBMITS_PER_DAY — отправок на проверку в сутки, 10
+
+	MediaStore      string  // MEDIA_STORE: postgres | s3 (postgres)
+	StorageEndpoint string  // STORAGE_ENDPOINT — https://… (R2, Яндекс Object Storage, MinIO)
+	StorageBucket   string  // STORAGE_BUCKET
+	StorageRegion   string  // STORAGE_REGION — auto (R2), ru-central1 (Яндекс)
+	StorageKey      string  // STORAGE_ACCESS_KEY
+	StorageSecret   string  // STORAGE_SECRET_KEY
+	MediaMaxMB      int     // MEDIA_MAX_MB — один файл, 10
+	MediaQuotaMB    int     // MEDIA_QUOTA_MB — на пользователя, 300
+	MediaMaxFiles   int     // MEDIA_MAX_FILES — на пользователя, 300
+	MediaWorkers    int     // MEDIA_WORKERS — обработка фото параллельно; 0 — половина ядер
+	UploadRPS       float64 // RATE_LIMIT_UPLOAD_RPS — загрузок фото в секунду на пользователя, 0.5
+	UploadBurst     int     // RATE_LIMIT_UPLOAD_BURST, 20
+
 	Warnings []string // некритичные замечания для журнала при запуске
 }
+
+// Где хранить фото (MEDIA_STORE).
+const (
+	MediaPostgres = "postgres"
+	MediaS3       = "s3"
+)
 
 // Production — боевой режим.
 func (c Config) Production() bool { return c.AppEnv == EnvProduction }
@@ -281,6 +303,31 @@ func load(get func(string) string) (Config, error) {
 	c.UserBurst = num("RATE_LIMIT_USER_BURST", 30)
 	c.WebhookRPS = rate("TELEGRAM_WEBHOOK_RPS", 50)
 	c.WebhookBurst = num("TELEGRAM_WEBHOOK_BURST", 200)
+	c.TasksMax = num("TASKS_MAX_PER_USER", 50)
+	c.SubmitsPerDay = num("MODERATION_SUBMITS_PER_DAY", 10)
+	c.MediaMaxMB = num("MEDIA_MAX_MB", 10)
+	c.MediaQuotaMB = num("MEDIA_QUOTA_MB", 300)
+	c.MediaMaxFiles = num("MEDIA_MAX_FILES", 300)
+	c.MediaWorkers = num("MEDIA_WORKERS", 0)
+	c.UploadRPS = rate("RATE_LIMIT_UPLOAD_RPS", 0.5)
+	c.UploadBurst = num("RATE_LIMIT_UPLOAD_BURST", 20)
+	c.MediaStore = strings.ToLower(strings.TrimSpace(get("MEDIA_STORE")))
+	c.StorageEndpoint = strings.TrimRight(strings.TrimSpace(get("STORAGE_ENDPOINT")), "/")
+	c.StorageBucket = strings.TrimSpace(get("STORAGE_BUCKET"))
+	c.StorageRegion = strings.TrimSpace(get("STORAGE_REGION"))
+	c.StorageKey = strings.TrimSpace(get("STORAGE_ACCESS_KEY"))
+	c.StorageSecret = strings.TrimSpace(get("STORAGE_SECRET_KEY"))
+	switch c.MediaStore {
+	case "", MediaPostgres:
+		c.MediaStore = MediaPostgres
+	case MediaS3:
+		if !strings.HasPrefix(c.StorageEndpoint, "https://") && !strings.HasPrefix(c.StorageEndpoint, "http://") ||
+			c.StorageBucket == "" || c.StorageKey == "" || c.StorageSecret == "" {
+			errs = append(errs, errors.New("MEDIA_STORE=s3: нужны STORAGE_ENDPOINT (https://…), STORAGE_BUCKET, STORAGE_ACCESS_KEY, STORAGE_SECRET_KEY"))
+		}
+	default:
+		errs = append(errs, errors.New("MEDIA_STORE: postgres или s3"))
+	}
 	c.RedisURL = strings.TrimSpace(get("REDIS_URL"))
 	if c.RedisURL != "" && !strings.HasPrefix(c.RedisURL, "redis://") && !strings.HasPrefix(c.RedisURL, "rediss://") {
 		errs = append(errs, errors.New("REDIS_URL: адрес вида redis://… или rediss://…"))

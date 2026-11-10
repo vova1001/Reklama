@@ -51,6 +51,54 @@ type ProfileService interface {
 	SaveCreator(ctx context.Context, u domain.User, p domain.CreatorProfile) (domain.CreatorProfile, error)
 }
 
+// TaskService — задания бизнеса и лента.
+type TaskService interface {
+	List(ctx context.Context, u domain.User) ([]domain.Task, error)
+	Get(ctx context.Context, u domain.User, id int64) (domain.Task, error)
+	Create(ctx context.Context, u domain.User, in service.TaskInput) (domain.Task, error)
+	Update(ctx context.Context, u domain.User, id int64, in service.TaskInput) (domain.Task, error)
+	Delete(ctx context.Context, u domain.User, id int64) error
+	Submit(ctx context.Context, u domain.User, id int64) (domain.Task, error)
+	Withdraw(ctx context.Context, u domain.User, id int64) (domain.Task, error)
+	Feed(ctx context.Context, after *domain.FeedCursor, limit int) (service.FeedPage, error)
+}
+
+// CardService — анкета автора.
+type CardService interface {
+	Get(ctx context.Context, u domain.User) (*domain.CreatorCard, error)
+	Save(ctx context.Context, u domain.User, in service.CardInput) (domain.CreatorCard, error)
+	Submit(ctx context.Context, u domain.User) (domain.CreatorCard, error)
+	Withdraw(ctx context.Context, u domain.User) (domain.CreatorCard, error)
+}
+
+// CategoryService — справочник и свои категории.
+type CategoryService interface {
+	List(ctx context.Context, u domain.User) (service.CategoryList, error)
+	Similar(ctx context.Context, u domain.User, q string) ([]domain.CategoryInfo, error)
+	Create(ctx context.Context, u domain.User, title string) (domain.CategoryInfo, bool, error)
+}
+
+// MediaService — фото: загрузка, удаление, аватар, просмотр с правами.
+type MediaService interface {
+	MaxBytes() int64
+	Upload(ctx context.Context, u domain.User, in service.UploadInput) (domain.Media, error)
+	Delete(ctx context.Context, u domain.User, id string) error
+	SetAvatar(ctx context.Context, u domain.User, id string) (string, error)
+	Open(ctx context.Context, viewerID int64, id string, size int) (service.Blob, bool, error)
+}
+
+// Services — сервисы, которые обслуживает транспорт.
+type Services struct {
+	Home       HomeService
+	Health     HealthService
+	Auth       AuthService
+	Profiles   ProfileService
+	Tasks      TaskService
+	Cards      CardService
+	Categories CategoryService
+	Media      MediaService
+}
+
 // Options — настройки транспорта (из config).
 type Options struct {
 	Origin        string // схема+хост сайта из PUBLIC_URL — для проверки Origin
@@ -60,7 +108,9 @@ type Options struct {
 	APILimiter  Limiter
 	AuthLimiter Limiter
 	UserLimiter Limiter
-	BotWait     time.Duration // сколько ждать подтверждения в боте в одном запросе (long-poll), 25 с
+	// UploadLimiter — загрузки фото по пользователю.
+	UploadLimiter Limiter
+	BotWait       time.Duration // сколько ждать подтверждения в боте в одном запросе (long-poll), 25 с
 	// TelegramWebhook — приём обновлений бота (transport/telegram); nil — бот выключен.
 	// Свой секрет вместо CSRF и свой лимит, поэтому вне группы /api.
 	TelegramWebhook http.Handler
@@ -68,19 +118,26 @@ type Options struct {
 
 // Server — HTTP API.
 type Server struct {
-	home     HomeService
-	health   HealthService
-	auth     AuthService
-	profiles ProfileService
-	opt      Options
+	home       HomeService
+	health     HealthService
+	auth       AuthService
+	profiles   ProfileService
+	tasks      TaskService
+	cards      CardService
+	categories CategoryService
+	media      MediaService
+	opt        Options
 }
 
 // New создаёт API.
-func New(home HomeService, health HealthService, auth AuthService, profiles ProfileService, opt Options) *Server {
+func New(svc Services, opt Options) *Server {
 	if opt.BotWait <= 0 {
 		opt.BotWait = 25 * time.Second
 	}
-	return &Server{home: home, health: health, auth: auth, profiles: profiles, opt: opt}
+	return &Server{
+		home: svc.Home, health: svc.Health, auth: svc.Auth, profiles: svc.Profiles, tasks: svc.Tasks, cards: svc.Cards,
+		categories: svc.Categories, media: svc.Media, opt: opt,
+	}
 }
 
 // Routes — все маршруты API.
@@ -88,12 +145,14 @@ func (s *Server) Routes() http.Handler {
 	r := chi.NewRouter()
 	r.Use(requestID, logRequests, recoverer)
 	r.Get("/healthz", s.getHealth)
+	r.With(limit(s.opt.APILimiter, byIP("media:"))).Get("/media/{id}/{file}", s.getMedia)
 	if s.opt.TelegramWebhook != nil {
 		r.Post("/api/telegram/webhook", s.opt.TelegramWebhook.ServeHTTP)
 	}
 	r.Route("/api", func(r chi.Router) {
 		r.Use(limit(s.opt.APILimiter, byIP("ip:")), s.client, s.csrf)
 		r.Get("/home", s.getHome)
+		r.Get("/tasks", s.getFeed)
 		r.Route("/auth", func(r chi.Router) {
 			r.Use(noStore)
 			r.Get("/config", s.getAuthConfig)
@@ -119,6 +178,27 @@ func (s *Server) Routes() http.Handler {
 			r.Get("/profile/creator", s.getCreator)
 			r.Put("/profile/creator", s.putCreator)
 			r.Post("/logout-all", s.postLogoutAll)
+			r.Put("/avatar", s.putAvatar)
+
+			r.Get("/tasks", s.listMyTasks)
+			r.Post("/tasks", s.createTask)
+			r.Get("/tasks/{id}", s.getMyTask)
+			r.Put("/tasks/{id}", s.updateTask)
+			r.Delete("/tasks/{id}", s.deleteTask)
+			r.Post("/tasks/{id}/submit", s.submitTask)
+			r.Post("/tasks/{id}/withdraw", s.withdrawTask)
+
+			r.Get("/card", s.getCard)
+			r.Put("/card", s.putCard)
+			r.Post("/card/submit", s.submitCard)
+			r.Post("/card/withdraw", s.withdrawCard)
+
+			r.Get("/categories", s.getCategories)
+			r.Get("/categories/similar", s.getSimilarCategories)
+			r.Post("/categories", s.createCategory)
+
+			r.With(limit(s.opt.UploadLimiter, byUser("upload:"))).Post("/media", s.uploadMedia)
+			r.Delete("/media/{id}", s.deleteMedia)
 		})
 		r.NotFound(func(w http.ResponseWriter, _ *http.Request) {
 			writeError(w, http.StatusNotFound, "not_found", "Такого адреса нет.")

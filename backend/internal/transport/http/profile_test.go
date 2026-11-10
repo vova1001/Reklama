@@ -91,7 +91,7 @@ func newMemLimiter(rps float64, burst int) Limiter {
 
 func profSrv(a *fakeAuth, p *fakeProfiles, opt Options) *Server {
 	opt.Origin, opt.SecureCookies = testOrigin, true
-	return New(fakeHome{}, fakeDB{}, a, p, opt)
+	return New(Services{Home: fakeHome{}, Health: fakeDB{}, Auth: a, Profiles: p}, opt)
 }
 
 // meReq — запрос вошедшего (cookie сессии «good» и CSRF).
