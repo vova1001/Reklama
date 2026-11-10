@@ -29,11 +29,13 @@ func TestLoad(t *testing.T) {
 		}},
 		{name: "бой: адрес и ключи", env: map[string]string{"APP_ENV": "production", "DATABASE_URL": "x", "PUBLIC_URL": "https://ohvat.ru/",
 			"AUTH_SECRET": strings.Repeat("s", 32), "RESEND_API_KEY": "re_x", "GOOGLE_CLIENT_ID": "id", "GOOGLE_CLIENT_SECRET": "sec",
-			"TELEGRAM_BOT_TOKEN": "1:x", "TELEGRAM_BOT_NAME": "@bot", "RATE_LIMIT_RPS": "0.5"},
+			"TELEGRAM_BOT_TOKEN": "1:x", "TELEGRAM_BOT_NAME": "@reklama_auth_bot", "TELEGRAM_WEBHOOK_SECRET": "s3cr-et_X", "RATE_LIMIT_RPS": "0.5"},
 			check: func(t *testing.T, c Config) {
 				if c.PublicURL != "https://ohvat.ru" || !c.SecureCookies() || c.Origin() != "https://ohvat.ru" ||
 					c.GoogleRedirectURL() != "https://ohvat.ru/api/auth/google/callback" || !c.GoogleEnabled() ||
-					c.MailProvider != MailResend || c.TelegramBotName != "bot" || c.RateRPS != 0.5 {
+					c.MailProvider != MailResend || c.TelegramBotName != "reklama_auth_bot" || c.RateRPS != 0.5 ||
+					!c.BotEnabled() || c.TelegramMode != TelegramWebhook || c.TelegramWebhookURL() != "https://ohvat.ru/api/telegram/webhook" ||
+					c.TelegramLoginTTL != 5*time.Minute || c.TelegramLoginPerIP != 30 || c.TelegramSendRPS != 25 {
 					t.Errorf("%+v", c)
 				}
 			}},
@@ -80,6 +82,31 @@ func TestLoad(t *testing.T) {
 		{name: "короткий секрет", env: map[string]string{"DATABASE_URL": "x", "AUTH_SECRET": "short"}, err: "AUTH_SECRET"},
 		{name: "плохая почта", env: map[string]string{"DATABASE_URL": "x", "MAIL_PROVIDER": "pigeon"}, err: "MAIL_PROVIDER"},
 		{name: "плохой токен", env: map[string]string{"DATABASE_URL": "x", "TELEGRAM_BOT_TOKEN": "nocolon"}, err: "TELEGRAM_BOT_TOKEN"},
+		{name: "бот локально: без вебхука, приём эмуляции", env: map[string]string{"DATABASE_URL": "x", "TELEGRAM_BOT_TOKEN": "1:x",
+			"TELEGRAM_BOT_NAME": "test_bot", "TELEGRAM_WEBHOOK_SECRET": "s", "TELEGRAM_API_URL": "http://faketg:8081/", "TELEGRAM_LOGIN_TTL_MIN": "2"},
+			check: func(t *testing.T, c Config) {
+				if !c.BotEnabled() || c.TelegramMode != "" || c.TelegramWebhookURL() != "" || c.TelegramAPIURL != "http://faketg:8081" || c.TelegramLoginTTL != 2*time.Minute {
+					t.Errorf("%+v", c)
+				}
+			}},
+		{name: "бот без секрета — выключен с предупреждением", env: map[string]string{"DATABASE_URL": "x", "TELEGRAM_BOT_TOKEN": "1:x", "TELEGRAM_BOT_NAME": "test_bot", "AUTH_SECRET": strings.Repeat("s", 32)},
+			check: func(t *testing.T, c Config) {
+				if c.BotEnabled() || len(c.Warnings) != 1 || !strings.Contains(c.Warnings[0], "TELEGRAM_WEBHOOK_SECRET") {
+					t.Errorf("%+v", c)
+				}
+			}},
+		{name: "бот выключен", env: map[string]string{"DATABASE_URL": "x", "TELEGRAM_BOT_TOKEN": "1:x", "TELEGRAM_BOT_NAME": "test_bot", "TELEGRAM_WEBHOOK_SECRET": "s", "TELEGRAM_MODE": "off"},
+			check: func(t *testing.T, c Config) {
+				if c.BotEnabled() {
+					t.Error("off")
+				}
+			}},
+		{name: "плохой секрет вебхука", env: map[string]string{"DATABASE_URL": "x", "TELEGRAM_WEBHOOK_SECRET": "a b"}, err: "TELEGRAM_WEBHOOK_SECRET"},
+		{name: "плохое имя бота", env: map[string]string{"DATABASE_URL": "x", "TELEGRAM_BOT_NAME": "t.me/x"}, err: "TELEGRAM_BOT_NAME"},
+		{name: "вебхук без https", env: map[string]string{"DATABASE_URL": "x", "TELEGRAM_MODE": "webhook"}, err: "https"},
+		{name: "плохой режим бота", env: map[string]string{"DATABASE_URL": "x", "TELEGRAM_MODE": "push"}, err: "TELEGRAM_MODE"},
+		{name: "плохой адрес Bot API", env: map[string]string{"DATABASE_URL": "x", "TELEGRAM_API_URL": "ftp//x"}, err: "TELEGRAM_API_URL"},
+		{name: "rps бота выше лимита", env: map[string]string{"DATABASE_URL": "x", "TELEGRAM_SEND_RPS": "100"}, err: "TELEGRAM_SEND_RPS"},
 		{name: "плохой лимит", env: map[string]string{"DATABASE_URL": "x", "AUTH_CODE_PER_IP_HOUR": "-1"}, err: "AUTH_CODE_PER_IP_HOUR"},
 		{name: "плохой rps", env: map[string]string{"DATABASE_URL": "x", "RATE_LIMIT_RPS": "abc"}, err: "RATE_LIMIT_RPS"},
 	}

@@ -142,15 +142,24 @@ func (q *Queue) deliver(ctx context.Context, m Message) {
 			q.log.Info("почта: письмо отправлено", "via", q.sender.Name(), "to", maskEmail(m.To), "attempt", attempt+1)
 			return
 		}
+		var se *SendError
+		if errors.As(err, &se) && se.Permanent() {
+			q.log.Error("почта: письмо отклонено сервисом — без повторов", "via", q.sender.Name(), "to", maskEmail(m.To), "status", se.Status, "err", err)
+			return
+		}
 		if attempt >= q.opt.Retries || ctx.Err() != nil {
 			q.log.Error("почта: письмо не отправлено", "via", q.sender.Name(), "to", maskEmail(m.To), "attempts", attempt+1, "err", err)
 			return
 		}
-		q.log.Warn("почта: повтор отправки", "via", q.sender.Name(), "to", maskEmail(m.To), "attempt", attempt+1, "err", err)
+		pause := wait
+		if se != nil && se.RetryAfter > 0 {
+			pause = min(se.RetryAfter, 2*time.Minute) // 429: ждём, сколько просит сервис
+		}
+		q.log.Warn("почта: повтор отправки", "via", q.sender.Name(), "to", maskEmail(m.To), "attempt", attempt+1, "in", pause.String(), "err", err)
 		select {
 		case <-ctx.Done():
 			return
-		case <-time.After(wait):
+		case <-time.After(pause):
 		}
 		wait *= 2
 	}

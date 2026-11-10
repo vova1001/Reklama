@@ -18,10 +18,12 @@ import (
 	"ohvat/backend/internal/config"
 	"ohvat/backend/internal/gateway/google"
 	"ohvat/backend/internal/gateway/mail"
+	tggw "ohvat/backend/internal/gateway/telegram"
 	"ohvat/backend/internal/logx"
 	"ohvat/backend/internal/repository"
 	"ohvat/backend/internal/service"
 	httpapi "ohvat/backend/internal/transport/http"
+	tgtransport "ohvat/backend/internal/transport/telegram"
 	"ohvat/backend/migrations"
 )
 
@@ -70,20 +72,50 @@ func run(log *slog.Logger) error {
 		gp = google.New(cfg.GoogleClientID, cfg.GoogleClientSecret, cfg.GoogleRedirectURL())
 	}
 
+	authRepo := repository.NewAuth(pool)
+	tgRepo := repository.NewTelegram(pool)
+
+	// бот Telegram: клиент Bot API → очередь отправки (лимиты Telegram) → уведомления и сервис бота
+	var (
+		tgClient *tggw.Client
+		outbox   *tggw.Outbox
+		notifier service.Notifier
+		botRepo  service.TelegramLoginRepository
+	)
+	var bot *service.Bot
+	if cfg.BotEnabled() {
+		tgClient = tggw.New(cfg.TelegramBotToken, tggw.Options{BaseURL: cfg.TelegramAPIURL})
+		outbox = tggw.NewOutbox(tgClient, tggw.OutboxOptions{RPS: cfg.TelegramSendRPS, OnBlocked: func(chatID int64) { bot.ChatBlocked(chatID) }}, log)
+		notifier = service.NewBotNotifier(tgRepo, outbox, cfg.PublicURL, log)
+		botRepo = tgRepo
+		log.Info("бот Telegram включён", "bot", cfg.TelegramBotName, "mode", cfg.TelegramMode)
+	} else if cfg.TelegramBotToken != "" {
+		log.Warn("бот Telegram не принимает сообщения — вход через бота выключен (виджет работает)")
+	}
+
 	auth := service.NewAuth(service.AuthDeps{
-		Users: repository.NewAuth(pool), Codes: repository.NewAuth(pool), Sessions: repository.NewAuth(pool),
-		Mailer: mailer, Google: gp, Log: log,
+		Users: authRepo, Codes: authRepo, Sessions: authRepo,
+		Mailer: mailer, Google: gp, BotLogins: botRepo, Devices: tgRepo, Notifier: notifier, Log: log,
 	}, service.AuthConfig{
 		Secret: []byte(cfg.AuthSecret), CodeTTL: cfg.CodeTTL, MaxAttempts: cfg.CodeAttempts, ResendAfter: cfg.CodeResend,
 		PerEmailHour: cfg.CodePerEmail, PerIPHour: cfg.CodePerIP, SessionTTL: cfg.SessionTTL,
 		TelegramToken: cfg.TelegramBotToken, TelegramBotName: cfg.TelegramBotName, EmailEnabled: mailer != nil,
+		TelegramBot: cfg.BotEnabled(), BotLoginTTL: cfg.TelegramLoginTTL, BotLoginPerIP: cfg.TelegramLoginPerIP,
 	})
-	limiter := httpapi.NewRateLimiter(cfg.RateRPS, cfg.RateBurst)
+	var hook *tgtransport.Handler
+	opts := httpapi.Options{Origin: cfg.Origin(), SecureCookies: cfg.SecureCookies(), Limiter: httpapi.NewRateLimiter(cfg.RateRPS, cfg.RateBurst)}
+	if cfg.BotEnabled() {
+		bot = service.NewBot(service.BotDeps{Auth: auth, Users: authRepo, Chats: tgRepo, Messenger: outbox, Log: log},
+			service.BotConfig{SiteURL: cfg.PublicURL})
+		hook = tgtransport.New(bot, tgtransport.Options{Secret: cfg.TelegramSecret, Log: log})
+		opts.TelegramWebhook = hook
+	}
+	limiter := opts.Limiter
 	api := httpapi.New(
 		service.NewHome(repository.NewHome(pool)),
 		service.NewHealth(repository.NewHealth(pool)),
 		auth,
-		httpapi.Options{Origin: cfg.Origin(), SecureCookies: cfg.SecureCookies(), Limiter: limiter},
+		opts,
 	)
 	srv := &http.Server{
 		Addr:              cfg.HTTPAddr,
@@ -115,8 +147,19 @@ func run(log *slog.Logger) error {
 	}
 	g.Go(func() error { auth.RunCleanup(gctx, 10*time.Minute); return nil })
 	g.Go(func() error { limiter.Run(gctx, time.Minute); return nil })
+	if cfg.BotEnabled() {
+		g.Go(func() error { outbox.Run(gctx); return nil })
+		g.Go(func() error { hook.RunSweep(gctx, time.Minute); return nil })
+		g.Go(func() error {
+			return tgClient.SetupWithRetry(gctx, tggw.SetupOptions{BotName: cfg.TelegramBotName, WebhookURL: cfg.TelegramWebhookURL(),
+				WebhookSecret: cfg.TelegramSecret, Polling: cfg.TelegramMode == config.TelegramPolling}, log)
+		})
+		if cfg.TelegramMode == config.TelegramPolling {
+			g.Go(func() error { tgtransport.NewPoller(tgClient, hook, log).Run(gctx); return nil })
+		}
+	}
 	err = g.Wait()
-	log.Info("сервер остановлен: запросы и письма завершены")
+	log.Info("сервер остановлен: запросы, письма и сообщения бота завершены")
 	return err
 }
 

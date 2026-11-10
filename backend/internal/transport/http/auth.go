@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"ohvat/backend/internal/domain"
 	"ohvat/backend/internal/service"
@@ -25,7 +26,7 @@ func (s *Server) getAuthConfig(w http.ResponseWriter, r *http.Request) {
 	m := s.auth.Methods()
 	out := authConfigDTO{Email: m.Email, Google: m.Google, CSRFToken: tok}
 	if m.TelegramBotID != "" {
-		out.Telegram = &telegramDTO{BotID: m.TelegramBotID, BotName: m.TelegramBotName}
+		out.Telegram = &telegramDTO{BotID: m.TelegramBotID, BotName: m.TelegramBotName, Bot: m.TelegramBot}
 	}
 	writeJSON(w, http.StatusOK, out)
 }
@@ -85,6 +86,53 @@ func (s *Server) postTelegram(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.loggedIn(w, res)
+}
+
+// POST /api/auth/telegram/bot/start — ссылка на бота; секрет браузера — в httpOnly-cookie (только этот браузер
+// сможет забрать вход).
+func (s *Server) postBotStart(w http.ResponseWriter, r *http.Request) {
+	var in botStartIn
+	if !decode(w, r, &in) {
+		return
+	}
+	st, err := s.auth.StartTelegramBot(r.Context(), in.Role, in.Consent, clientIP(r))
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	http.SetCookie(w, &http.Cookie{
+		Name: botCookie, Value: st.BrowserSecret, Path: botCookiePath, MaxAge: int((st.ExpiresIn + 2*time.Minute).Seconds()),
+		HttpOnly: true, Secure: s.opt.SecureCookies, SameSite: http.SameSiteLaxMode,
+	})
+	writeJSON(w, http.StatusCreated, botStartDTO{URL: st.URL, ExpiresIn: int(st.ExpiresIn.Seconds())})
+}
+
+// POST /api/auth/telegram/bot/status — ждать подтверждения в боте (до BotWait); подтверждено — сессия.
+func (s *Server) postBotStatus(w http.ResponseWriter, r *http.Request) {
+	c, err := r.Cookie(botCookie)
+	if err != nil {
+		s.fail(w, r, service.ErrBotLoginExpired)
+		return
+	}
+	st, res, err := s.auth.WaitTelegramBot(r.Context(), c.Value, s.opt.BotWait)
+	if r.Context().Err() != nil {
+		return // страницу закрыли — отвечать некому
+	}
+	if err != nil {
+		if errors.Is(err, service.ErrBotLoginExpired) || errors.Is(err, service.ErrBotLoginCancelled) {
+			s.clearCookie(w, botCookie, botCookiePath)
+		}
+		s.fail(w, r, err)
+		return
+	}
+	if st != service.BotLoginDone {
+		writeJSON(w, http.StatusOK, botStatusDTO{Status: string(service.BotLoginWaiting)})
+		return
+	}
+	s.clearCookie(w, botCookie, botCookiePath)
+	s.setSession(w, res.Token, res.ExpiresAt)
+	u := toUserDTO(res.User)
+	writeJSON(w, http.StatusOK, botStatusDTO{Status: string(service.BotLoginDone), User: &u, Next: nextPath(res.User), Created: res.Created})
 }
 
 // GET /api/auth/google/start?role=&consent=1 — переход в Google; state, PKCE verifier и роль — в короткой httpOnly-cookie.
@@ -263,6 +311,10 @@ func (s *Server) fail(w http.ResponseWriter, r *http.Request, err error) {
 		writeError(w, http.StatusServiceUnavailable, "provider_disabled", "Этот способ входа сейчас недоступен. Выберите другой.")
 	case errors.Is(err, service.ErrMailUnavailable):
 		writeError(w, http.StatusServiceUnavailable, "mail_unavailable", "Не получилось отправить письмо. Попробуйте через минуту или войдите другим способом.")
+	case errors.Is(err, service.ErrBotLoginExpired):
+		writeError(w, http.StatusGone, "login_expired", "Ссылка для входа устарела. Нажмите «Войти через Telegram» ещё раз.")
+	case errors.Is(err, service.ErrBotLoginCancelled):
+		writeError(w, http.StatusGone, "login_cancelled", "Вход отменён в Telegram.")
 	case errors.Is(err, service.ErrRoleLocked):
 		writeError(w, http.StatusConflict, "role_locked", "Роль уже выбрана — для другой роли нужен отдельный аккаунт.")
 	default:

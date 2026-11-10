@@ -24,6 +24,13 @@ const (
 	MailLog    = "log"
 )
 
+// Приём сообщений бота.
+const (
+	TelegramWebhook = "webhook" // setWebhook на ${PUBLIC_URL}/api/telegram/webhook при старте (нужен https)
+	TelegramPolling = "polling" // getUpdates в фоне (локально); вебхук при этом снимается
+	TelegramOff     = "off"     // бот не принимает сообщения (вход через бота выключен)
+)
+
 // Config — настройки API.
 type Config struct {
 	AppEnv      string // APP_ENV: production | development (по умолчанию development)
@@ -41,10 +48,16 @@ type Config struct {
 	SMTPPassword string // SMTP_PASSWORD
 	SMTPFrom     string // SMTP_FROM (пусто — MAIL_FROM)
 
-	TelegramBotToken   string // TELEGRAM_BOT_TOKEN
-	TelegramBotName    string // TELEGRAM_BOT_NAME — имя бота без @ (подпись у кнопки)
-	GoogleClientID     string // GOOGLE_CLIENT_ID
-	GoogleClientSecret string // GOOGLE_CLIENT_SECRET
+	TelegramBotToken   string        // TELEGRAM_BOT_TOKEN
+	TelegramBotName    string        // TELEGRAM_BOT_NAME — имя бота без @ (ссылка t.me/<имя>)
+	TelegramSecret     string        // TELEGRAM_WEBHOOK_SECRET — секрет вебхука (заголовок X-Telegram-Bot-Api-Secret-Token)
+	TelegramMode       string        // TELEGRAM_MODE: webhook | polling | off; пусто — webhook при https, иначе только приём эмуляции
+	TelegramAPIURL     string        // TELEGRAM_API_URL — адрес Bot API (по умолчанию https://api.telegram.org; в e2e — подставной)
+	TelegramLoginTTL   time.Duration // TELEGRAM_LOGIN_TTL_MIN, 5
+	TelegramLoginPerIP int           // TELEGRAM_LOGIN_PER_IP_HOUR, 30
+	TelegramSendRPS    float64       // TELEGRAM_SEND_RPS — сообщений бота в секунду, 25
+	GoogleClientID     string        // GOOGLE_CLIENT_ID
+	GoogleClientSecret string        // GOOGLE_CLIENT_SECRET
 
 	CodeTTL      time.Duration // AUTH_CODE_TTL_MIN, 10
 	CodeAttempts int           // AUTH_CODE_MAX_ATTEMPTS, 5
@@ -80,6 +93,19 @@ func (c Config) GoogleRedirectURL() string { return c.PublicURL + "/api/auth/goo
 // GoogleEnabled — ключи Google заданы.
 func (c Config) GoogleEnabled() bool { return c.GoogleClientID != "" && c.GoogleClientSecret != "" }
 
+// BotEnabled — бот принимает сообщения (вход через бота, команды, уведомления).
+func (c Config) BotEnabled() bool {
+	return c.TelegramBotToken != "" && c.TelegramBotName != "" && c.TelegramSecret != "" && c.TelegramMode != TelegramOff
+}
+
+// TelegramWebhookURL — адрес вебхука для setWebhook ("" — вебхук при старте не ставим).
+func (c Config) TelegramWebhookURL() string {
+	if !c.BotEnabled() || c.TelegramMode != TelegramWebhook {
+		return ""
+	}
+	return c.PublicURL + "/api/telegram/webhook"
+}
+
 // Load читает настройки из окружения.
 func Load() (Config, error) { return load(os.Getenv) }
 
@@ -100,6 +126,9 @@ func load(get func(string) string) (Config, error) {
 		SMTPFrom:           strings.TrimSpace(get("SMTP_FROM")),
 		TelegramBotToken:   strings.TrimSpace(get("TELEGRAM_BOT_TOKEN")),
 		TelegramBotName:    strings.TrimPrefix(strings.TrimSpace(get("TELEGRAM_BOT_NAME")), "@"),
+		TelegramSecret:     strings.TrimSpace(get("TELEGRAM_WEBHOOK_SECRET")),
+		TelegramMode:       strings.ToLower(strings.TrimSpace(get("TELEGRAM_MODE"))),
+		TelegramAPIURL:     strings.TrimRight(strings.TrimSpace(get("TELEGRAM_API_URL")), "/"),
 		GoogleClientID:     strings.TrimSpace(get("GOOGLE_CLIENT_ID")),
 		GoogleClientSecret: strings.TrimSpace(get("GOOGLE_CLIENT_SECRET")),
 	}
@@ -171,6 +200,39 @@ func load(get func(string) string) (Config, error) {
 	if c.TelegramBotToken != "" && !strings.Contains(c.TelegramBotToken, ":") {
 		errs = append(errs, errors.New("TELEGRAM_BOT_TOKEN: вид «123456:ABC…» от @BotFather"))
 	}
+	if c.TelegramSecret != "" && !validSecret(c.TelegramSecret) {
+		errs = append(errs, errors.New("TELEGRAM_WEBHOOK_SECRET: 1–256 символов A-Z, a-z, 0-9, _ и -"))
+	}
+	if c.TelegramBotName != "" && !validBotName(c.TelegramBotName) {
+		errs = append(errs, errors.New("TELEGRAM_BOT_NAME: имя бота латиницей, оканчивается на bot"))
+	}
+	if c.TelegramAPIURL != "" {
+		if u, err := url.Parse(c.TelegramAPIURL); err != nil || u.Host == "" || (u.Scheme != "http" && u.Scheme != "https") {
+			errs = append(errs, errors.New("TELEGRAM_API_URL: адрес вида https://api.telegram.org"))
+		}
+	}
+	switch c.TelegramMode {
+	case "":
+		c.TelegramMode = TelegramWebhook
+		if !strings.HasPrefix(c.PublicURL, "https://") {
+			c.TelegramMode = "" // http (локально): Telegram не шлёт вебхуки; приём только эмуляции (e2e) — или polling
+		}
+	case TelegramWebhook:
+		if !strings.HasPrefix(c.PublicURL, "https://") {
+			errs = append(errs, errors.New("TELEGRAM_MODE=webhook: нужен PUBLIC_URL на https"))
+		}
+	case TelegramPolling, TelegramOff:
+	default:
+		errs = append(errs, errors.New("TELEGRAM_MODE: webhook, polling или off"))
+	}
+	if c.TelegramBotToken != "" && c.TelegramMode != TelegramOff {
+		switch {
+		case c.TelegramBotName == "":
+			c.Warnings = append(c.Warnings, "TELEGRAM_BOT_NAME не задан — вход через бота выключен")
+		case c.TelegramSecret == "":
+			c.Warnings = append(c.Warnings, "TELEGRAM_WEBHOOK_SECRET не задан — бот не принимает сообщения, вход через бота выключен")
+		}
+	}
 	if (c.GoogleClientID == "") != (c.GoogleClientSecret == "") {
 		c.Warnings = append(c.Warnings, "Google: нужны оба ключа — GOOGLE_CLIENT_ID и GOOGLE_CLIENT_SECRET; вход через Google выключен")
 	}
@@ -182,6 +244,17 @@ func load(get func(string) string) (Config, error) {
 	c.SessionTTL = time.Duration(num("AUTH_SESSION_DAYS", 30)) * 24 * time.Hour
 	c.RateBurst = num("RATE_LIMIT_BURST", 10)
 	c.MailWorkers = num("MAIL_WORKERS", 2)
+	c.TelegramLoginTTL = time.Duration(num("TELEGRAM_LOGIN_TTL_MIN", 5)) * time.Minute
+	c.TelegramLoginPerIP = num("TELEGRAM_LOGIN_PER_IP_HOUR", 30)
+	c.TelegramSendRPS = 25
+	if v := strings.TrimSpace(get("TELEGRAM_SEND_RPS")); v != "" {
+		f, err := strconv.ParseFloat(v, 64)
+		if err != nil || f <= 0 || f > 30 {
+			errs = append(errs, errors.New("TELEGRAM_SEND_RPS: число от 1 до 30 (лимит Telegram)"))
+		} else {
+			c.TelegramSendRPS = f
+		}
+	}
 	c.RateRPS = 1
 	if v := strings.TrimSpace(get("RATE_LIMIT_RPS")); v != "" {
 		f, err := strconv.ParseFloat(v, 64)
@@ -212,4 +285,30 @@ func (c Config) MailReady() (provider, reason string) {
 		}
 	}
 	return c.MailProvider, ""
+}
+
+func validSecret(s string) bool {
+	if len(s) > 256 {
+		return false
+	}
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		if !(c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || c == '_' || c == '-') {
+			return false
+		}
+	}
+	return true
+}
+
+func validBotName(s string) bool {
+	if len(s) < 5 || len(s) > 32 || !strings.HasSuffix(strings.ToLower(s), "bot") {
+		return false
+	}
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		if !(c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || c == '_') {
+			return false
+		}
+	}
+	return true
 }

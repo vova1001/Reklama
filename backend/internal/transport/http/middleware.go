@@ -15,12 +15,16 @@ import (
 
 	"ohvat/backend/internal/domain"
 	"ohvat/backend/internal/logx"
+	"ohvat/backend/internal/service"
 )
 
 const (
 	sessionCookie = "ohvat_session"
 	csrfCookie    = "ohvat_csrf"
 	oauthCookie   = "ohvat_oauth"
+	botCookie     = "ohvat_tglogin"
+	botCookiePath = "/api/auth/telegram/bot"
+	deviceCookie  = "ohvat_device"
 	csrfHeader    = "X-CSRF-Token"
 	maxBody       = 16 << 10
 )
@@ -82,6 +86,30 @@ func clientIP(r *http.Request) string {
 		return r.RemoteAddr
 	}
 	return host
+}
+
+// client — сведения о клиенте в контекст сервиса (адрес, браузер, устройство) и cookie устройства
+// (случайный id на 400 дней, httpOnly): по нему вход с нового устройства даёт уведомление в Telegram.
+func (s *Server) client(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		dev := ""
+		if c, err := r.Cookie(deviceCookie); err == nil && len(c.Value) == 43 {
+			dev = c.Value
+		} else if strings.HasPrefix(r.URL.Path, "/api/auth/") {
+			b := make([]byte, 32)
+			if _, err := rand.Read(b); err == nil {
+				dev = base64.RawURLEncoding.EncodeToString(b)
+				http.SetCookie(w, &http.Cookie{Name: deviceCookie, Value: dev, Path: "/api/auth", MaxAge: 400 * 24 * 3600,
+					HttpOnly: true, Secure: s.opt.SecureCookies, SameSite: http.SameSiteLaxMode})
+			}
+		}
+		ua := r.UserAgent()
+		if len(ua) > 512 {
+			ua = ua[:512]
+		}
+		ctx := service.WithClient(r.Context(), service.ClientInfo{IP: clientIP(r), UserAgent: ua, DeviceID: dev})
+		next.ServeHTTP(w, r.WithContext(ctx))
+	})
 }
 
 // csrf — защита изменяющих запросов: заголовок X-CSRF-Token должен совпасть с cookie (сравнение за постоянное

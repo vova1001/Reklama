@@ -26,6 +26,24 @@ type profileIn struct {
 type telegramDTO struct {
 	BotID   string `json:"botId"`
 	BotName string `json:"botName"`
+	Bot     bool   `json:"bot"` // вход через бота (ссылка t.me) — основной способ
+}
+
+type botStartIn struct {
+	Role    string `json:"role"`
+	Consent bool   `json:"consent"`
+}
+
+type botStartDTO struct {
+	URL       string `json:"url"`
+	ExpiresIn int    `json:"expiresIn"`
+}
+
+type botStatusDTO struct {
+	Status  string   `json:"status"` // pending | ok
+	User    *userDTO `json:"user,omitempty"`
+	Next    string   `json:"next,omitempty"`
+	Created bool     `json:"created,omitempty"`
 }
 
 type authConfigDTO struct {

@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"sort"
+	"strconv"
 	"sync"
 	"time"
 
@@ -366,3 +367,332 @@ var errBoom = errors.New("boom")
 
 // fixedRand — предсказуемые «случайные» байты.
 func fixedRand(b byte) *bytes.Reader { return bytes.NewReader(bytes.Repeat([]byte{b}, 1<<16)) }
+
+func (m *memRepo) DeleteUserSessions(_ context.Context, uid int64) (int64, error) {
+	if err := m.err("DeleteUserSessions"); err != nil {
+		return 0, err
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	var n int64
+	for k, s := range m.sessions {
+		if s.user == uid {
+			delete(m.sessions, k)
+			n++
+		}
+	}
+	return n, nil
+}
+
+func (m *memRepo) sessionCount(uid int64) int {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	n := 0
+	for _, s := range m.sessions {
+		if s.user == uid {
+			n++
+		}
+	}
+	return n
+}
+
+// memTG — входы через бота, чаты и устройства в памяти (фейк TelegramLoginRepository, BotChatRepository,
+// DeviceRepository). idents — привязки telegram id → пользователь (для NotifyChat).
+type memTG struct {
+	mu      sync.Mutex
+	logins  []*memLogin
+	chats   map[int64]*domain.TelegramChat
+	devices map[string]bool
+	idents  map[int64]int64 // пользователь сайта → tg id
+	fail    map[string]error
+}
+
+type memLogin struct {
+	domain.TelegramLogin
+	token []byte
+	ip    string
+}
+
+func newMemTG() *memTG {
+	return &memTG{chats: map[int64]*domain.TelegramChat{}, devices: map[string]bool{}, idents: map[int64]int64{}, fail: map[string]error{}}
+}
+
+func (m *memTG) CreateTelegramLogin(_ context.Context, l domain.NewTelegramLogin) error {
+	if err := m.fail["CreateTelegramLogin"]; err != nil {
+		return err
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.logins = append(m.logins, &memLogin{TelegramLogin: domain.TelegramLogin{ID: int64(len(m.logins) + 1), BrowserHash: l.BrowserHash,
+		Role: l.Role, CreatedAt: l.CreatedAt, ExpiresAt: l.ExpiresAt}, token: l.TokenHash, ip: l.IP})
+	return nil
+}
+
+func (m *memTG) TelegramLoginStats(_ context.Context, ip string, since time.Time) (int, time.Time, error) {
+	if err := m.fail["TelegramLoginStats"]; err != nil {
+		return 0, time.Time{}, err
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	n, first := 0, time.Time{}
+	for _, l := range m.logins {
+		if l.ip == ip && l.CreatedAt.After(since) {
+			n++
+			if first.IsZero() || l.CreatedAt.Before(first) {
+				first = l.CreatedAt
+			}
+		}
+	}
+	return n, first, nil
+}
+
+func (m *memTG) find(match func(*memLogin) bool) *memLogin {
+	for _, l := range m.logins {
+		if match(l) {
+			return l
+		}
+	}
+	return nil
+}
+
+func (m *memTG) PendingTelegramLogin(_ context.Context, th []byte, now time.Time) (domain.TelegramLogin, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	l := m.find(func(l *memLogin) bool {
+		return bytes.Equal(l.token, th) && l.ConsumedAt == nil && l.ExpiresAt.After(now)
+	})
+	if l == nil {
+		return domain.TelegramLogin{}, domain.ErrNotFound
+	}
+	return l.TelegramLogin, nil
+}
+
+func (m *memTG) ConfirmTelegramLogin(_ context.Context, th []byte, p domain.TelegramProfile, now, grace time.Time) (domain.TelegramLogin, error) {
+	if err := m.fail["ConfirmTelegramLogin"]; err != nil {
+		return domain.TelegramLogin{}, err
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	l := m.find(func(l *memLogin) bool {
+		return bytes.Equal(l.token, th) && l.ConsumedAt == nil && l.ExpiresAt.After(now) && (l.TgUserID == 0 || l.TgUserID == p.ID)
+	})
+	if l == nil {
+		return domain.TelegramLogin{}, domain.ErrNotFound
+	}
+	l.TgUserID, l.TgName, l.TgUsername = p.ID, p.Name(), p.Username
+	if l.ConfirmedAt == nil {
+		t := now
+		l.ConfirmedAt = &t
+	}
+	if grace.After(l.ExpiresAt) {
+		l.ExpiresAt = grace
+	}
+	return l.TelegramLogin, nil
+}
+
+func (m *memTG) CancelTelegramLogin(_ context.Context, th []byte, now time.Time) (domain.TelegramLogin, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	l := m.find(func(l *memLogin) bool { return bytes.Equal(l.token, th) && l.ConsumedAt == nil && l.ConfirmedAt == nil })
+	if l == nil {
+		return domain.TelegramLogin{}, domain.ErrNotFound
+	}
+	t := now
+	l.ConsumedAt, l.Cancelled = &t, true
+	return l.TelegramLogin, nil
+}
+
+func (m *memTG) TelegramLoginByBrowser(_ context.Context, bh []byte) (domain.TelegramLogin, error) {
+	if err := m.fail["TelegramLoginByBrowser"]; err != nil {
+		return domain.TelegramLogin{}, err
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	l := m.find(func(l *memLogin) bool { return bytes.Equal(l.BrowserHash, bh) })
+	if l == nil {
+		return domain.TelegramLogin{}, domain.ErrNotFound
+	}
+	return l.TelegramLogin, nil
+}
+
+func (m *memTG) ConsumeTelegramLogin(_ context.Context, bh []byte, now time.Time) (domain.TelegramLogin, error) {
+	if err := m.fail["ConsumeTelegramLogin"]; err != nil {
+		return domain.TelegramLogin{}, err
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	l := m.find(func(l *memLogin) bool {
+		return bytes.Equal(l.BrowserHash, bh) && l.ConfirmedAt != nil && l.ConsumedAt == nil && l.ExpiresAt.After(now)
+	})
+	if l == nil {
+		return domain.TelegramLogin{}, domain.ErrNotFound
+	}
+	t := now
+	l.ConsumedAt = &t
+	return l.TelegramLogin, nil
+}
+
+func (m *memTG) DeleteTelegramLoginsBefore(_ context.Context, t time.Time) (int64, error) {
+	if err := m.fail["DeleteTelegramLoginsBefore"]; err != nil {
+		return 0, err
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	var n int64
+	keep := m.logins[:0]
+	for _, l := range m.logins {
+		if l.CreatedAt.Before(t) {
+			n++
+			continue
+		}
+		keep = append(keep, l)
+	}
+	m.logins = keep
+	return n, nil
+}
+
+func (m *memTG) SaveChat(_ context.Context, tg, chat int64, username string) (domain.TelegramChat, error) {
+	if err := m.fail["SaveChat"]; err != nil {
+		return domain.TelegramChat{}, err
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	c, ok := m.chats[tg]
+	if !ok {
+		c = &domain.TelegramChat{TgUserID: tg, Notify: true}
+		m.chats[tg] = c
+	}
+	c.ChatID, c.Username, c.Blocked = chat, username, false
+	return *c, nil
+}
+
+func (m *memTG) SetNotify(_ context.Context, tg int64, on bool) error {
+	if err := m.fail["SetNotify"]; err != nil {
+		return err
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	c, ok := m.chats[tg]
+	if !ok {
+		return domain.ErrNotFound
+	}
+	c.Notify = on
+	return nil
+}
+
+func (m *memTG) BlockChat(_ context.Context, chat int64) error {
+	if err := m.fail["BlockChat"]; err != nil {
+		return err
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for _, c := range m.chats {
+		if c.ChatID == chat {
+			c.Blocked = true
+		}
+	}
+	return nil
+}
+
+func (m *memTG) Chat(_ context.Context, tg int64) (domain.TelegramChat, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if c, ok := m.chats[tg]; ok {
+		return *c, nil
+	}
+	return domain.TelegramChat{}, domain.ErrNotFound
+}
+
+func (m *memTG) NotifyChat(_ context.Context, uid int64) (domain.TelegramChat, error) {
+	if err := m.fail["NotifyChat"]; err != nil {
+		return domain.TelegramChat{}, err
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if c, ok := m.chats[m.idents[uid]]; ok && c.Notify && !c.Blocked {
+		return *c, nil
+	}
+	return domain.TelegramChat{}, domain.ErrNotFound
+}
+
+func (m *memTG) TouchDevice(_ context.Context, uid int64, h []byte) (bool, error) {
+	if err := m.fail["TouchDevice"]; err != nil {
+		return false, err
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	k := strconv.FormatInt(uid, 10) + ":" + string(h)
+	if m.devices[k] {
+		return false, nil
+	}
+	m.devices[k] = true
+	return true, nil
+}
+
+func (m *memTG) chat(tg int64) domain.TelegramChat {
+	c, _ := m.Chat(context.Background(), tg)
+	return c
+}
+
+// fakeMessenger — исходящие сообщения бота.
+type fakeMessenger struct {
+	mu      sync.Mutex
+	sent    []BotMessage
+	answers []string
+	err     error
+}
+
+func (f *fakeMessenger) Send(_ context.Context, m BotMessage) error {
+	if f.err != nil {
+		return f.err
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.sent = append(f.sent, m)
+	return nil
+}
+
+func (f *fakeMessenger) AnswerCallback(_ context.Context, _, text string) error {
+	if f.err != nil {
+		return f.err
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.answers = append(f.answers, text)
+	return nil
+}
+
+func (f *fakeMessenger) last() BotMessage {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if len(f.sent) == 0 {
+		return BotMessage{}
+	}
+	return f.sent[len(f.sent)-1]
+}
+
+func (f *fakeMessenger) count() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return len(f.sent)
+}
+
+// fakeNotifier — запоминает уведомления.
+type fakeNotifier struct {
+	mu  sync.Mutex
+	got []Notification
+	err error
+}
+
+func (f *fakeNotifier) Notify(_ context.Context, _ int64, n Notification) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.got = append(f.got, n)
+	return f.err
+}
+
+func (f *fakeNotifier) count() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return len(f.got)
+}

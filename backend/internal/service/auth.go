@@ -49,6 +49,8 @@ type SessionRepository interface {
 	SessionUser(ctx context.Context, tokenHash []byte, now time.Time) (domain.User, error)
 	DeleteSession(ctx context.Context, tokenHash []byte) error
 	DeleteExpiredSessions(ctx context.Context, now time.Time) (int64, error)
+	// DeleteUserSessions завершает все сеансы пользователя.
+	DeleteUserSessions(ctx context.Context, userID int64) (int64, error)
 }
 
 // Mailer — отправка письма с кодом. Реализация ставит письмо в очередь и не ждёт отправки.
@@ -94,6 +96,10 @@ type AuthConfig struct {
 	TelegramToken   string        // TELEGRAM_BOT_TOKEN; пусто — вход через Telegram выключен
 	TelegramBotName string        // TELEGRAM_BOT_NAME — для подписи на странице входа
 	TelegramMaxAge  time.Duration // насколько свежей должна быть подпись Telegram, 1 час
+	TelegramBot     bool          // вход через бота включён (бот принимает сообщения)
+	BotLoginTTL     time.Duration // срок ссылки входа через бота, 5 мин
+	BotLoginGrace   time.Duration // сколько после подтверждения браузер может забрать вход, 2 мин
+	BotLoginPerIP   int           // запусков входа через бота с адреса в час, 30
 	EmailEnabled    bool          // вход по почте доступен (есть способ отправки)
 	CodeRetention   time.Duration // сколько хранить строки кодов (для лимитов), 24 ч
 }
@@ -119,6 +125,15 @@ func (c *AuthConfig) defaults() {
 	}
 	if c.TelegramMaxAge == 0 {
 		c.TelegramMaxAge = time.Hour
+	}
+	if c.BotLoginTTL == 0 {
+		c.BotLoginTTL = 5 * time.Minute
+	}
+	if c.BotLoginGrace == 0 {
+		c.BotLoginGrace = 2 * time.Minute
+	}
+	if c.BotLoginPerIP == 0 {
+		c.BotLoginPerIP = 30
 	}
 	if c.CodeRetention == 0 {
 		c.CodeRetention = 24 * time.Hour
@@ -178,14 +193,17 @@ func (e *ValidationError) orNil() error {
 
 // AuthDeps — всё, от чего зависит сервис входа.
 type AuthDeps struct {
-	Users    UserRepository
-	Codes    CodeRepository
-	Sessions SessionRepository
-	Mailer   Mailer         // nil — вход по почте выключен
-	Google   GoogleProvider // nil — вход через Google выключен
-	Clock    Clock          // nil — SystemClock
-	Random   io.Reader      // nil — crypto/rand
-	Log      *slog.Logger   // nil — slog.Default()
+	Users     UserRepository
+	Codes     CodeRepository
+	Sessions  SessionRepository
+	Mailer    Mailer                  // nil — вход по почте выключен
+	Google    GoogleProvider          // nil — вход через Google выключен
+	BotLogins TelegramLoginRepository // nil — вход через бота выключен
+	Devices   DeviceRepository        // nil — устройства не запоминаются (уведомление о каждом входе)
+	Notifier  Notifier                // nil — уведомления не отправляются
+	Clock     Clock                   // nil — SystemClock
+	Random    io.Reader               // nil — crypto/rand
+	Log       *slog.Logger            // nil — slog.Default()
 }
 
 // Auth — регистрация и вход: почта с кодом, Telegram, Google; сессии; анкета.
@@ -195,6 +213,10 @@ type Auth struct {
 	sessions SessionRepository
 	mailer   Mailer
 	google   GoogleProvider
+	tgLogins TelegramLoginRepository
+	devices  DeviceRepository
+	notifier Notifier
+	signals  *signalHub
 	clock    Clock
 	rnd      io.Reader
 	log      *slog.Logger
@@ -216,6 +238,9 @@ func NewAuth(d AuthDeps, cfg AuthConfig) *Auth {
 	if d.Mailer == nil {
 		cfg.EmailEnabled = false
 	}
+	if d.BotLogins == nil || cfg.TelegramBotName == "" {
+		cfg.TelegramBot = false
+	}
 	if len(cfg.Secret) == 0 {
 		// без ключа коды всё равно хешируются — случайным ключом процесса (коды не переживут перезапуск)
 		cfg.Secret = make([]byte, 32)
@@ -223,6 +248,7 @@ func NewAuth(d AuthDeps, cfg AuthConfig) *Auth {
 	}
 	return &Auth{
 		users: d.Users, codes: d.Codes, sessions: d.Sessions, mailer: d.Mailer, google: d.Google,
+		tgLogins: d.BotLogins, devices: d.Devices, notifier: d.Notifier, signals: newSignalHub(),
 		clock: d.Clock, rnd: d.Random, log: d.Log, cfg: cfg,
 	}
 }
@@ -233,11 +259,12 @@ type Methods struct {
 	Google          bool
 	TelegramBotID   string // "" — Telegram выключен
 	TelegramBotName string
+	TelegramBot     bool // вход через бота (ссылка t.me/<бот>?start=…)
 }
 
 // Methods — включённые способы входа.
 func (s *Auth) Methods() Methods {
-	return Methods{Email: s.cfg.EmailEnabled, Google: s.google != nil, TelegramBotID: telegramBotID(s.cfg.TelegramToken), TelegramBotName: s.cfg.TelegramBotName}
+	return Methods{Email: s.cfg.EmailEnabled, Google: s.google != nil, TelegramBotID: telegramBotID(s.cfg.TelegramToken), TelegramBotName: s.cfg.TelegramBotName, TelegramBot: s.cfg.TelegramBot}
 }
 
 // LoginResult — успешный вход: токен для cookie и пользователь.
@@ -269,6 +296,7 @@ func (s *Auth) login(ctx context.Context, id domain.Identity, emailVerified bool
 	if err != nil {
 		return LoginResult{}, err
 	}
+	s.afterLogin(ctx, u, id, created)
 	return LoginResult{Token: tok, ExpiresAt: exp, User: u, Created: created}, nil
 }
 
@@ -363,8 +391,14 @@ func (s *Auth) Cleanup(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("очистка сессий: %w", err)
 	}
-	if codes+sess > 0 {
-		s.log.InfoContext(ctx, "очистка входа", "codes", codes, "sessions", sess)
+	var tg int64
+	if s.tgLogins != nil {
+		if tg, err = s.tgLogins.DeleteTelegramLoginsBefore(ctx, now.Add(-s.cfg.CodeRetention)); err != nil {
+			return fmt.Errorf("очистка входов через бота: %w", err)
+		}
+	}
+	if codes+sess+tg > 0 {
+		s.log.InfoContext(ctx, "очистка входа", "codes", codes, "sessions", sess, "telegram_logins", tg)
 	}
 	return nil
 }

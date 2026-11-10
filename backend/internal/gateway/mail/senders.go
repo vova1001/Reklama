@@ -15,9 +15,46 @@ import (
 	"net"
 	"net/http"
 	"net/smtp"
+	"net/textproto"
+	"strconv"
 	"strings"
 	"time"
 )
+
+// SendError — сервис отправки ответил ошибкой. Permanent — повтор не поможет (4xx кроме 429, SMTP 5xx).
+type SendError struct {
+	Via        string
+	Status     int
+	Detail     string
+	RetryAfter time.Duration // из заголовка Retry-After (429)
+}
+
+func (e *SendError) Error() string { return fmt.Sprintf("%s: %d: %s", e.Via, e.Status, e.Detail) }
+
+// Permanent — ошибку не стоит повторять.
+func (e *SendError) Permanent() bool {
+	if e.Via == "smtp" {
+		return e.Status >= 500
+	}
+	return e.Status >= 400 && e.Status < 500 && e.Status != http.StatusTooManyRequests
+}
+
+// retryAfter — Retry-After в секундах или дата HTTP; не разобрано — 0.
+func retryAfter(v string) time.Duration {
+	v = strings.TrimSpace(v)
+	if v == "" {
+		return 0
+	}
+	if n, err := strconv.Atoi(v); err == nil && n > 0 {
+		return time.Duration(n) * time.Second
+	}
+	if t, err := http.ParseTime(v); err == nil {
+		if d := time.Until(t); d > 0 {
+			return d
+		}
+	}
+	return 0
+}
 
 // ===== Resend (HTTPS API) =====
 
@@ -59,7 +96,8 @@ func (r Resend) Send(ctx context.Context, m Message) error {
 	defer res.Body.Close()
 	if res.StatusCode/100 != 2 {
 		b, _ := io.ReadAll(io.LimitReader(res.Body, 512))
-		return fmt.Errorf("resend: %s: %s", res.Status, strings.TrimSpace(string(b)))
+		return &SendError{Via: "resend", Status: res.StatusCode, Detail: strings.TrimSpace(string(b)),
+			RetryAfter: retryAfter(res.Header.Get("Retry-After"))}
 	}
 	_, _ = io.Copy(io.Discard, io.LimitReader(res.Body, 4096))
 	return nil
@@ -120,6 +158,10 @@ func (s SMTP) Send(ctx context.Context, m Message) error {
 		return fmt.Errorf("smtp: MAIL FROM: %w", err)
 	}
 	if err := c.Rcpt(m.To); err != nil {
+		var te *textproto.Error
+		if errors.As(err, &te) && te.Code >= 500 {
+			return &SendError{Via: "smtp", Status: te.Code, Detail: "RCPT TO: " + te.Msg} // адрес отвергнут — повтор не поможет
+		}
 		return fmt.Errorf("smtp: RCPT TO: %w", err)
 	}
 	w, err := c.Data()

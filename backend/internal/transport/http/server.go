@@ -37,6 +37,8 @@ type AuthService interface {
 	Logout(ctx context.Context, token string) error
 	Account(ctx context.Context, u domain.User) (service.Account, error)
 	SaveProfile(ctx context.Context, u domain.User, p domain.Profile) (domain.User, error)
+	StartTelegramBot(ctx context.Context, role string, consent bool, ip string) (service.TelegramBotStart, error)
+	WaitTelegramBot(ctx context.Context, browserSecret string, wait time.Duration) (service.BotLoginStatus, service.LoginResult, error)
 }
 
 // Options — настройки транспорта (из config).
@@ -44,6 +46,10 @@ type Options struct {
 	Origin        string // схема+хост сайта из PUBLIC_URL — для проверки Origin
 	SecureCookies bool   // PUBLIC_URL на https
 	Limiter       *RateLimiter
+	BotWait       time.Duration // сколько ждать подтверждения в боте в одном запросе (long-poll), 25 с
+	// TelegramWebhook — приём обновлений бота (transport/telegram); nil — бот выключен.
+	// Свой секрет вместо CSRF и свой лимит одновременных запросов, поэтому вне группы /api.
+	TelegramWebhook http.Handler
 }
 
 // Server — HTTP API.
@@ -59,6 +65,9 @@ func New(home HomeService, health HealthService, auth AuthService, opt Options) 
 	if opt.Limiter == nil {
 		opt.Limiter = NewRateLimiter(1, 10)
 	}
+	if opt.BotWait <= 0 {
+		opt.BotWait = 25 * time.Second
+	}
 	return &Server{home: home, health: health, auth: auth, opt: opt}
 }
 
@@ -67,8 +76,11 @@ func (s *Server) Routes() http.Handler {
 	r := chi.NewRouter()
 	r.Use(requestID, logRequests, recoverer)
 	r.Get("/healthz", s.getHealth)
+	if s.opt.TelegramWebhook != nil {
+		r.Post("/api/telegram/webhook", s.opt.TelegramWebhook.ServeHTTP)
+	}
 	r.Route("/api", func(r chi.Router) {
-		r.Use(s.csrf)
+		r.Use(s.client, s.csrf)
 		r.Get("/home", s.getHome)
 		r.Route("/auth", func(r chi.Router) {
 			r.Use(noStore)
@@ -79,6 +91,8 @@ func (s *Server) Routes() http.Handler {
 				r.Post("/email/start", s.postEmailStart)
 				r.Post("/email/verify", s.postEmailVerify)
 				r.Post("/telegram", s.postTelegram)
+				r.Post("/telegram/bot/start", s.postBotStart)
+				r.Post("/telegram/bot/status", s.postBotStatus)
 				r.Get("/google/start", s.getGoogleStart)
 				r.Get("/google/callback", s.getGoogleCallback)
 			})

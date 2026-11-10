@@ -215,6 +215,12 @@ func (r *Auth) DeleteExpiredSessions(ctx context.Context, now time.Time) (int64,
 	return n, dbErr("очистка сессий", err)
 }
 
+// DeleteUserSessions — завершить все сеансы пользователя.
+func (r *Auth) DeleteUserSessions(ctx context.Context, userID int64) (int64, error) {
+	n, err := r.q.DeleteUserSessions(ctx, userID)
+	return n, dbErr("завершение сеансов", err)
+}
+
 // ===== преобразования =====
 
 // dbErr переводит ошибки pgx в ошибки домена: нет строки → ErrNotFound, нарушение уникальности → ErrConflict.

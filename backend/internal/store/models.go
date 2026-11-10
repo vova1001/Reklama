@@ -78,6 +78,32 @@ type Session struct {
 	LastSeenAt pgtype.Timestamptz
 }
 
+type TelegramChat struct {
+	TgUserID  int64
+	ChatID    int64
+	Username  string
+	Notify    bool
+	BlockedAt pgtype.Timestamptz
+	CreatedAt pgtype.Timestamptz
+	UpdatedAt pgtype.Timestamptz
+}
+
+type TelegramLogin struct {
+	ID          int64
+	TokenHash   []byte
+	BrowserHash []byte
+	Role        pgtype.Text
+	Ip          string
+	TgUserID    pgtype.Int8
+	TgName      string
+	TgUsername  string
+	CreatedAt   pgtype.Timestamptz
+	ExpiresAt   pgtype.Timestamptz
+	ConfirmedAt pgtype.Timestamptz
+	ConsumedAt  pgtype.Timestamptz
+	Cancelled   bool
+}
+
 type User struct {
 	ID          int64
 	Role        pgtype.Text
@@ -91,4 +117,11 @@ type User struct {
 	CreatedAt   pgtype.Timestamptz
 	UpdatedAt   pgtype.Timestamptz
 	LastLoginAt pgtype.Timestamptz
+}
+
+type UserDevice struct {
+	UserID      int64
+	DeviceHash  []byte
+	FirstSeenAt pgtype.Timestamptz
+	LastSeenAt  pgtype.Timestamptz
 }
