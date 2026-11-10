@@ -1,6 +1,6 @@
 -- name: CreateTelegramLogin :exec
-INSERT INTO telegram_logins (token_hash, browser_hash, role, ip, created_at, expires_at)
-VALUES ($1, $2, $3, $4, $5, $6);
+INSERT INTO telegram_logins (token_hash, browser_hash, ip, created_at, expires_at)
+VALUES ($1, $2, $3, $4, $5);
 
 -- name: CountTelegramLoginsByIP :one
 SELECT count(*)::int AS started, COALESCE(min(created_at), 'epoch'::timestamptz)::timestamptz AS first_at

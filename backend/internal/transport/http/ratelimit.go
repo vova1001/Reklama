@@ -2,104 +2,70 @@ package httpapi
 
 import (
 	"context"
+	"log/slog"
 	"math"
 	"net/http"
 	"strconv"
-	"sync"
 	"time"
 )
 
-// RateLimiter — токен-бакет на адрес клиента: rps токенов в секунду, запас burst.
-// Хранится в памяти процесса (один сервер); старые ключи чистит Run. Для нескольких серверов — Redis.
-type RateLimiter struct {
-	mu      sync.Mutex
-	rps     float64
-	burst   float64
-	buckets map[string]*tokenBucket
-	now     func() time.Time
-	idle    time.Duration
+// Limiter — ограничитель частоты по ключу (реализации — internal/ratelimit: память процесса или Redis).
+type Limiter interface {
+	Allow(ctx context.Context, key string) (ok bool, retryAfter time.Duration, err error)
 }
 
-type tokenBucket struct {
-	tokens float64
-	last   time.Time
+// keyFunc — ключ бакета для запроса; "" — не ограничивать.
+type keyFunc func(r *http.Request) string
+
+func byIP(prefix string) keyFunc {
+	return func(r *http.Request) string { return prefix + clientIP(r) }
 }
 
-// NewRateLimiter создаёт ограничитель.
-func NewRateLimiter(rps float64, burst int) *RateLimiter {
-	return &RateLimiter{rps: rps, burst: float64(burst), buckets: map[string]*tokenBucket{}, now: time.Now, idle: 10 * time.Minute}
-}
-
-// Allow тратит токен; нет токена — false и через сколько появится.
-func (l *RateLimiter) Allow(key string) (bool, time.Duration) {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	now := l.now()
-	b, ok := l.buckets[key]
-	if !ok {
-		b = &tokenBucket{tokens: l.burst, last: now}
-		l.buckets[key] = b
-	}
-	b.tokens = math.Min(l.burst, b.tokens+now.Sub(b.last).Seconds()*l.rps)
-	b.last = now
-	if b.tokens >= 1 {
-		b.tokens--
-		return true, 0
-	}
-	wait := time.Duration((1 - b.tokens) / l.rps * float64(time.Second))
-	return false, wait
-}
-
-// sweep удаляет бакеты, к которым давно не обращались (они всё равно полные).
-func (l *RateLimiter) sweep() int {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	now := l.now()
-	n := 0
-	for k, b := range l.buckets {
-		if now.Sub(b.last) > l.idle {
-			delete(l.buckets, k)
-			n++
+func byUser(prefix string) keyFunc {
+	return func(r *http.Request) string {
+		u := currentUser(r)
+		if u.ID == 0 {
+			return ""
 		}
+		return prefix + strconv.FormatInt(u.ID, 10)
 	}
-	return n
 }
 
-// Size — сколько адресов сейчас в памяти.
-func (l *RateLimiter) Size() int {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	return len(l.buckets)
-}
-
-// Run чистит старые ключи раз в every до отмены ctx.
-func (l *RateLimiter) Run(ctx context.Context, every time.Duration) {
-	t := time.NewTicker(every)
-	defer t.Stop()
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-t.C:
-			l.sweep()
+// limit — 429 с Retry-After, когда у ключа кончились токены. Сбой хранилища лимитов не роняет сайт:
+// запрос пропускается, ошибка — в журнал (Fallback в ratelimit обычно подменяет Redis памятью раньше).
+func limit(l Limiter, key keyFunc) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		if l == nil {
+			return next
 		}
-	}
-}
-
-// Middleware отвечает 429 с Retry-After, когда у адреса кончились токены.
-func (l *RateLimiter) Middleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if ok, wait := l.Allow(clientIP(r)); !ok {
-			sec := int(math.Ceil(wait.Seconds()))
-			if sec < 1 {
-				sec = 1
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			k := key(r)
+			if k == "" {
+				next.ServeHTTP(w, r)
+				return
 			}
-			w.Header().Set("Retry-After", strconv.Itoa(sec))
-			writeJSON(w, http.StatusTooManyRequests, errorDTO{Error: errorBody{
-				Code: "rate_limited", Message: "Слишком много попыток подряд. Подождите немного и попробуйте снова.", RetryAfter: sec,
-			}})
-			return
-		}
-		next.ServeHTTP(w, r)
-	})
+			ok, wait, err := l.Allow(r.Context(), k)
+			if err != nil {
+				slog.WarnContext(r.Context(), "лимит не проверен — запрос пропущен", "err", err)
+				next.ServeHTTP(w, r)
+				return
+			}
+			if !ok {
+				tooMany(w, wait)
+				return
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
+func tooMany(w http.ResponseWriter, wait time.Duration) {
+	sec := int(math.Ceil(wait.Seconds()))
+	if sec < 1 {
+		sec = 1
+	}
+	w.Header().Set("Retry-After", strconv.Itoa(sec))
+	writeJSON(w, http.StatusTooManyRequests, errorDTO{Error: errorBody{
+		Code: "rate_limited", Message: "Слишком много запросов подряд. Подождите немного и попробуйте снова.", RetryAfter: sec,
+	}})
 }

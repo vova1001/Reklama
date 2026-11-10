@@ -19,6 +19,16 @@
   --color-line: #dcd9d2;
   --color-line-dark: rgba(237, 236, 232, 0.16);
   --color-tint: rgba(15, 117, 83, 0.1);
+  /* приложение и вход — те же токены плюс состояния (project/design/tokens.md) */
+  --color-sunken: #e2dfd8; /* дорожка сегмента и прогресса, «утопленное» */
+  --color-line-strong: #c4bfb3; /* рамка при наведении, разделитель меню */
+  --color-placeholder: #6e6d67; /* подсказка в поле (4.6:1 на панели) */
+  --color-emerald-hover: #0c6145; /* заливка кнопки при наведении (белый текст 7.5:1) */
+  --color-emerald-ink: #0b5e43; /* изумрудный текст на мягкой изумрудной подложке (6.7:1) */
+  --color-emerald-soft: #e3f0ea; /* мягкая изумрудная подложка: подсказки, активный пункт */
+  --color-warn: #8a5300; /* «пример», предупреждение (5.6:1 на своей подложке) */
+  --color-warn-soft: #fbf0da;
+  --color-error: #b3261e;
   --font-sans: 'Inter', system-ui, sans-serif;
   --radius-card: 28px;
   --radius-photo: 28px;

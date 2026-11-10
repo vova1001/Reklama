@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/redis/go-redis/v9"
 	"golang.org/x/sync/errgroup"
 
 	"ohvat/backend/internal/config"
@@ -20,6 +21,7 @@ import (
 	"ohvat/backend/internal/gateway/mail"
 	tggw "ohvat/backend/internal/gateway/telegram"
 	"ohvat/backend/internal/logx"
+	"ohvat/backend/internal/ratelimit"
 	"ohvat/backend/internal/repository"
 	"ohvat/backend/internal/service"
 	httpapi "ohvat/backend/internal/transport/http"
@@ -102,19 +104,28 @@ func run(log *slog.Logger) error {
 		TelegramToken: cfg.TelegramBotToken, TelegramBotName: cfg.TelegramBotName, EmailEnabled: mailer != nil,
 		TelegramBot: cfg.BotEnabled(), BotLoginTTL: cfg.TelegramLoginTTL, BotLoginPerIP: cfg.TelegramLoginPerIP,
 	})
+	profiles := service.NewProfiles(repository.NewProfiles(pool), authRepo)
+
+	// лимиты: Redis (REDIS_URL) — общие для всех серверов, при сбое Redis — в памяти; без Redis — в памяти
+	lims := newLimiters(ctx, cfg, log)
+	defer lims.close()
+
 	var hook *tgtransport.Handler
-	opts := httpapi.Options{Origin: cfg.Origin(), SecureCookies: cfg.SecureCookies(), Limiter: httpapi.NewRateLimiter(cfg.RateRPS, cfg.RateBurst)}
+	opts := httpapi.Options{
+		Origin: cfg.Origin(), SecureCookies: cfg.SecureCookies(),
+		APILimiter: lims.api, AuthLimiter: lims.auth, UserLimiter: lims.user,
+	}
 	if cfg.BotEnabled() {
 		bot = service.NewBot(service.BotDeps{Auth: auth, Users: authRepo, Chats: tgRepo, Messenger: outbox, Log: log},
 			service.BotConfig{SiteURL: cfg.PublicURL})
-		hook = tgtransport.New(bot, tgtransport.Options{Secret: cfg.TelegramSecret, Log: log})
+		hook = tgtransport.New(bot, tgtransport.Options{Secret: cfg.TelegramSecret, Limiter: lims.webhook, Log: log})
 		opts.TelegramWebhook = hook
 	}
-	limiter := opts.Limiter
 	api := httpapi.New(
 		service.NewHome(repository.NewHome(pool)),
 		service.NewHealth(repository.NewHealth(pool)),
 		auth,
+		profiles,
 		opts,
 	)
 	srv := &http.Server{
@@ -146,7 +157,9 @@ func run(log *slog.Logger) error {
 		g.Go(func() error { queue.Run(gctx); return nil })
 	}
 	g.Go(func() error { auth.RunCleanup(gctx, 10*time.Minute); return nil })
-	g.Go(func() error { limiter.Run(gctx, time.Minute); return nil })
+	for _, m := range lims.memory {
+		g.Go(func() error { m.Run(gctx, time.Minute); return nil })
+	}
 	if cfg.BotEnabled() {
 		g.Go(func() error { outbox.Run(gctx); return nil })
 		g.Go(func() error { hook.RunSweep(gctx, time.Minute); return nil })
@@ -161,6 +174,47 @@ func run(log *slog.Logger) error {
 	err = g.Wait()
 	log.Info("сервер остановлен: запросы, письма и сообщения бота завершены")
 	return err
+}
+
+// limiters — ограничители частоты по правилам; memory — бакеты в памяти (их чистит фоновая задача).
+type limiters struct {
+	api, auth, user, webhook ratelimit.Limiter
+	memory                   []*ratelimit.Memory
+	rdb                      *redis.Client
+}
+
+func (l *limiters) close() {
+	if l.rdb != nil {
+		_ = l.rdb.Close()
+	}
+}
+
+// newLimiters — правила лимитов из настроек. REDIS_URL задан, но Redis недоступен при старте — сервер
+// запускается с лимитами в памяти (и пишет предупреждение), а не падает.
+func newLimiters(ctx context.Context, cfg config.Config, log *slog.Logger) *limiters {
+	out := &limiters{}
+	if cfg.RedisURL != "" {
+		rdb, err := ratelimit.Connect(ctx, cfg.RedisURL)
+		if err != nil {
+			log.Warn("лимиты: Redis недоступен — считаю в памяти процесса", "err", err)
+		} else {
+			out.rdb = rdb
+			log.Info("лимиты: Redis")
+		}
+	}
+	mk := func(prefix string, r ratelimit.Rate) ratelimit.Limiter {
+		mem := ratelimit.NewMemory(r)
+		out.memory = append(out.memory, mem)
+		if out.rdb == nil {
+			return mem
+		}
+		return &ratelimit.Fallback{Primary: ratelimit.NewRedis(out.rdb, "ohvat:rl:"+prefix, r), Secondary: mem, Log: log}
+	}
+	out.api = mk("api:", ratelimit.Rate{RPS: cfg.APIRPS, Burst: cfg.APIBurst})
+	out.auth = mk("auth:", ratelimit.Rate{RPS: cfg.RateRPS, Burst: cfg.RateBurst})
+	out.user = mk("user:", ratelimit.Rate{RPS: cfg.UserRPS, Burst: cfg.UserBurst})
+	out.webhook = mk("tg:", ratelimit.Rate{RPS: cfg.WebhookRPS, Burst: cfg.WebhookBurst})
+	return out
 }
 
 // newSender — способ отправки писем по MAIL_PROVIDER.

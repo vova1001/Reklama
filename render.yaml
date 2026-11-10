@@ -78,3 +78,19 @@ services:
         value: "1"
       - key: RATE_LIMIT_BURST
         value: "10"
+      # весь /api с адреса, /api/me* на пользователя, вебхук бота на всех (в секунду / запас)
+      - key: RATE_LIMIT_API_RPS
+        value: "10"
+      - key: RATE_LIMIT_API_BURST
+        value: "60"
+      - key: RATE_LIMIT_USER_RPS
+        value: "5"
+      - key: RATE_LIMIT_USER_BURST
+        value: "30"
+      - key: TELEGRAM_WEBHOOK_RPS
+        value: "50"
+      - key: TELEGRAM_WEBHOOK_BURST
+        value: "200"
+      # необязательно: Redis для общих лимитов нескольких серверов (redis:// или rediss://); пусто — в памяти
+      - key: REDIS_URL
+        sync: false

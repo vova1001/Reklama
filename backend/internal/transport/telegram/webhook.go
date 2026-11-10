@@ -10,7 +10,9 @@ import (
 	"errors"
 	"io"
 	"log/slog"
+	"math"
 	"net/http"
+	"strconv"
 	"sync"
 	"time"
 
@@ -20,6 +22,11 @@ import (
 // BotService — что транспорту нужно от бота.
 type BotService interface {
 	Handle(ctx context.Context, u service.BotUpdate) error
+}
+
+// Limiter — общий лимит частоты вебхука (internal/ratelimit). Ключ один: все обновления приходят от Telegram.
+type Limiter interface {
+	Allow(ctx context.Context, key string) (ok bool, retryAfter time.Duration, err error)
 }
 
 // SecretHeader — заголовок с секретом вебхука (secret_token из setWebhook).
@@ -33,7 +40,10 @@ type Options struct {
 	Timeout       time.Duration // на обработку одного обновления, 8 с
 	UserRPS       float64       // событий в секунду от одного человека (остальное игнорируется), 1
 	UserBurst     int           // запас подряд, 5
-	Log           *slog.Logger
+	// Limiter — лимит обновлений в секунду на весь вебхук (после проверки секрета); nil — без лимита.
+	// Сверх лимита — 429 с Retry-After: Telegram повторит доставку позже.
+	Limiter Limiter
+	Log     *slog.Logger
 }
 
 // Handler — приём обновлений.
@@ -88,6 +98,16 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.log.WarnContext(r.Context(), "бот: вебхук без верного секрета")
 		w.WriteHeader(http.StatusUnauthorized)
 		return
+	}
+	if h.opt.Limiter != nil {
+		ok, wait, err := h.opt.Limiter.Allow(r.Context(), "telegram")
+		if err != nil {
+			h.log.WarnContext(r.Context(), "бот: лимит вебхука не проверен", "err", err)
+		} else if !ok {
+			w.Header().Set("Retry-After", strconv.Itoa(int(math.Max(1, math.Ceil(wait.Seconds())))))
+			w.WriteHeader(http.StatusTooManyRequests)
+			return
+		}
 	}
 	select {
 	case h.sem <- struct{}{}:

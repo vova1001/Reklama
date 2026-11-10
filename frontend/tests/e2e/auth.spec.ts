@@ -25,16 +25,15 @@ test.beforeEach(async ({ context }) => {
   await context.route('https://telegram.org/**', (r) => r.abort()); // окно Telegram в тестах не открываем
 });
 
-async function requestCode(page: Page, email: string, role?: 'business' | 'creator') {
+async function requestCode(page: Page, email: string) {
   await page.goto('/login');
-  if (role) await page.getByRole('radio', { name: role === 'business' ? 'Я бизнес' : 'Я автор' }).click();
   await page.getByRole('button', { name: 'Войти по почте' }).click();
   await page.getByLabel('Почта').fill(email);
   await page.getByRole('button', { name: 'Получить код' }).click();
   await expect(page.getByRole('heading', { name: 'Введите код' })).toBeVisible();
 }
 
-test('страница входа: одна карточка, роль, способы входа, согласие строкой, без прокрутки вбок', async ({ page }) => {
+test('страница входа: одна карточка без выбора роли, способы входа, согласие строкой, без прокрутки вбок', async ({ page }) => {
   const errors = jsErrors(page);
   const res = await page.goto('/login');
   expect(res?.status()).toBe(200);
@@ -44,13 +43,9 @@ test('страница входа: одна карточка, роль, спос
   await expect(page.locator('.au-mark')).toHaveAttribute('href', '/');
   const card = await page.locator('.au-card').boundingBox();
   expect(card!.width).toBeLessThanOrEqual(420);
-  const roles = page.getByRole('radio');
-  await expect(roles).toHaveCount(2);
-  await expect(roles.first()).toHaveAttribute('aria-checked', 'true');
-  await roles.first().focus();
-  await page.keyboard.press('ArrowRight');
-  await expect(roles.nth(1)).toHaveAttribute('aria-checked', 'true');
-  await expect(roles.nth(1)).toBeFocused();
+  // роль не выбирается: один аккаунт — два режима
+  await expect(page.getByRole('radio')).toHaveCount(0);
+  await expect(page.locator('.au-sub')).toContainText('для бизнеса и для автора');
   // способы входа — пилюли одна под другой: Telegram, Google, почта
   const cfg = await (await page.request.get('/api/auth/config')).json();
   const ways = page.locator('.ways > .way');
@@ -90,10 +85,10 @@ test('ошибки формы почты: пустая, неверный адр�
   await expect(page.locator('h1')).toBeVisible();
 });
 
-test('вход по почте → анкета автора → кабинет → выход', async ({ page }, info) => {
+test('вход по почте → сразу приложение → выход', async ({ page }, info) => {
   const errors = jsErrors(page);
-  const email = uniq(info.project.name, 'creator');
-  await requestCode(page, email, 'creator');
+  const email = uniq(info.project.name, 'mail');
+  await requestCode(page, email);
   await expect(page.locator('[data-sent-to]')).toHaveText(email);
   await expect(page.locator('[data-resend-wait]')).toContainText('Отправить ещё раз можно через');
 
@@ -107,74 +102,35 @@ test('вход по почте → анкета автора → кабинет 
   await page.locator('[data-digit]').first().fill('12');
   await page.getByRole('button', { name: 'Войти' }).click();
   await expect(page.locator('[data-err="code"]')).toHaveText('Введите все 6 цифр из письма');
-  // верный — автопереход к анкете
+  // верный — автопереход сразу в приложение, без анкеты
   await page.locator('[data-digit]').first().fill(code);
-  await page.waitForURL('**/login?step=profile');
-  await expect(page.locator('h1')).toHaveText('Расскажите о себе');
-  await expect(page.locator('.role-b')).toHaveText('Автор');
+  await page.waitForURL('**/app');
+  await expect(page.locator('[data-app]')).toHaveAttribute('data-mode', 'business');
+  await expect(page.getByRole('heading', { level: 1, name: 'Ваши задания' })).toBeVisible();
 
-  // анкета: пустые поля
-  await page.getByRole('button', { name: 'Готово' }).click();
-  await expect(page.locator('[data-err="name"]')).not.toBeEmpty();
-  await expect(page.locator('[data-err="city"]')).toHaveText('Укажите город');
-  await expect(page.locator('[data-err="channels"]')).toContainText('хотя бы одну');
-  await page.getByLabel('Имя или псевдоним').fill('Алина');
-  await page.getByLabel('Город').fill('Москва');
-  // неверная ссылка — ошибка от сервера рядом с полем
-  await page.getByLabel('Канал 1').fill('javascript:alert(1)');
-  await page.getByRole('button', { name: 'Готово' }).click();
-  await expect(page.locator('[data-err="channels"]')).toContainText('https://');
-  await page.getByLabel('Канал 1').fill('youtube.com/@alina');
-  await page.getByRole('button', { name: 'Добавить ещё' }).click();
-  await page.getByLabel('Канал 2').fill('@alina_tg');
-  await page.getByRole('button', { name: 'Готово' }).click();
-
-  await page.waitForURL('**/account');
-  await expect(page.locator('h1')).toHaveText('Алина');
-  await expect(page.locator('.rows')).toContainText('youtube.com/@alina');
-  await expect(page.locator('.rows')).toContainText(email);
-  // шапка: вместо «Войти» — аватар
-  await expect(page.locator('[data-me]')).toHaveAttribute('href', '/account');
-  await expect(page.locator('.bar .login')).toHaveCount(0);
-  // /login для вошедшего с анкетой — сразу в кабинет
+  // /login и /account для вошедшего — в приложение
   await page.goto('/login');
-  await expect(page).toHaveURL(/\/account$/);
+  await expect(page).toHaveURL(/\/app$/);
+  await page.goto('/account');
+  await expect(page).toHaveURL(/\/app$/);
+  // на главной вместо «Войти» — аватар со ссылкой в приложение
+  await page.goto('/');
+  await expect(page.locator('[data-me]')).toHaveAttribute('href', '/app');
+  await expect(page.locator('.bar .login')).toHaveCount(0);
 
   // cookie сессии — httpOnly, SameSite=Lax
   const sess = (await page.context().cookies()).find((c) => c.name === 'ohvat_session');
   expect(sess?.httpOnly).toBe(true);
   expect(sess?.sameSite).toBe('Lax');
 
-  await page.getByRole('button', { name: 'Выйти' }).click();
+  await page.goto('/app');
+  await page.getByRole('button', { name: 'Меню профиля' }).click();
+  await page.getByRole('menuitem', { name: 'Выйти' }).click();
   await page.waitForURL((u) => u.pathname === '/');
   await expect(page.locator('.bar .login')).toHaveCount(1);
-  await page.goto('/account');
+  await page.goto('/app');
   await expect(page).toHaveURL(/\/login$/);
   expect(errors).toEqual([]);
-});
-
-test('бизнес: роль выбирается в анкете, сферы — пилюли до 5', async ({ page }, info) => {
-  const email = uniq(info.project.name, 'biz');
-  await page.goto('/login');
-  // роль по умолчанию «бизнес» — сохраняется при регистрации
-  await page.getByRole('button', { name: 'Войти по почте' }).click();
-  await page.getByLabel('Почта').fill(email);
-  await page.getByRole('button', { name: 'Получить код' }).click();
-  await expect(page.getByRole('heading', { name: 'Введите код' })).toBeVisible();
-  await page.locator('[data-digit]').first().fill(codeFor(email));
-  await page.waitForURL('**/login?step=profile');
-  await expect(page.locator('.role-b')).toHaveText('Бизнес');
-  await page.getByLabel('Название компании или бренда').fill('Кофейня «Зерно»');
-  await page.getByLabel('Город').fill('Казань');
-  await page.getByRole('button', { name: 'Готово' }).click();
-  await expect(page.locator('[data-err="spheres"]')).toContainText('хотя бы одну');
-  const chips = page.locator('[data-slug]');
-  for (let i = 0; i < 6; i++) await chips.nth(i).click();
-  await expect(page.locator('[data-err="spheres"]')).toHaveText('Можно выбрать до 5 сфер');
-  await expect(page.locator('[data-slug][aria-pressed="true"]')).toHaveCount(5);
-  await page.getByRole('button', { name: 'Готово' }).click();
-  await page.waitForURL('**/account');
-  await expect(page.locator('.rows .chip')).toHaveCount(5);
 });
 
 test('повторная отправка кода: таймер 60 с, лимит 429 с обратным отсчётом', async ({ page }, info) => {
@@ -204,7 +160,7 @@ test('без CSRF-токена изменяющий запрос отклоня�
 test('Google: переход с state и PKCE; возврат с чужим state или отменой — понятная ошибка', async ({ page, request }) => {
   const cfg = await (await request.get('/api/auth/config')).json();
   test.skip(!cfg.google, 'ключи Google не заданы');
-  const r = await request.get('/api/auth/google/start?consent=1&role=creator', { maxRedirects: 0 });
+  const r = await request.get('/api/auth/google/start?consent=1', { maxRedirects: 0 });
   expect(r.status()).toBe(302);
   const loc = new URL(r.headers()['location']);
   expect(loc.host).toBe('accounts.google.com');

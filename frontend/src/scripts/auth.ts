@@ -1,119 +1,19 @@
-// Вход (Telegram-бот, Google, почта с кодом), анкета и выход. Без библиотек; все запросы — с CSRF-токеном, ошибки — понятным языком рядом с полем.
+// Вход (Telegram-бот, Google, почта с кодом). Все запросы — с CSRF-токеном, ошибки — понятным языком рядом с полем.
+// После входа — сразу приложение (/app); роль не выбирается: один аккаунт — два режима, переключаются внутри.
 import type { components } from '../lib/api.gen';
+import { $, $$, api, busy, clearErrs, countdown, mmss, setErr, showFields, type ApiError } from '../lib/client';
 
-type ApiError = components['schemas']['Error']['error'];
 type LoginResult = components['schemas']['LoginResult'];
 type CodeSent = components['schemas']['CodeSent'];
 type BotLink = components['schemas']['BotLink'];
 type BotStatus = components['schemas']['BotStatus'];
-type Res<T> = { ok: true; status: number; data: T } | { ok: false; status: number; error: ApiError };
 
-const NET_ERROR: ApiError = { code: 'network', message: 'Нет связи с сервером. Проверьте интернет и попробуйте ещё раз.' };
-
-// ===== API =====
-let csrf = '';
-async function csrfToken(force = false): Promise<string> {
-  if (csrf && !force) return csrf;
-  const res = await fetch('/api/auth/config', { credentials: 'same-origin', signal: AbortSignal.timeout(10_000) });
-  if (!res.ok) throw new Error(String(res.status));
-  csrf = ((await res.json()) as { csrfToken: string }).csrfToken;
-  return csrf;
-}
-
-async function api<T>(method: 'POST' | 'PUT', path: string, body?: unknown, retried = false, timeout = 15_000): Promise<Res<T>> {
-  try {
-    const res = await fetch(path, {
-      method,
-      credentials: 'same-origin',
-      headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': await csrfToken() },
-      body: body === undefined ? undefined : JSON.stringify(body),
-      signal: AbortSignal.timeout(timeout),
-    });
-    if (res.status === 204) return { ok: true, status: 204, data: undefined as T };
-    const json = await res.json().catch(() => null);
-    if (res.ok) return { ok: true, status: res.status, data: json as T };
-    const error: ApiError = json?.error ?? { code: 'internal', message: 'Что-то пошло не так. Попробуйте позже.' };
-    const ra = Number(res.headers.get('Retry-After'));
-    if (ra > 0 && !error.retryAfter) error.retryAfter = ra;
-    // токен устарел (например, cookie очистили) — один раз берём новый и повторяем
-    if (res.status === 403 && error.code === 'csrf' && !retried) {
-      await csrfToken(true);
-      return api<T>(method, path, body, true, timeout);
-    }
-    return { ok: false, status: res.status, error };
-  } catch {
-    return { ok: false, status: 0, error: NET_ERROR };
-  }
-}
-
-// ===== помощники интерфейса =====
-const $ = <T extends Element = HTMLElement>(sel: string, root: ParentNode = document) => root.querySelector<T>(sel);
-const $$ = <T extends Element = HTMLElement>(sel: string, root: ParentNode = document) => [...root.querySelectorAll<T>(sel)];
-
-function setErr(root: ParentNode, field: string, msg: string) {
-  const el = $(`[data-err="${field}"]`, root);
-  if (el) el.textContent = msg;
-  const input = field === 'email' ? $('#email', root) : field === 'name' ? $('#name', root) : field === 'city' ? $('#city', root) : null;
-  input?.setAttribute('aria-invalid', msg ? 'true' : 'false');
-}
-function clearErrs(root: ParentNode) {
-  $$('[data-err]', root).forEach((e) => (e.textContent = ''));
-  $$('[aria-invalid]', root).forEach((e) => e.setAttribute('aria-invalid', 'false'));
-}
-function showFields(root: ParentNode, e: ApiError) {
-  for (const [k, v] of Object.entries(e.fields ?? {})) setErr(root, k, v);
-  if (!e.fields || !Object.keys(e.fields).length) setErr(root, 'form', e.message);
-}
-function busy(btn: HTMLButtonElement | null, on: boolean) {
-  if (!btn) return;
-  btn.disabled = on;
-  btn.classList.toggle('is-busy', on);
-  btn.setAttribute('aria-busy', String(on));
-}
-const mmss = (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
-
-/** Обратный отсчёт: tick(осталось) каждую секунду, done() в конце. Возвращает отмену. */
-function countdown(sec: number, tick: (left: number) => void, done: () => void): () => void {
-  const end = Date.now() + sec * 1000;
-  let t = 0;
-  const step = () => {
-    const left = Math.max(0, Math.ceil((end - Date.now()) / 1000));
-    if (left <= 0) return done();
-    tick(left);
-    t = window.setTimeout(step, 250);
-  };
-  step();
-  return () => clearTimeout(t);
-}
-
-// Переключатель-радиогруппа: щелчок, стрелки, Home/End; onChange(значение)
-function radioGroup(group: HTMLElement, onChange?: (v: string) => void) {
-  const items = $$<HTMLButtonElement>('[role="radio"]', group);
-  const pick = (b: HTMLButtonElement, focus = false) => {
-    items.forEach((i) => {
-      i.setAttribute('aria-checked', String(i === b));
-      i.tabIndex = i === b ? 0 : -1;
-    });
-    if (focus) b.focus();
-    onChange?.(b.dataset.role!);
-  };
-  items.forEach((b, i) => {
-    b.addEventListener('click', () => pick(b));
-    b.addEventListener('keydown', (e) => {
-      const n = items.length;
-      const to = { ArrowRight: i + 1, ArrowDown: i + 1, ArrowLeft: i - 1, ArrowUp: i - 1, Home: 0, End: n - 1 }[e.key];
-      if (to === undefined) return;
-      e.preventDefault();
-      pick(items[(to + n) % n], true);
-    });
-  });
-  return () => items.find((i) => i.getAttribute('aria-checked') === 'true')?.dataset.role ?? '';
-}
+const APP = '/app';
 
 // ===== вход: способы, почта, код, Telegram =====
 // Согласие — одна строка под кнопками («Продолжая, вы принимаете…»): нажатие способа входа и есть согласие.
 function initLogin(root: HTMLElement) {
-  const panes = $$('[data-pane]', root).filter((p) => p.dataset.pane !== 'profile');
+  const panes = $$('[data-pane]', root);
   const start = $('[data-pane="start"]', root);
   if (!start) return;
   const pane = (name: string) => $(`[data-pane="${name}"]`, root)!;
@@ -121,18 +21,12 @@ function initLogin(root: HTMLElement) {
     panes.forEach((p) => (p.hidden = p.dataset.pane !== name));
     (focus ?? $<HTMLElement>('.pane-t', pane(name)))?.focus();
   };
-  const role = (() => {
-    const g = $('[data-roles]', start);
-    return g ? radioGroup(g) : () => '';
-  })();
   const consent = true;
 
-  // Google: обычный переход, роль — в адрес
+  // Google: обычный переход
   $<HTMLAnchorElement>('[data-google]', start)?.addEventListener('click', (e) => {
     e.preventDefault();
-    const q = new URLSearchParams({ consent: '1' });
-    if (role()) q.set('role', role());
-    location.assign(`/api/auth/google/start?${q}`);
+    location.assign(`/api/auth/google/start?${new URLSearchParams({ consent: '1' })}`);
   });
 
   // ----- Telegram -----
@@ -161,7 +55,7 @@ function initLogin(root: HTMLElement) {
         busy(btn, false);
         return;
       }
-      const r = await api<LoginResult>('POST', '/api/auth/telegram', { user, role: role(), consent });
+      const r = await api<LoginResult>('POST', '/api/auth/telegram', { user, consent });
       if (r.ok) return location.assign(r.data.next);
       busy(btn, false);
       setErr(errRoot, errRoot === start ? 'form' : 'tg', r.error.message);
@@ -199,9 +93,9 @@ function initLogin(root: HTMLElement) {
       if (r.ok) {
         pause = 0;
         if (r.data.status === 'ok') {
-          tgWaitText!.textContent = 'Вход подтверждён, открываем кабинет…';
+          tgWaitText!.textContent = 'Вход подтверждён, открываем приложение…';
           tgStop();
-          return location.assign(r.data.next ?? '/account');
+          return location.assign(r.data.next ?? APP);
         }
         continue;
       }
@@ -218,7 +112,7 @@ function initLogin(root: HTMLElement) {
     const fine = matchMedia('(pointer: fine)').matches;
     const pop = fine ? window.open('about:blank', '_blank') : null;
     busy(btn, true);
-    const r = await api<BotLink>('POST', '/api/auth/telegram/bot/start', { role: role(), consent });
+    const r = await api<BotLink>('POST', '/api/auth/telegram/bot/start', { consent });
     busy(btn, false);
     if (!r.ok) {
       pop?.close();
@@ -309,7 +203,7 @@ function initLogin(root: HTMLElement) {
 
   async function send(addr: string, btn: HTMLButtonElement | null): Promise<CodeSent | null> {
     busy(btn, true);
-    const r = await api<CodeSent>('POST', '/api/auth/email/start', { email: addr, role: role(), consent });
+    const r = await api<CodeSent>('POST', '/api/auth/email/start', { email: addr, consent });
     busy(btn, false);
     if (r.ok) return r.data;
     return Promise.reject(r.error);
@@ -477,112 +371,9 @@ function initLogin(root: HTMLElement) {
   });
 }
 
-// ===== анкета =====
-function initProfile(root: HTMLElement) {
-  const form = $<HTMLFormElement>('[data-profile-form]', root);
-  if (!form) return;
-  let role = form.dataset.role ?? '';
-  const nameLabel = $('[data-name-label]', form)!;
-  const show = (r: string) => {
-    role = r;
-    $$('[data-for]', form).forEach((el) => (el.hidden = el.dataset.for !== r));
-    nameLabel.textContent = r === 'creator' ? 'Имя или псевдоним' : 'Название компании или бренда';
-    setErr(form, 'role', '');
-  };
-  const g = $('[data-roles]', form);
-  if (g) radioGroup(g, show);
-
-  // сферы — пилюли-переключатели, до 5
-  const chips = $$<HTMLButtonElement>('[data-slug]', form);
-  chips.forEach((c) =>
-    c.addEventListener('click', () => {
-      const on = c.getAttribute('aria-pressed') === 'true';
-      if (!on && chips.filter((x) => x.getAttribute('aria-pressed') === 'true').length >= 5) {
-        setErr(form, 'spheres', 'Можно выбрать до 5 сфер');
-        return;
-      }
-      setErr(form, 'spheres', '');
-      c.setAttribute('aria-pressed', String(!on));
-    }),
-  );
-
-  // каналы — до 5 полей
-  const list = $('[data-channels]', form)!;
-  const add = $<HTMLButtonElement>('[data-add-channel]', form)!;
-  const rows = () => $$('.chan', list);
-  const syncAdd = () => (add.hidden = rows().length >= 5);
-  add.addEventListener('click', () => {
-    const tpl = rows()[0];
-    const row = tpl.cloneNode(true) as HTMLElement;
-    const input = $<HTMLInputElement>('input', row)!;
-    input.value = '';
-    input.setAttribute('aria-label', `Канал ${rows().length + 1}`);
-    const rm = document.createElement('button');
-    rm.type = 'button';
-    rm.className = 'rm';
-    rm.setAttribute('aria-label', 'Убрать канал');
-    rm.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>';
-    rm.addEventListener('click', () => {
-      row.remove();
-      syncAdd();
-      add.focus();
-    });
-    row.append(rm);
-    list.append(row);
-    syncAdd();
-    input.focus();
-  });
-
-  const btn = $<HTMLButtonElement>('[data-submit]', form);
-  form.addEventListener('submit', async (e) => {
-    e.preventDefault();
-    clearErrs(form);
-    const name = $<HTMLInputElement>('#name', form)!.value.trim();
-    const city = $<HTMLInputElement>('#city', form)!.value.trim();
-    const spheres = chips.filter((c) => c.getAttribute('aria-pressed') === 'true').map((c) => c.dataset.slug!);
-    const channels = $$<HTMLInputElement>('.chan input', list).map((i) => i.value.trim()).filter(Boolean);
-    let bad = false;
-    const need = (cond: boolean, f: string, msg: string) => {
-      if (cond) {
-        setErr(form, f, msg);
-        bad = true;
-      }
-    };
-    need(!role, 'role', 'Выберите: бизнес или автор');
-    need(name.length < 2, 'name', role === 'creator' ? 'Как вас называть — от 2 символов' : 'Название — от 2 символов');
-    need(city.length < 2, 'city', 'Укажите город');
-    need(role === 'business' && spheres.length === 0, 'spheres', 'Выберите хотя бы одну сферу');
-    need(role === 'creator' && channels.length === 0, 'channels', 'Добавьте хотя бы одну ссылку на канал');
-    if (bad) {
-      ($('[aria-invalid="true"]', form) ?? $('[role="radio"]', form))?.focus();
-      return;
-    }
-    busy(btn, true);
-    const r = await api<LoginResult>('PUT', '/api/me/profile', { role, name, city, spheres, channels });
-    if (r.ok) return location.assign(r.data.next);
-    busy(btn, false);
-    if (r.status === 401) return location.assign('/login');
-    showFields(form, r.error);
-  });
-}
-
-// ===== выход =====
-function initLogout() {
-  const btn = $<HTMLButtonElement>('[data-logout]');
-  btn?.addEventListener('click', async () => {
-    busy(btn, true);
-    const r = await api<void>('POST', '/api/auth/logout');
-    if (r.ok) return location.assign('/');
-    busy(btn, false);
-    setErr(document, 'form', r.error.message);
-  });
-}
-
 const root = $('[data-auth]');
 if (root) {
   initLogin(root);
-  initProfile(root);
-  initLogout();
   // сообщение об ошибке из адреса (?error=…) убираем из адресной строки, чтобы не всплывало при обновлении
   if (new URLSearchParams(location.search).has('error')) history.replaceState(null, '', location.pathname);
 }

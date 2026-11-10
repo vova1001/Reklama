@@ -51,28 +51,14 @@ for (const [w, h, mobile] of [[375, 812, true], [768, 1024, false], [1440, 900, 
   await shot(page, `code-error-${w}`);
 
   await page.locator('[data-digit]').first().fill(code);
-  await page.waitForURL('**/login?step=profile');
+  // после входа — сразу приложение: лента, профиль, настройки
+  await page.waitForURL('**/app');
   await page.evaluate(() => document.fonts.ready);
-  await shot(page, `profile-${w === 768 ? 'choose' : 'creator'}-${w}`);
-
-  if (w === 768) {
-    // роль не выбрана при входе → выбирается в анкете (бизнес: сферы)
-    await page.click('[data-role="business"]');
-    await page.fill('#name', 'Кофейня «Зерно»');
-    await page.fill('#city', 'Казань');
-    for (const s of ['food', 'beauty']) await page.click(`[data-slug="${s}"]`);
-    await shot(page, `profile-business-${w}`);
-  } else {
-    await page.fill('#name', 'Алина Смирнова');
-    await page.fill('#city', 'Москва');
-    await page.fill('.chan input', 'youtube.com/@alina');
-    await page.click('[data-add-channel]');
-    await page.locator('.chan input').nth(1).fill('@alina_tg');
-  }
-  await page.click('[data-profile-form] [data-submit]');
-  await page.waitForURL('**/account');
-  await page.evaluate(() => document.fonts.ready);
-  await shot(page, `account-${w}`);
+  await shot(page, `app-feed-${w}`);
+  await page.goto(base + '/app/profile', { waitUntil: 'networkidle' });
+  await shot(page, `app-profile-${w}`);
+  await page.goto(base + '/app/settings', { waitUntil: 'networkidle' });
+  await shot(page, `app-settings-${w}`);
   await page.goto(base + '/', { waitUntil: 'networkidle' });
   await page.screenshot({ path: `${out}auth-header-${w}.png` });
   await ctx.close();

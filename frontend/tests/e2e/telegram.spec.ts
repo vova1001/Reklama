@@ -54,12 +54,11 @@ test.beforeEach(async ({ context, request }) => {
   await context.route('https://telegram.org/**', (r) => r.abort());
 });
 
-test('вход через бота: /start → «Подтвердить вход» → анкета → кабинет', async ({ page, request }) => {
+test('вход через бота: /start → «Подтвердить вход» → сразу приложение', async ({ page, request }) => {
   const errors: string[] = [];
   page.on('pageerror', (e) => errors.push(e.message));
   const tg = 7_000_000 + Math.floor(Math.random() * 1e6);
   await page.goto('/login');
-  await page.getByRole('radio', { name: 'Я автор' }).click();
   const token = await startBotLogin(page);
   // пока не подтверждено — страница ждёт
   await page.waitForTimeout(500);
@@ -72,33 +71,31 @@ test('вход через бота: /start → «Подтвердить вход
   expect(kb[0][0]).toMatchObject({ text: 'Подтвердить вход', callback_data: `ok:${token}` });
   expect(kb[1][0]).toMatchObject({ text: 'Это не я', callback_data: `no:${token}` });
 
-  // нажал «Подтвердить вход» → сайт сам открывает анкету
+  // нажал «Подтвердить вход» → сайт сам открывает приложение
   expect((await hook(request, tap(tg, `ok:${token}`))).status()).toBe(200);
-  await page.waitForURL('**/login?step=profile', { timeout: 15_000 });
-  await expect(page.locator('.role-b')).toHaveText('Автор');
-  await expect(page.getByLabel('Имя или псевдоним')).toHaveValue('Тест Телеграмов');
+  await page.waitForURL('**/app', { timeout: 15_000 });
+  await expect(page.locator('[data-app]')).toBeVisible();
   await waitCall(request, tg, (c) => c.method === 'editMessageText' && String(c.params.text).includes('Вход подтверждён'));
-  await page.getByLabel('Город').fill('Самара');
-  await page.getByLabel('Канал 1').fill('@test_tg');
-  await page.getByRole('button', { name: 'Готово' }).click();
-  await page.waitForURL('**/account');
-  await expect(page.locator('.rows')).toContainText('Telegram');
+  // Telegram привязан — шаг «Уведомления в Telegram» выполнен
+  await expect(page.locator('[data-step="telegram"]')).toHaveAttribute('data-done', 'true');
+  await page.goto('/app/settings');
+  await expect(page.locator('[data-provider="telegram"]')).toContainText('Подключён');
 
   // ссылка одноразовая: повторное нажатие — «устарела»
   await hook(request, tap(tg, `ok:${token}`));
   await waitCall(request, tg, (c) => c.method === 'editMessageText' && String(c.params.text).includes('устарела'));
-  // /profile в боте — кто я
+  // /profile в боте — кто я и какой режим
   await hook(request, say(tg, '/profile'));
-  await waitCall(request, tg, (c) => c.method === 'sendMessage' && String(c.params.text).includes('Роль: автор'));
+  await waitCall(request, tg, (c) => c.method === 'sendMessage' && String(c.params.text).includes('Режим: бизнес'));
 
-  // второй вход тем же Telegram — тот же аккаунт, сразу кабинет
+  // второй вход тем же Telegram — тот же аккаунт, сразу приложение
   await page.context().clearCookies();
   await page.goto('/login');
   const t2 = await startBotLogin(page);
   await hook(request, say(tg, `/start login_${t2}`));
   await hook(request, tap(tg, `ok:${t2}`));
-  await page.waitForURL('**/account', { timeout: 15_000 });
-  await expect(page.locator('h1')).toHaveText('Тест Телеграмов');
+  await page.waitForURL('**/app', { timeout: 15_000 });
+  await expect(page.locator('.hello')).toContainText('Тест');
   expect(errors).toEqual([]);
 });
 

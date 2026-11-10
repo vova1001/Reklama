@@ -15,12 +15,12 @@ func TestAuthUsersAndIdentities(t *testing.T) {
 	ctx := context.Background()
 	r := repository.NewAuth(testPool(t))
 
-	u, err := r.CreateUserWithIdentity(ctx, domain.NewUser{Role: "business", Name: "Анна", Email: "anna@mail.ru"},
+	u, err := r.CreateUserWithIdentity(ctx, domain.NewUser{Name: "Анна", Email: "anna@mail.ru"},
 		domain.Identity{Provider: "email", Subject: "anna@mail.ru", Email: "anna@mail.ru"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if u.ID == 0 || u.Role != "business" || u.Email != "anna@mail.ru" || u.Onboarded() || u.Spheres == nil {
+	if u.ID == 0 || u.ActiveMode != "business" || u.Email != "anna@mail.ru" || u.Onboarded() {
 		t.Fatalf("%+v", u)
 	}
 	// поиск
@@ -53,7 +53,7 @@ func TestAuthUsersAndIdentities(t *testing.T) {
 
 	// Telegram без почты → привязка Google с почтой: почта появляется у пользователя
 	tg, err := r.CreateUserWithIdentity(ctx, domain.NewUser{Name: "Иван"}, domain.Identity{Provider: "telegram", Subject: "42"})
-	if err != nil || tg.Email != "" || tg.Role != "" {
+	if err != nil || tg.Email != "" {
 		t.Fatalf("%v %+v", err, tg)
 	}
 	if err := r.LinkIdentity(ctx, tg.ID, domain.Identity{Provider: "google", Subject: "g2", Email: "ivan@gmail.com"}); err != nil {
@@ -70,30 +70,9 @@ func TestAuthUsersAndIdentities(t *testing.T) {
 		t.Errorf("способы: %v %v", p, err)
 	}
 
-	// роль записывается, только если пустая
-	if err := r.TouchLogin(ctx, tg.ID, domain.Identity{Provider: "telegram", Subject: "42"}, "creator"); err != nil {
+	// отметка входа
+	if err := r.TouchLogin(ctx, tg.ID, domain.Identity{Provider: "telegram", Subject: "42"}); err != nil {
 		t.Fatal(err)
-	}
-	if err := r.TouchLogin(ctx, tg.ID, domain.Identity{Provider: "telegram", Subject: "42"}, "business"); err != nil {
-		t.Fatal(err)
-	}
-	if got, _ := r.UserByID(ctx, tg.ID); got.Role != "creator" {
-		t.Errorf("роль: %q", got.Role)
-	}
-
-	// анкета
-	n, err := r.CountCategories(ctx, []string{"food", "beauty", "nope"})
-	if err != nil || n != 2 {
-		t.Errorf("темы: %d %v", n, err)
-	}
-	pr, err := r.UpdateProfile(ctx, u.ID, domain.Profile{Role: "business", Name: "Кофейня", City: "Казань", Spheres: []string{"food"}})
-	if err != nil || !pr.Onboarded() || pr.City != "Казань" || pr.Spheres[0] != "food" || len(pr.Channels) != 0 {
-		t.Fatalf("%v %+v", err, pr)
-	}
-	first := *pr.OnboardedAt
-	pr, _ = r.UpdateProfile(ctx, u.ID, domain.Profile{Role: "business", Name: "Кофейня 2", City: "Казань", Spheres: []string{"food"}})
-	if !pr.OnboardedAt.Equal(first) {
-		t.Error("дата заполнения анкеты не меняется при правке")
 	}
 }
 
@@ -103,7 +82,7 @@ func TestAuthCodes(t *testing.T) {
 	now := time.Now().UTC().Truncate(time.Microsecond)
 	mk := func(email, ip string, at time.Time, hash string) {
 		t.Helper()
-		if err := r.CreateCode(ctx, domain.NewLoginCode{Email: email, CodeHash: []byte(hash), Role: "creator", IP: ip, CreatedAt: at, ExpiresAt: at.Add(10 * time.Minute)}); err != nil {
+		if err := r.CreateCode(ctx, domain.NewLoginCode{Email: email, CodeHash: []byte(hash), IP: ip, CreatedAt: at, ExpiresAt: at.Add(10 * time.Minute)}); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -126,7 +105,7 @@ func TestAuthCodes(t *testing.T) {
 
 	// активный — только последний (прежний погашен новым)
 	c, err := r.ActiveCode(ctx, "a@mail.ru", now)
-	if err != nil || string(c.CodeHash) != "h2" || c.Role != "creator" {
+	if err != nil || string(c.CodeHash) != "h2" {
 		t.Fatalf("%v %+v", err, c)
 	}
 	if _, err := r.ActiveCode(ctx, "a@mail.ru", now.Add(10*time.Minute)); !errors.Is(err, domain.ErrNotFound) {

@@ -55,6 +55,13 @@ services:
       AUTH_SESSION_DAYS: ${AUTH_SESSION_DAYS:-}
       RATE_LIMIT_RPS: ${RATE_LIMIT_RPS:-}
       RATE_LIMIT_BURST: ${RATE_LIMIT_BURST:-}
+      RATE_LIMIT_API_RPS: ${RATE_LIMIT_API_RPS:-}
+      RATE_LIMIT_API_BURST: ${RATE_LIMIT_API_BURST:-}
+      RATE_LIMIT_USER_RPS: ${RATE_LIMIT_USER_RPS:-}
+      RATE_LIMIT_USER_BURST: ${RATE_LIMIT_USER_BURST:-}
+      TELEGRAM_WEBHOOK_RPS: ${TELEGRAM_WEBHOOK_RPS:-}
+      TELEGRAM_WEBHOOK_BURST: ${TELEGRAM_WEBHOOK_BURST:-}
+      REDIS_URL: ${REDIS_URL:-}
       MAIL_WORKERS: ${MAIL_WORKERS:-}
     depends_on:
       db:
@@ -100,21 +107,33 @@ services:
       timeout: 3s
       retries: 30
 
+  redis-test:
+    profiles: [test]
+    image: ${REGISTRY:-docker.io/library}/redis:7-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
   backend-test:
     profiles: [test]
     build:
       context: ./backend
-      target: build
+      target: test
       args:
         REGISTRY: ${REGISTRY:-docker.io/library}
     environment:
       TEST_DATABASE_URL: postgres://test:test@db-test:5432/test?sslmode=disable
+      TEST_REDIS_URL: redis://redis-test:6379/0
     command: >
       sh -c "go vet ./... &&
-             go test -count=1 -p 1 -race -coverpkg=./internal/service,./internal/repository,./internal/transport/...,./internal/gateway/telegram -coverprofile=/tmp/c.out ./... &&
+             go test -count=1 -p 1 -race -coverpkg=./internal/service,./internal/repository,./internal/transport/...,./internal/gateway/telegram,./internal/ratelimit -coverprofile=/tmp/c.out ./... &&
              go tool cover -func=/tmp/c.out | tail -1"
     depends_on:
       db-test:
+        condition: service_healthy
+      redis-test:
         condition: service_healthy
 
 volumes:

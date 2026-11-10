@@ -1,0 +1,70 @@
+---
+// Правая колонка: прогресс профиля, подсказка, быстрые действия, тариф, «как это работает».
+// Части, зависящие от режима, — для обоих режимов (data-for-mode), видна та, что включена.
+import Icon from '../Icon.astro';
+import { ACTIONS, HOW, MODES, STEP_TITLE, TIPS } from '../../content/app';
+import type { Me } from '../../lib/auth';
+interface Props { me: Me; actions?: boolean }
+const { me, actions = true } = Astro.props;
+const mode = me.user.mode;
+---
+<section class="card side-card" aria-labelledby="prog-t" data-progress>
+  <div class="prog-head">
+    <h2 id="prog-t" class="side-t">Профиль</h2>
+    <span class="prog-num" data-progress-num>{me.completion}%</span>
+  </div>
+  <div class="prog-bar" role="progressbar" aria-label="Профиль заполнен" aria-valuemin="0" aria-valuemax="100" aria-valuenow={me.completion} data-progress-bar>
+    <span style={`width:${me.completion}%`}></span>
+  </div>
+  <ul class="chk">
+    {me.checklist.map((st) => {
+      const s = STEP_TITLE[st.key]?.(mode) ?? { title: st.key, href: '/app/profile' };
+      return (
+        <li data-step={st.key} data-done={st.done ? 'true' : 'false'}>
+          <a href={s.href}>
+            <span class="st-ic" aria-hidden="true"><Icon name="check" size={16} /></span>
+            <span class="st-t" data-step-title>{s.title}</span>
+            <span class="sr-only" data-step-state>{st.done ? 'готово' : 'не заполнено'}</span>
+            <Icon name="chevron-right" size={18} class="st-go" />
+          </a>
+        </li>
+      );
+    })}
+  </ul>
+</section>
+
+{actions && (
+  <section class="card side-card" aria-labelledby="act-t">
+    <h2 id="act-t" class="side-t">Быстрые действия</h2>
+    {MODES.map((m) => (
+      <ul class="acts" data-for-mode={m.id}>
+        {ACTIONS[m.id].map((a) => (
+          <li><a class="act" href={a.href}><span class="act-ic"><Icon name={a.icon} size={20} /></span>{a.title}<Icon name="chevron-right" size={18} class="st-go" /></a></li>
+        ))}
+      </ul>
+    ))}
+  </section>
+)}
+
+<section class="card side-card tip" aria-labelledby="tip-t">
+  <h2 id="tip-t" class="side-t"><Icon name="lightbulb" size={20} />Подсказка</h2>
+  {MODES.map((m) => <p data-for-mode={m.id}>{TIPS[m.id]}</p>)}
+</section>
+
+<section class="card side-card side-plan" aria-labelledby="plan-t">
+  <div class="plan-row">
+    <h2 id="plan-t" class="side-t">Тариф</h2>
+    <span class="pill-badge">Бесплатный</span>
+  </div>
+  <p class="muted">Все возможности старта без оплаты. Больше заданий и место выше в ленте — на тарифах Про и Топ.</p>
+  <a class="lnk-arrow" href="/pricing">Сравнить тарифы<Icon name="arrow-right" size={18} /></a>
+</section>
+
+<section class="card side-card" aria-labelledby="how-t">
+  <h2 id="how-t" class="side-t"><Icon name="circle-help" size={20} />Как это работает</h2>
+  {MODES.map((m) => (
+    <ol class="how" data-for-mode={m.id}>
+      {HOW[m.id].map((t, i) => <li><span class="how-n">{i + 1}</span>{t}</li>)}
+    </ol>
+  ))}
+</section>

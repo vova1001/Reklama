@@ -60,7 +60,7 @@ func (t botTexts) welcome(chat int64, p domain.TelegramProfile, reEnabled bool) 
 
 func (t botTexts) help(chat int64) BotMessage {
 	return BotMessage{ChatID: chat, Text: "<b>Как войти на сайт</b>\nНа странице входа нажмите «Войти через Telegram» — откроется этот бот. " +
-		"Нажмите «Подтвердить вход», и сайт откроет кабинет сам.\n\n<b>Команды</b>\n/start — начало и включить уведомления\n" +
+		"Нажмите «Подтвердить вход», и сайт откроется сам.\n\n<b>Команды</b>\n/start — начало и включить уведомления\n" +
 		"/profile — мой аккаунт\n/stop — выключить уведомления\n/help — эта справка", Buttons: rows(t.link("Войти на сайт", "/login"))}
 }
 
@@ -80,7 +80,7 @@ func (t botTexts) loginConfirm(chat int64, token string, until time.Time) BotMes
 }
 
 func (t botTexts) loginConfirmed(chat, msg int64) BotMessage {
-	return BotMessage{ChatID: chat, EditMessageID: msg, Text: "<b>Вход подтверждён</b>\n\nВернитесь на сайт — кабинет откроется сам."}
+	return BotMessage{ChatID: chat, EditMessageID: msg, Text: "<b>Вход подтверждён</b>\n\nВернитесь на сайт — приложение откроется само."}
 }
 
 func (t botTexts) loginCancelled(chat, msg int64) BotMessage {
@@ -103,19 +103,19 @@ func (t botTexts) noProfile(chat int64) BotMessage {
 		Buttons: rows(t.link("Войти на сайт", "/login"))}
 }
 
-var roleTitle = map[string]string{domain.RoleBusiness: "бизнес", domain.RoleCreator: "автор"}
+var modeTitle = map[string]string{domain.ModeBusiness: "бизнес", domain.ModeCreator: "автор"}
 
 func (t botTexts) profile(chat int64, u domain.User, notify bool) BotMessage {
 	name := strings.TrimSpace(u.Name)
 	if name == "" {
 		name = "Без имени"
 	}
-	role := roleTitle[u.Role]
-	if role == "" {
-		role = "не выбрана — заполните анкету на сайте"
+	mode := modeTitle[u.ActiveMode]
+	if mode == "" {
+		mode = modeTitle[domain.ModeBusiness]
 	}
 	var b strings.Builder
-	b.WriteString("<b>" + html.EscapeString(name) + "</b>\nРоль: " + role)
+	b.WriteString("<b>" + html.EscapeString(name) + "</b>\nРежим: " + mode)
 	if u.City != "" {
 		b.WriteString("\nГород: " + html.EscapeString(u.City))
 	}
@@ -127,7 +127,7 @@ func (t botTexts) profile(chat int64, u domain.User, notify bool) BotMessage {
 	} else {
 		b.WriteString("\nУведомления: выключены (включить — /start)")
 	}
-	return BotMessage{ChatID: chat, Text: b.String(), Buttons: rows(t.link("Открыть кабинет", "/account"))}
+	return BotMessage{ChatID: chat, Text: b.String(), Buttons: rows(t.link("Открыть приложение", "/app"))}
 }
 
 // ===== уведомления =====
@@ -157,26 +157,26 @@ func (t botTexts) notification(chat, userID int64, n Notification) (BotMessage, 
 		b.WriteString("Время: " + when + "\n\nЕсли это были не вы — завершите все сеансы.")
 		return BotMessage{ChatID: chat, Text: b.String(), Buttons: rows(
 			[]BotButton{{Text: "Это не я — выйти везде", Data: cbLogoutAll + strconv.FormatInt(userID, 10)}},
-			t.link("Открыть кабинет", "/account"))}, true
+			t.link("Открыть приложение", "/app"))}, true
 	case NotifyNewTask:
 		head := "<b>Новое задание</b>"
 		if n.Topic != "" {
 			head = "<b>Новое задание по теме «" + esc(n.Topic) + "»</b>"
 		}
-		return BotMessage{ChatID: chat, Text: head + "\n\n" + esc(n.Title), Buttons: rows(t.link("Открыть задание", pathOr(n.Path, "/account")))}, n.Title != ""
+		return BotMessage{ChatID: chat, Text: head + "\n\n" + esc(n.Title), Buttons: rows(t.link("Открыть задание", pathOr(n.Path, "/app")))}, n.Title != ""
 	case NotifyNewResponse:
 		text := "<b>Новый отклик</b> на задание «" + esc(n.Title) + "»"
 		if n.From != "" {
 			text += "\nОт: " + esc(n.From)
 		}
-		return BotMessage{ChatID: chat, Text: text, Buttons: rows(t.link("Посмотреть отклик", pathOr(n.Path, "/account")))}, n.Title != ""
+		return BotMessage{ChatID: chat, Text: text, Buttons: rows(t.link("Посмотреть отклик", pathOr(n.Path, "/app")))}, n.Title != ""
 	case NotifyPayout:
 		status := map[string]string{PayoutSent: "отправлена", PayoutDone: "зачислена", PayoutFailed: "не прошла — проверьте реквизиты в кабинете"}[n.Status]
 		if status == "" || n.AmountKopecks <= 0 {
 			return BotMessage{}, false
 		}
 		return BotMessage{ChatID: chat, Text: "<b>Выплата " + FormatRub(n.AmountKopecks) + "</b> " + status + ".",
-			Buttons: rows(t.link("Открыть кабинет", pathOr(n.Path, "/account")))}, true
+			Buttons: rows(t.link("Открыть приложение", pathOr(n.Path, "/app")))}, true
 	}
 	return BotMessage{}, false
 }

@@ -84,8 +84,8 @@ func VerifyTelegram(data map[string]string, botToken string, now time.Time, maxA
 	return TelegramUser{ID: data["id"], Name: clip(name, 80), Username: data["username"], PhotoURL: photo, AuthDate: at}, nil
 }
 
-// LoginTelegram — вход через Telegram по данным виджета. role — выбранная при регистрации (может быть пустой).
-func (s *Auth) LoginTelegram(ctx context.Context, data map[string]string, role string, consent bool) (LoginResult, error) {
+// LoginTelegram — вход через Telegram по данным виджета.
+func (s *Auth) LoginTelegram(ctx context.Context, data map[string]string, consent bool) (LoginResult, error) {
 	if !consent {
 		return LoginResult{}, errConsent()
 	}
@@ -94,7 +94,7 @@ func (s *Auth) LoginTelegram(ctx context.Context, data map[string]string, role s
 		return LoginResult{}, err
 	}
 	id := domain.Identity{Provider: domain.ProviderTelegram, Subject: tg.ID}
-	return s.login(ctx, id, false, domain.NewUser{Role: role, Name: tg.Name, AvatarURL: tg.PhotoURL})
+	return s.login(ctx, id, false, domain.NewUser{Name: tg.Name, AvatarURL: tg.PhotoURL})
 }
 
 // telegramBotID — числовой id бота из токена «123456:ABC…» (нужен кнопке входа); нет токена — "".

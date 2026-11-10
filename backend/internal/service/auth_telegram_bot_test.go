@@ -47,7 +47,7 @@ var anna = domain.TelegramProfile{ID: 777, FirstName: "Анна", LastName: "К"
 func TestBotLoginFlow(t *testing.T) {
 	ctx := context.Background()
 	e := newBotEnv(t)
-	st, err := e.a.StartTelegramBot(ctx, "creator", true, "1.1.1.1")
+	st, err := e.a.StartTelegramBot(ctx, true, "1.1.1.1")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -82,7 +82,7 @@ func TestBotLoginFlow(t *testing.T) {
 		t.Fatal(err)
 	}
 	wg.Wait()
-	if werr != nil || stt != BotLoginDone || res.Token == "" || !res.Created || res.User.Role != "creator" || res.User.Name != "Анна К" {
+	if werr != nil || stt != BotLoginDone || res.Token == "" || !res.Created || res.User.ActiveMode != "business" || res.User.Name != "Анна К" {
 		t.Fatalf("%v %v %+v", stt, werr, res)
 	}
 	if time.Since(started) > time.Second {
@@ -112,7 +112,7 @@ func TestBotLoginErrors(t *testing.T) {
 	ctx := context.Background()
 	t.Run("выключен", func(t *testing.T) {
 		e := newBotEnv(t, func(d *AuthDeps, _ *AuthConfig) { d.BotLogins = nil })
-		if _, err := e.a.StartTelegramBot(ctx, "", true, "ip"); !errors.Is(err, ErrProviderDisabled) {
+		if _, err := e.a.StartTelegramBot(ctx, true, "ip"); !errors.Is(err, ErrProviderDisabled) {
 			t.Error(err)
 		}
 		if e.a.Methods().TelegramBot {
@@ -132,32 +132,29 @@ func TestBotLoginErrors(t *testing.T) {
 	t.Run("согласие и роль", func(t *testing.T) {
 		e := newBotEnv(t)
 		var ve *ValidationError
-		if _, err := e.a.StartTelegramBot(ctx, "", false, "ip"); !errors.As(err, &ve) || ve.Fields["consent"] == "" {
-			t.Error(err)
-		}
-		if _, err := e.a.StartTelegramBot(ctx, "admin", true, "ip"); !errors.As(err, &ve) || ve.Fields["role"] == "" {
+		if _, err := e.a.StartTelegramBot(ctx, false, "ip"); !errors.As(err, &ve) || ve.Fields["consent"] == "" {
 			t.Error(err)
 		}
 	})
 	t.Run("лимит с адреса", func(t *testing.T) {
 		e := newBotEnv(t, func(_ *AuthDeps, c *AuthConfig) { c.BotLoginPerIP = 3 })
 		for i := 0; i < 3; i++ {
-			if _, err := e.a.StartTelegramBot(ctx, "", true, "9.9.9.9"); err != nil {
+			if _, err := e.a.StartTelegramBot(ctx, true, "9.9.9.9"); err != nil {
 				t.Fatal(err)
 			}
 			e.clk.add(time.Minute)
 		}
 		var le *LimitError
-		if _, err := e.a.StartTelegramBot(ctx, "", true, "9.9.9.9"); !errors.As(err, &le) || le.RetryAfter != 57*time.Minute {
+		if _, err := e.a.StartTelegramBot(ctx, true, "9.9.9.9"); !errors.As(err, &le) || le.RetryAfter != 57*time.Minute {
 			t.Fatalf("%v", err)
 		}
-		if _, err := e.a.StartTelegramBot(ctx, "", true, "8.8.8.8"); err != nil {
+		if _, err := e.a.StartTelegramBot(ctx, true, "8.8.8.8"); err != nil {
 			t.Error("другой адрес", err)
 		}
 	})
 	t.Run("ссылка истекла", func(t *testing.T) {
 		e := newBotEnv(t)
-		st, _ := e.a.StartTelegramBot(ctx, "", true, "ip")
+		st, _ := e.a.StartTelegramBot(ctx, true, "ip")
 		e.clk.add(5*time.Minute + time.Second)
 		if _, err := e.a.BotLoginPending(ctx, tokenOf(t, st.URL)); !errors.Is(err, ErrBotLoginExpired) {
 			t.Error(err)
@@ -171,7 +168,7 @@ func TestBotLoginErrors(t *testing.T) {
 	})
 	t.Run("подтверждение продлевает срок на grace", func(t *testing.T) {
 		e := newBotEnv(t)
-		st, _ := e.a.StartTelegramBot(ctx, "", true, "ip")
+		st, _ := e.a.StartTelegramBot(ctx, true, "ip")
 		e.clk.add(4*time.Minute + 59*time.Second)
 		if _, err := e.a.ConfirmBotLogin(ctx, tokenOf(t, st.URL), anna); err != nil {
 			t.Fatal(err)
@@ -183,7 +180,7 @@ func TestBotLoginErrors(t *testing.T) {
 	})
 	t.Run("отмена", func(t *testing.T) {
 		e := newBotEnv(t)
-		st, _ := e.a.StartTelegramBot(ctx, "", true, "ip")
+		st, _ := e.a.StartTelegramBot(ctx, true, "ip")
 		if err := e.a.CancelBotLogin(ctx, tokenOf(t, st.URL)); err != nil {
 			t.Fatal(err)
 		}
@@ -199,7 +196,7 @@ func TestBotLoginErrors(t *testing.T) {
 	})
 	t.Run("подтвердил другой аккаунт — второй не перехватит", func(t *testing.T) {
 		e := newBotEnv(t)
-		st, _ := e.a.StartTelegramBot(ctx, "", true, "ip")
+		st, _ := e.a.StartTelegramBot(ctx, true, "ip")
 		tok := tokenOf(t, st.URL)
 		if _, err := e.a.ConfirmBotLogin(ctx, tok, anna); err != nil {
 			t.Fatal(err)
@@ -213,7 +210,7 @@ func TestBotLoginErrors(t *testing.T) {
 	})
 	t.Run("бот не может подтвердить", func(t *testing.T) {
 		e := newBotEnv(t)
-		st, _ := e.a.StartTelegramBot(ctx, "", true, "ip")
+		st, _ := e.a.StartTelegramBot(ctx, true, "ip")
 		if _, err := e.a.ConfirmBotLogin(ctx, tokenOf(t, st.URL), domain.TelegramProfile{ID: 5, IsBot: true}); !errors.Is(err, ErrTelegramInvalid) {
 			t.Error(err)
 		}
@@ -228,7 +225,7 @@ func TestBotLoginErrors(t *testing.T) {
 	})
 	t.Run("ожидание прерывается отменой запроса", func(t *testing.T) {
 		e := newBotEnv(t)
-		st, _ := e.a.StartTelegramBot(ctx, "", true, "ip")
+		st, _ := e.a.StartTelegramBot(ctx, true, "ip")
 		cctx, cancel := context.WithCancel(ctx)
 		go func() { time.Sleep(10 * time.Millisecond); cancel() }()
 		if s, _, err := e.a.WaitTelegramBot(cctx, st.BrowserSecret, 5*time.Second); !errors.Is(err, context.Canceled) || s != BotLoginWaiting {
@@ -239,12 +236,12 @@ func TestBotLoginErrors(t *testing.T) {
 		for _, m := range []string{"TelegramLoginStats", "CreateTelegramLogin"} {
 			e := newBotEnv(t)
 			e.tg.fail[m] = errBoom
-			if _, err := e.a.StartTelegramBot(ctx, "", true, "ip"); !errors.Is(err, errBoom) {
+			if _, err := e.a.StartTelegramBot(ctx, true, "ip"); !errors.Is(err, errBoom) {
 				t.Error(m, err)
 			}
 		}
 		e := newBotEnv(t)
-		st, _ := e.a.StartTelegramBot(ctx, "", true, "ip")
+		st, _ := e.a.StartTelegramBot(ctx, true, "ip")
 		e.tg.fail["ConfirmTelegramLogin"] = errBoom
 		if _, err := e.a.ConfirmBotLogin(ctx, tokenOf(t, st.URL), anna); !errors.Is(err, errBoom) {
 			t.Error(err)
@@ -258,7 +255,7 @@ func TestBotLoginErrors(t *testing.T) {
 	})
 	t.Run("сбой создания сессии после подтверждения", func(t *testing.T) {
 		e := newBotEnv(t)
-		st, _ := e.a.StartTelegramBot(ctx, "", true, "ip")
+		st, _ := e.a.StartTelegramBot(ctx, true, "ip")
 		_, _ = e.a.ConfirmBotLogin(ctx, tokenOf(t, st.URL), anna)
 		e.repo.fail["CreateSession"] = errBoom
 		if _, _, err := e.a.WaitTelegramBot(ctx, st.BrowserSecret, time.Millisecond); !errors.Is(err, errBoom) {
@@ -285,7 +282,7 @@ func TestNewDeviceNotification(t *testing.T) {
 	e := newBotEnv(t)
 	login := func(dev, ua string) LoginResult {
 		t.Helper()
-		_, err := e.a.StartEmail(ctx, "a@mail.ru", "business", true, "1.1.1.1")
+		_, err := e.a.StartEmail(ctx, "a@mail.ru", true, "1.1.1.1")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -348,9 +345,9 @@ func TestLogoutEverywhere(t *testing.T) {
 func TestCleanupTelegramLogins(t *testing.T) {
 	ctx := context.Background()
 	e := newBotEnv(t)
-	_, _ = e.a.StartTelegramBot(ctx, "", true, "ip")
+	_, _ = e.a.StartTelegramBot(ctx, true, "ip")
 	e.clk.add(25 * time.Hour)
-	_, _ = e.a.StartTelegramBot(ctx, "", true, "ip")
+	_, _ = e.a.StartTelegramBot(ctx, true, "ip")
 	if err := e.a.Cleanup(ctx); err != nil || len(e.tg.logins) != 1 {
 		t.Fatal(err, len(e.tg.logins))
 	}

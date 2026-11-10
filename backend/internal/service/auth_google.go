@@ -38,7 +38,7 @@ func (s *Auth) StartGoogle(consent bool) (GoogleStart, error) {
 
 // LoginGoogle — обмен кода Google на профиль и вход. Совпадение подтверждённой почты Google с почтой
 // пользователя — тот же аккаунт.
-func (s *Auth) LoginGoogle(ctx context.Context, code, verifier, role string) (LoginResult, error) {
+func (s *Auth) LoginGoogle(ctx context.Context, code, verifier string) (LoginResult, error) {
 	if s.google == nil {
 		return LoginResult{}, ErrProviderDisabled
 	}
@@ -66,7 +66,7 @@ func (s *Auth) LoginGoogle(ctx context.Context, code, verifier, role string) (Lo
 	if !verified {
 		id.Email = ""
 	}
-	return s.login(ctx, id, verified, domain.NewUser{Role: role, Name: clip(strings.TrimSpace(p.Name), 80), AvatarURL: picture})
+	return s.login(ctx, id, verified, domain.NewUser{Name: clip(strings.TrimSpace(p.Name), 80), AvatarURL: picture})
 }
 
 // pkceChallenge — code_challenge = BASE64URL(SHA256(verifier)).

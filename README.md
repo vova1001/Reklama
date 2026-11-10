@@ -33,7 +33,7 @@ docker compose up --build        # или: make dev (создаст .env со с
 ## Устройство
 
 ```
-backend/    Go 1.25: api/openapi.yaml (контракт), cmd/server, internal/{transport/http,service,repository,gateway,store,domain,config,logx}, migrations/, queries/
+backend/    Go 1.25: api/openapi.yaml (контракт), cmd/server, internal/{transport/{http,telegram},service,repository,ratelimit,gateway,store,domain,config,logx}, migrations/, queries/
 frontend/   Astro + Tailwind 4: src/{components,content,lib,pages,scripts,styles}, public/{fonts,img}, tests/e2e
 deploy/     nginx.conf — единый вход: / → сайт, /api и /healthz → API
 project/    бриф, ТЗ, макет, задачи (handoff/), architecture.md, screens/
@@ -50,3 +50,5 @@ project/    бриф, ТЗ, макет, задачи (handoff/), architecture.md
 ## Настройки
 
 Все — переменные окружения, образец — `.env.example` (без значений). Паролей и ключей в репозитории нет.
+Лимиты запросов (`RATE_LIMIT_*`, `TELEGRAM_WEBHOOK_*`) считаются в памяти процесса; для нескольких серверов задайте
+`REDIS_URL` — лимиты станут общими (при сбое Redis временно считаются в памяти, сайт работает).

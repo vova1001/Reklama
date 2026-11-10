@@ -2,10 +2,10 @@ package domain
 
 import "time"
 
-// Роли пользователей (совпадают с аудиториями тарифов).
+// Режимы аккаунта (совпадают с аудиториями тарифов). Один аккаунт — оба режима, активен один.
 const (
-	RoleBusiness = AudienceBusiness
-	RoleCreator  = AudienceCreator
+	ModeBusiness = AudienceBusiness
+	ModeCreator  = AudienceCreator
 )
 
 // Способы входа.
@@ -15,29 +15,26 @@ const (
 	ProviderGoogle   = "google"
 )
 
-// ValidRole — роль из списка (пустая — «ещё не выбрана» — не считается).
-func ValidRole(r string) bool { return r == RoleBusiness || r == RoleCreator }
+// ValidMode — режим из списка.
+func ValidMode(m string) bool { return m == ModeBusiness || m == ModeCreator }
 
 // User — пользователь площадки.
 type User struct {
 	ID          int64
-	Role        string // "" — не выбрана
 	Name        string
 	Email       string // "" — нет подтверждённой почты
 	AvatarURL   string
 	City        string
-	Spheres     []string // бизнес: темы
-	Channels    []string // автор: ссылки на каналы
-	OnboardedAt *time.Time
+	ActiveMode  string     // ModeBusiness | ModeCreator
+	OnboardedAt *time.Time // когда впервые сохранены общие данные
 	CreatedAt   time.Time
 }
 
-// Onboarded — анкета первого входа заполнена.
+// Onboarded — общие данные профиля сохранялись хотя бы раз.
 func (u User) Onboarded() bool { return u.OnboardedAt != nil }
 
 // NewUser — данные для создания пользователя при первом входе.
 type NewUser struct {
-	Role      string
 	Name      string
 	Email     string
 	AvatarURL string
@@ -55,7 +52,6 @@ type LoginCode struct {
 	ID        int64
 	Email     string
 	CodeHash  []byte
-	Role      string
 	Attempts  int
 	CreatedAt time.Time
 	ExpiresAt time.Time
@@ -65,7 +61,6 @@ type LoginCode struct {
 type NewLoginCode struct {
 	Email     string
 	CodeHash  []byte
-	Role      string
 	IP        string
 	CreatedAt time.Time
 	ExpiresAt time.Time
@@ -78,11 +73,42 @@ type CodeStats struct {
 	LastAt  time.Time // самый поздний в окне
 }
 
-// Profile — анкета первого входа.
-type Profile struct {
-	Role     string
-	Name     string
-	City     string
-	Spheres  []string
-	Channels []string
+// Basics — общие данные профиля (для обоих режимов).
+type Basics struct {
+	Name string
+	City string
+}
+
+// BusinessProfile — профиль режима «Бизнес».
+type BusinessProfile struct {
+	Name      string // название компании или бренда
+	City      string
+	Spheres   []string // slug тем из справочника
+	UpdatedAt time.Time
+}
+
+// CreatorProfile — профиль режима «Автор».
+type CreatorProfile struct {
+	Name      string // имя или псевдоним
+	City      string
+	Spheres   []string // темы, о которых пишет
+	Channels  []string // https://… или @имя
+	UpdatedAt time.Time
+}
+
+// Profiles — профили режимов пользователя; nil — профиль режима ещё не заполнен.
+type Profiles struct {
+	Business *BusinessProfile
+	Creator  *CreatorProfile
+}
+
+// Filled — заполнен ли профиль режима.
+func (p Profiles) Filled(mode string) bool {
+	switch mode {
+	case ModeBusiness:
+		return p.Business != nil
+	case ModeCreator:
+		return p.Creator != nil
+	}
+	return false
 }

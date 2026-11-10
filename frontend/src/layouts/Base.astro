@@ -1,7 +1,7 @@
 ---
 import '../styles/global.css';
-interface Props { title: string; description: string; noindex?: boolean }
-const { title, description, noindex = false } = Astro.props;
+interface Props { title: string; description: string; noindex?: boolean; theme?: string; bodyClass?: string }
+const { title, description, noindex = false, theme = '#1B1B1A', bodyClass } = Astro.props;
 const site = process.env.PUBLIC_URL ?? 'http://localhost:8000';
 const url = new URL(Astro.url.pathname, site).toString();
 ---
@@ -12,7 +12,7 @@ const url = new URL(Astro.url.pathname, site).toString();
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>{title}</title>
     <meta name="description" content={description} />
-    <meta name="theme-color" content="#1B1B1A" />
+    <meta name="theme-color" content={theme} />
     {noindex && <meta name="robots" content="noindex" />}
     <link rel="canonical" href={url} />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
@@ -26,7 +26,7 @@ const url = new URL(Astro.url.pathname, site).toString();
     <meta property="og:image" content={new URL('/og.png', site).toString()} />
     <script is:inline>document.documentElement.classList.add('js')</script>
   </head>
-  <body>
+  <body class={bodyClass}>
     <slot />
     <script src="../scripts/site.ts"></script>
   </body>

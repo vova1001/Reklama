@@ -193,7 +193,7 @@ export interface paths {
         };
         /**
          * Переход ко входу через Google
-         * @description OAuth 2.0 Authorization Code + PKCE (S256) + state. state, verifier и роль — в httpOnly cookie `ohvat_oauth`
+         * @description OAuth 2.0 Authorization Code + PKCE (S256) + state. state и verifier — в httpOnly cookie `ohvat_oauth`
          *     на 10 минут. Ошибки — переход на `/login?error=google_off|consent|google`.
          */
         get: operations["startGoogle"];
@@ -214,7 +214,7 @@ export interface paths {
         };
         /**
          * Возврат из Google
-         * @description Сверка state, обмен кода (с verifier), вход. Успех — переход на `/account` или `/login?step=profile`;
+         * @description Сверка state, обмен кода (с verifier), вход. Успех — переход в приложение `/app`;
          *     ошибка — `/login?error=google|google_state|google_cancel`.
          */
         get: operations["googleCallback"];
@@ -253,7 +253,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Кто вошёл */
+        /**
+         * Кто вошёл
+         * @description Общие данные, активный режим, способы входа, какие профили режимов заполнены и прогресс заполнения.
+         */
         get: operations["getMe"];
         put?: never;
         post?: never;
@@ -261,6 +264,26 @@ export interface paths {
         options?: never;
         head?: never;
         patch?: never;
+        trace?: never;
+    };
+    "/api/me/mode": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Переключить режим «Бизнес / Автор»
+         * @description Профиль режима заполнять не обязательно — приложение мягко подскажет.
+         */
+        patch: operations["switchMode"];
         trace?: never;
     };
     "/api/me/profile": {
@@ -272,12 +295,73 @@ export interface paths {
         };
         get?: never;
         /**
-         * Анкета первого входа
-         * @description Бизнес — 1–5 тем (`categories.slug`); автор — 1–5 ссылок на каналы (https://… или @имя).
-         *     Имя и город — 2–80 символов. Роль после заполнения анкеты не меняется (409).
+         * Общие данные профиля
+         * @description Как вас называть и город — 2–80 символов. Первое сохранение отмечает `onboarded`.
          */
-        put: operations["saveProfile"];
+        put: operations["saveBasics"];
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/profile/business": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Профиль режима «Бизнес» */
+        get: operations["getBusinessProfile"];
+        /**
+         * Сохранить профиль бизнеса
+         * @description Название и город — 2–80 символов; 1–5 сфер из справочника (`categories.slug`).
+         */
+        put: operations["saveBusinessProfile"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/profile/creator": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Профиль режима «Автор» */
+        get: operations["getCreatorProfile"];
+        /**
+         * Сохранить профиль автора
+         * @description Имя и город — 2–80 символов; 1–5 тем из справочника; 1–5 каналов (https://… или @имя; http повышается до https).
+         */
+        put: operations["saveCreatorProfile"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/logout-all": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Выйти на всех устройствах
+         * @description Все сеансы аккаунта удаляются (включая этот), cookie стирается.
+         */
+        post: operations["logoutAll"];
         delete?: never;
         options?: never;
         head?: never;
@@ -371,8 +455,11 @@ export interface components {
             question: string;
             answer: string;
         };
-        /** @enum {string} */
-        Role: "business" | "creator";
+        /**
+         * @description Режим аккаунта — один аккаунт может быть и бизнесом, и автором
+         * @enum {string}
+         */
+        Mode: "business" | "creator";
         AuthConfig: {
             /** @description Вход по почте доступен */
             email: boolean;
@@ -392,11 +479,6 @@ export interface components {
         EmailStart: {
             /** @example anna@mail.ru */
             email: string;
-            /**
-             * @description Роль при регистрации
-             * @enum {string}
-             */
-            role?: "business" | "creator" | "";
             /** @description Согласие на обработку персональных данных — должно быть true */
             consent: boolean;
         };
@@ -418,8 +500,6 @@ export interface components {
             code: string;
         };
         TelegramLogin: {
-            /** @enum {string} */
-            role?: "business" | "creator" | "";
             consent: boolean;
             /** @description Объект из Telegram Login как есть (id, first_name, last_name, username, photo_url, auth_date, hash) */
             user: {
@@ -427,8 +507,6 @@ export interface components {
             };
         };
         BotStart: {
-            /** @enum {string} */
-            role?: "business" | "creator" | "";
             consent: boolean;
         };
         BotLink: {
@@ -445,35 +523,63 @@ export interface components {
             status: "pending" | "ok";
             user?: components["schemas"]["User"];
             /** @enum {string} */
-            next?: "/account" | "/login?step=profile";
+            next?: "/app";
             created?: boolean;
         };
-        ProfileInput: {
-            /**
-             * @description Обязательна
-             * @enum {string}
-             */
-            role?: "business" | "creator" | "";
-            /** @description Имя или название */
+        ModeInput: {
+            mode: components["schemas"]["Mode"];
+        };
+        BasicsInput: {
+            /** @description Как вас называть */
             name: string;
             city: string;
-            /** @description Бизнес — slug тем */
-            spheres?: string[];
-            /** @description Автор — ссылки на каналы */
-            channels?: string[];
+        };
+        BusinessProfileInput: {
+            /** @description Название компании или бренда */
+            name: string;
+            city: string;
+            /** @description slug тем */
+            spheres: string[];
+        };
+        CreatorProfileInput: {
+            /** @description Имя или псевдоним */
+            name: string;
+            city: string;
+            /** @description Темы (slug) */
+            spheres: string[];
+            /** @description https://… или @имя */
+            channels: string[];
+        };
+        BusinessProfile: {
+            name: string;
+            city: string;
+            spheres: string[];
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        CreatorProfile: {
+            name: string;
+            city: string;
+            spheres: string[];
+            channels: string[];
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        BusinessProfileResult: {
+            profile: components["schemas"]["BusinessProfile"] | null;
+        };
+        CreatorProfileResult: {
+            profile: components["schemas"]["CreatorProfile"] | null;
         };
         User: {
             /** Format: int64 */
             id: number;
-            /** @enum {string|null} */
-            role: "business" | "creator" | null;
             name: string;
             email: string | null;
             avatarUrl: string;
             city: string;
-            spheres: string[];
-            channels: string[];
-            /** @description Анкета первого входа заполнена */
+            mode: components["schemas"]["Mode"];
+            /** @description Общие данные профиля сохранялись */
             onboarded: boolean;
         };
         LoginResult: {
@@ -482,13 +588,29 @@ export interface components {
              * @description Куда перейти
              * @enum {string}
              */
-            next: "/account" | "/login?step=profile";
+            next: "/app";
             /** @description Аккаунт создан этим входом */
             created: boolean;
+        };
+        Step: {
+            /**
+             * @description Общие данные | профиль активного режима | Telegram привязан
+             * @enum {string}
+             */
+            key: "basics" | "profile" | "telegram";
+            done: boolean;
         };
         Me: {
             user: components["schemas"]["User"];
             providers: ("email" | "telegram" | "google")[];
+            /** @description Какие профили режимов заполнены */
+            profiles: {
+                business: boolean;
+                creator: boolean;
+            };
+            checklist: components["schemas"]["Step"][];
+            /** @description Прогресс заполнения для активного режима, % */
+            completion: number;
         };
     };
     responses: {
@@ -849,7 +971,6 @@ export interface operations {
     startGoogle: {
         parameters: {
             query: {
-                role?: components["schemas"]["Role"];
                 /** @description Согласие на обработку данных */
                 consent: "1";
             };
@@ -889,7 +1010,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Переход в кабинет */
+            /** @description Переход в приложение или на страницу входа */
             303: {
                 headers: {
                     [name: string]: unknown;
@@ -930,7 +1051,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Пользователь и способы входа */
+            /** @description Пользователь, режим и профили */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -940,9 +1061,10 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthorized"];
+            429: components["responses"]["TooMany"];
         };
     };
-    saveProfile: {
+    switchMode: {
         parameters: {
             query?: never;
             header: {
@@ -954,23 +1076,189 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["ProfileInput"];
+                "application/json": components["schemas"]["ModeInput"];
             };
         };
         responses: {
-            200: components["responses"]["LoggedIn"];
-            400: components["responses"]["BadRequest"];
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            /** @description role_locked */
-            409: {
+            /** @description Режим включён */
+            200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Error"];
+                    "application/json": components["schemas"]["Me"];
                 };
             };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            429: components["responses"]["TooMany"];
+        };
+    };
+    saveBasics: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Значение из `GET /api/auth/config` (равно cookie `ohvat_csrf`) */
+                "X-CSRF-Token": components["parameters"]["CSRF"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BasicsInput"];
+            };
+        };
+        responses: {
+            /** @description Сохранено */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["User"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            429: components["responses"]["TooMany"];
+        };
+    };
+    getBusinessProfile: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Профиль (null — ещё не заполнен) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BusinessProfileResult"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            429: components["responses"]["TooMany"];
+        };
+    };
+    saveBusinessProfile: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Значение из `GET /api/auth/config` (равно cookie `ohvat_csrf`) */
+                "X-CSRF-Token": components["parameters"]["CSRF"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BusinessProfileInput"];
+            };
+        };
+        responses: {
+            /** @description Сохранено */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BusinessProfileResult"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            429: components["responses"]["TooMany"];
+        };
+    };
+    getCreatorProfile: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Профиль (null — ещё не заполнен) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CreatorProfileResult"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            429: components["responses"]["TooMany"];
+        };
+    };
+    saveCreatorProfile: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Значение из `GET /api/auth/config` (равно cookie `ohvat_csrf`) */
+                "X-CSRF-Token": components["parameters"]["CSRF"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreatorProfileInput"];
+            };
+        };
+        responses: {
+            /** @description Сохранено */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CreatorProfileResult"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            429: components["responses"]["TooMany"];
+        };
+    };
+    logoutAll: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Значение из `GET /api/auth/config` (равно cookie `ohvat_csrf`) */
+                "X-CSRF-Token": components["parameters"]["CSRF"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Завершено сеансов */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** Format: int64 */
+                        sessions: number;
+                    };
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            429: components["responses"]["TooMany"];
         };
     };
 }

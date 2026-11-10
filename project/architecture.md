@@ -21,9 +21,10 @@ Render — один контейнер (nginx + Astro + Go), свой серве
 
 | Слой | Пакет | Что делает |
 |---|---|---|
-| транспорт | `internal/transport/http` | маршруты chi, обработчики по `api/openapi.yaml` (только разбор запроса → вызов сервиса → ответ), DTO, единый формат ошибки `{error:{code,message,fields?,retryAfter?,attemptsLeft?}}`, middleware: request_id, журнал, паника, CSRF, токен-бакет по адресу (429 + Retry-After), сессия, `no-store` |
-| сервис | `internal/service` | бизнес-логика без HTTP и SQL: главная; вход — коды (HMAC, срок, попытки, лимиты почта/адрес), подпись Telegram, Google + PKCE, связывание аккаунтов по подтверждённой почте, сессии (SHA-256), анкета, фоновая очистка |
+| транспорт | `internal/transport/http` | маршруты chi, обработчики по `api/openapi.yaml` (только разбор запроса → вызов сервиса → ответ), DTO, единый формат ошибки `{error:{code,message,fields?,retryAfter?,attemptsLeft?}}`, middleware: request_id, журнал, паника, CSRF, лимиты через интерфейс `Limiter` (весь `/api` — по адресу, вход — строже по адресу, `/api/me*` — по пользователю; 429 + Retry-After), сессия, `no-store` |
+| сервис | `internal/service` | бизнес-логика без HTTP и SQL: главная; вход — коды (HMAC, срок, попытки, лимиты почта/адрес), подпись Telegram, Google + PKCE, связывание аккаунтов по подтверждённой почте, сессии (SHA-256), фоновая очистка; `Profiles` — режим аккаунта «Бизнес / Автор», общие данные, профили режимов, прогресс заполнения |
 | репозиторий | `internal/repository` (+ `internal/store` — код sqlc) | PostgreSQL, транзакции, ошибки pgx → `domain.ErrNotFound/ErrConflict`; SQL — только в `queries/*.sql` |
+| лимиты | `internal/ratelimit` | токен-бакет за интерфейсом `Limiter`: `Memory` (один сервер), `Redis` (атомарный Lua-скрипт, время Redis, `REDIS_URL`), `Fallback` (Redis → память при сбое) |
 | адаптеры | `internal/gateway/{mail,google}` | внешние сервисы за интерфейсами сервиса: очередь писем (воркеры, повторы, плавная остановка) поверх Resend / SMTP / журнала; OAuth-клиент Google |
 
 Сервис зависит только от интерфейсов (`UserRepository`, `CodeRepository`, `SessionRepository`, `Mailer`, `GoogleProvider`,
@@ -40,9 +41,11 @@ Render — один контейнер (nginx + Astro + Go), свой серве
 | `plans` | audience (`business`/`creator`), slug, name, subtitle, price_kopecks, period (`month`), recommended, position, is_active; уник. (audience, slug) | (audience, position), где is_active |
 | `plan_features` | plan_id → plans (каскад), position, text | PK (plan_id, position) |
 | `faq` | question, answer, position, is_published | position, где is_published |
-| `users` | role (`business`/`creator`/NULL), name, email (подтверждённая, NULL), avatar_url, city, spheres[], channels[], onboarded_at, last_login_at | уник. email, где не NULL |
+| `users` | name, email (подтверждённая, NULL), avatar_url, city, active_mode (`business`/`creator`, по умолчанию business), onboarded_at (общие данные сохранялись), last_login_at | уник. email, где не NULL |
+| `business_profiles` | user_id → users (PK, каскад), name, city, spheres[] — 1:1, строки нет, пока профиль не заполнен | PK |
+| `creator_profiles` | user_id → users (PK, каскад), name, city, spheres[], channels[] — 1:1, nullable | PK |
 | `identities` | user_id → users (каскад), provider (`email`/`telegram`/`google`), subject, email | уник. (provider, subject); user_id |
-| `login_codes` | email, code_hash (HMAC), role, ip, attempts, expires_at, consumed_at; строки живут сутки — по ним лимиты | (email, created_at), (ip, created_at), created_at |
+| `login_codes` | email, code_hash (HMAC), ip, attempts, expires_at, consumed_at; строки живут сутки — по ним лимиты | (email, created_at), (ip, created_at), created_at |
 | `sessions` | user_id → users (каскад), token_hash (SHA-256, уник.), expires_at | user_id, expires_at |
 
 Деньги — целые копейки; время — `timestamptz` (UTC). Объём данных главной — десятки строк, нагрузка минимальна.
@@ -51,7 +54,8 @@ Render — один контейнер (nginx + Astro + Go), свой серве
 
 `backend/api/openapi.yaml`: `GET /api/home`, `GET /healthz`; вход — `GET /api/auth/config`, `POST /api/auth/email/start`,
 `POST /api/auth/email/verify`, `POST /api/auth/telegram`, `GET /api/auth/google/start`, `GET /api/auth/google/callback`,
-`POST /api/auth/logout`; кабинет — `GET /api/me`, `PUT /api/me/profile`.
+`POST /api/auth/logout`; приложение — `GET /api/me`, `PATCH /api/me/mode`, `PUT /api/me/profile` (общие данные),
+`GET/PUT /api/me/profile/business`, `GET/PUT /api/me/profile/creator`, `POST /api/me/logout-all`.
 Типы фронта генерируются из контракта (`npm run gen:api` → `frontend/src/lib/api.gen.ts`).
 
 ## Фронтенд (Astro 7 SSR + Tailwind 4 + TypeScript)
@@ -74,10 +78,13 @@ Render — один контейнер (nginx + Astro + Go), свой серве
 - Анимации — только CSS, IntersectionObserver и один обработчик прокрутки на requestAnimationFrame (`src/scripts/site.ts`),
   без библиотек; расширение тёмных листов — `animation-timeline: view()` внутри `@supports`; при
   `prefers-reduced-motion` выключены и всё видно сразу; без JS — тоже всё видно.
-- Вход (задача 05): `/login` — роль, согласие, Google, Telegram (Telegram Login в окне, своя кнопка), почта → код
-  (6 ячеек, вставка, автопереход, таймер «ещё раз», 429 с отсчётом) → анкета (`/login` для вошедшего без анкеты);
-  `/account` — профиль и «Выйти». `src/middleware.ts` узнаёт пользователя по cookie (`GET /api/me`), шапка показывает
-  аватар. Скрипт — `src/scripts/auth.ts` (CSRF-токен из `/api/auth/config`), стили — `src/styles/auth.css`.
+- Вход (задачи 05–07): `/login` — без выбора роли; Telegram-бот, Google, почта → код (6 ячеек, автопереход, таймер,
+  429 с отсчётом) → сразу `/app`. `src/middleware.ts` узнаёт пользователя по cookie (`GET /api/me`, адрес посетителя
+  пробрасывается в `X-Real-IP`). Скрипт — `src/scripts/auth.ts`, общий клиент API — `src/lib/client.ts`.
+- Приложение (задача 07): `src/layouts/App.astro` — шапка (знак, режим, поиск-заглушка, аватар-меню), центр, колонка
+  «полезное», нижняя навигация на телефоне; `/app` (лента), `/app/profile` (общие данные + вкладки «Бизнес» / «Автор»),
+  `/app/settings` (способы входа, уведомления, выход со всех устройств); `/account` → 301 на `/app`.
+  Скрипт — `src/scripts/app.ts`, стили — `src/styles/app.css`, токены — `project/design/tokens.md`.
 - Будущие страницы (`/tasks`, `/creators`, `/tasks/new`, `/creators/new`, `/pricing`, `/categories`, `/faq`,
   `/docs/*`) — заглушка «Скоро» (`src/pages/[...path].astro`, список — `src/lib/routes.ts`); прочие адреса — 404.
 - Фото — WebP двух размеров (`public/img`), шрифт Inter 4 файлами (`public/fonts`, OFL), иконки Lucide (ISC).
@@ -89,7 +96,7 @@ Render — один контейнер (nginx + Astro + Go), свой серве
 |---|---|---|
 | модульные | `internal/service/*_test.go` (фейки в `fakes_test.go`), `internal/transport/http/*_test.go`, `internal/config`, `internal/gateway/*` | табличные: коды, лимиты, попытки, подпись Telegram, Google/PKCE, связывание, гонка двойного клика, анкета, очистка; CSRF, cookie, 429, карта ошибок; настройки; очередь писем (повторы, остановка), Resend, Google |
 | интеграционные | `internal/repository/*_test.go` | настоящая PostgreSQL: миграции up → down → up, транзакции, уникальность, атомарные попытки (10 параллельных → 5), сессии |
-| e2e | `frontend/tests/e2e/{home,auth}.spec.ts` | 375 / 768 / 1440; вход по почте с кодом из журнала, ошибки, анкета, кабинет, выход, лимит 429 |
+| e2e | `frontend/tests/e2e/{home,auth,telegram,app}.spec.ts` | 375 / 768 / 1440; вход по почте и через бота → `/app`, режимы, профили, меню, настройки, выход и выход везде, адаптив |
 
 `go test -race`; покрытие `service` + `repository` + `transport/http` — 94%.
 
@@ -99,5 +106,5 @@ Render — один контейнер (nginx + Astro + Go), свой серве
   новые миграции, новые пути в `openapi.yaml`; существующее не переписывается.
 - Оплата — `internal/payments` с общим интерфейсом и адаптером ЮKassa / Т-Банк (безопасная сделка), по правилам студии.
 - Файлы (аватары, обложки) — S3-совместимое хранилище (локально MinIO), когда появятся.
-- Redis — для нескольких серверов: лимиты частоты и очередь писем сейчас в памяти процесса (один сервер); сессии и коды — уже в базе.
+- Redis — для нескольких серверов: лимиты уже готовы (`REDIS_URL`), очередь писем и бота — пока в памяти процесса; сессии и коды — в базе.
 - Правка тем, тарифов и вопросов без разработчика — раздел админки поверх тех же таблиц.

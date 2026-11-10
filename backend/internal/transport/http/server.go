@@ -28,47 +28,59 @@ type HealthService interface {
 // AuthService — что транспорту нужно от сервиса входа.
 type AuthService interface {
 	Methods() service.Methods
-	StartEmail(ctx context.Context, email, role string, consent bool, ip string) (service.CodeSent, error)
+	StartEmail(ctx context.Context, email string, consent bool, ip string) (service.CodeSent, error)
 	VerifyEmail(ctx context.Context, email, code string) (service.LoginResult, error)
-	LoginTelegram(ctx context.Context, data map[string]string, role string, consent bool) (service.LoginResult, error)
+	LoginTelegram(ctx context.Context, data map[string]string, consent bool) (service.LoginResult, error)
 	StartGoogle(consent bool) (service.GoogleStart, error)
-	LoginGoogle(ctx context.Context, code, verifier, role string) (service.LoginResult, error)
+	LoginGoogle(ctx context.Context, code, verifier string) (service.LoginResult, error)
 	Session(ctx context.Context, token string) (domain.User, error)
 	Logout(ctx context.Context, token string) error
-	Account(ctx context.Context, u domain.User) (service.Account, error)
-	SaveProfile(ctx context.Context, u domain.User, p domain.Profile) (domain.User, error)
-	StartTelegramBot(ctx context.Context, role string, consent bool, ip string) (service.TelegramBotStart, error)
+	LogoutEverywhere(ctx context.Context, userID int64) (int64, error)
+	StartTelegramBot(ctx context.Context, consent bool, ip string) (service.TelegramBotStart, error)
 	WaitTelegramBot(ctx context.Context, browserSecret string, wait time.Duration) (service.BotLoginStatus, service.LoginResult, error)
+}
+
+// ProfileService — режим аккаунта и профили режимов.
+type ProfileService interface {
+	Overview(ctx context.Context, u domain.User) (service.Overview, error)
+	SwitchMode(ctx context.Context, u domain.User, mode string) (service.Overview, error)
+	SaveBasics(ctx context.Context, u domain.User, b domain.Basics) (domain.User, error)
+	Business(ctx context.Context, u domain.User) (*domain.BusinessProfile, error)
+	SaveBusiness(ctx context.Context, u domain.User, p domain.BusinessProfile) (domain.BusinessProfile, error)
+	Creator(ctx context.Context, u domain.User) (*domain.CreatorProfile, error)
+	SaveCreator(ctx context.Context, u domain.User, p domain.CreatorProfile) (domain.CreatorProfile, error)
 }
 
 // Options — настройки транспорта (из config).
 type Options struct {
 	Origin        string // схема+хост сайта из PUBLIC_URL — для проверки Origin
 	SecureCookies bool   // PUBLIC_URL на https
-	Limiter       *RateLimiter
-	BotWait       time.Duration // сколько ждать подтверждения в боте в одном запросе (long-poll), 25 с
+	// Лимиты (токен-бакеты); nil — без лимита. APILimiter — весь /api по адресу; AuthLimiter — вход по адресу
+	// (строже); UserLimiter — /api/me* по пользователю.
+	APILimiter  Limiter
+	AuthLimiter Limiter
+	UserLimiter Limiter
+	BotWait     time.Duration // сколько ждать подтверждения в боте в одном запросе (long-poll), 25 с
 	// TelegramWebhook — приём обновлений бота (transport/telegram); nil — бот выключен.
-	// Свой секрет вместо CSRF и свой лимит одновременных запросов, поэтому вне группы /api.
+	// Свой секрет вместо CSRF и свой лимит, поэтому вне группы /api.
 	TelegramWebhook http.Handler
 }
 
 // Server — HTTP API.
 type Server struct {
-	home   HomeService
-	health HealthService
-	auth   AuthService
-	opt    Options
+	home     HomeService
+	health   HealthService
+	auth     AuthService
+	profiles ProfileService
+	opt      Options
 }
 
 // New создаёт API.
-func New(home HomeService, health HealthService, auth AuthService, opt Options) *Server {
-	if opt.Limiter == nil {
-		opt.Limiter = NewRateLimiter(1, 10)
-	}
+func New(home HomeService, health HealthService, auth AuthService, profiles ProfileService, opt Options) *Server {
 	if opt.BotWait <= 0 {
 		opt.BotWait = 25 * time.Second
 	}
-	return &Server{home: home, health: health, auth: auth, opt: opt}
+	return &Server{home: home, health: health, auth: auth, profiles: profiles, opt: opt}
 }
 
 // Routes — все маршруты API.
@@ -80,14 +92,14 @@ func (s *Server) Routes() http.Handler {
 		r.Post("/api/telegram/webhook", s.opt.TelegramWebhook.ServeHTTP)
 	}
 	r.Route("/api", func(r chi.Router) {
-		r.Use(s.client, s.csrf)
+		r.Use(limit(s.opt.APILimiter, byIP("ip:")), s.client, s.csrf)
 		r.Get("/home", s.getHome)
 		r.Route("/auth", func(r chi.Router) {
 			r.Use(noStore)
 			r.Get("/config", s.getAuthConfig)
 			r.Post("/logout", s.postLogout)
 			r.Group(func(r chi.Router) {
-				r.Use(s.opt.Limiter.Middleware)
+				r.Use(limit(s.opt.AuthLimiter, byIP("auth:")))
 				r.Post("/email/start", s.postEmailStart)
 				r.Post("/email/verify", s.postEmailVerify)
 				r.Post("/telegram", s.postTelegram)
@@ -98,9 +110,15 @@ func (s *Server) Routes() http.Handler {
 			})
 		})
 		r.Route("/me", func(r chi.Router) {
-			r.Use(noStore, s.requireUser)
+			r.Use(noStore, s.requireUser, limit(s.opt.UserLimiter, byUser("user:")))
 			r.Get("/", s.getMe)
-			r.Put("/profile", s.putProfile)
+			r.Patch("/mode", s.patchMode)
+			r.Put("/profile", s.putBasics)
+			r.Get("/profile/business", s.getBusiness)
+			r.Put("/profile/business", s.putBusiness)
+			r.Get("/profile/creator", s.getCreator)
+			r.Put("/profile/creator", s.putCreator)
+			r.Post("/logout-all", s.postLogoutAll)
 		})
 		r.NotFound(func(w http.ResponseWriter, _ *http.Request) {
 			writeError(w, http.StatusNotFound, "not_found", "Такого адреса нет.")

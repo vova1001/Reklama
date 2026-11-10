@@ -1,6 +1,6 @@
-/* Вход, анкета, кабинет — минимализм: одна узкая карточка по центру (~400px), знак сверху, пилюли.
+/* Вход и формы приложения — минимализм: одна узкая карточка по центру (~400px), знак сверху, пилюли.
    Токены — из global.css (светлая лестница: фон → белая карточка → панель; изумруд-акцент). Шрифт не меньше 14px. */
-:root { --color-error: #b3261e; --err: 179, 38, 30; }
+:root { --err: 179, 38, 30; }
 
 .au {
   min-height: 100svh; display: flex; flex-direction: column; align-items: center;
@@ -15,17 +15,6 @@
 @media (min-width: 400px) { .au-card { padding: 36px 32px 28px; } }
 .au h1 { font-size: 30px; line-height: 1.1; letter-spacing: -0.035em; font-weight: 680; text-align: center; text-wrap: balance; overflow-wrap: anywhere; }
 .au-sub { margin-top: 8px; font-size: 16px; color: var(--color-gray); text-align: center; }
-
-/* роль — компактный сегмент */
-.au-seg { display: grid; grid-template-columns: 1fr 1fr; gap: 2px; padding: 3px; margin-top: 24px; border-radius: 999px; background: var(--color-panel); }
-.au-seg button {
-  display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 44px; padding: 0 10px; border-radius: 999px;
-  font-size: 16px; font-weight: 500; color: var(--color-gray); cursor: pointer; white-space: nowrap;
-  transition: background-color 0.3s var(--ease-out-soft), color 0.2s ease, box-shadow 0.3s var(--ease-out-soft);
-}
-.au-seg button[aria-checked='true'] { background: var(--color-card); color: var(--color-ink); box-shadow: 0 1px 2px rgba(var(--k), 0.08), 0 4px 12px -6px rgba(var(--k), 0.3); }
-.au-seg button[aria-checked='true'] .ic { color: var(--color-emerald); }
-@media (hover: hover) { .au-seg button[aria-checked='false']:hover { color: var(--color-ink); } }
 
 /* способы входа — крупные пилюли одна под другой */
 .ways { display: grid; gap: 10px; margin-top: 20px; }
@@ -62,7 +51,7 @@
   box-shadow: inset 0 0 0 1px var(--color-line); outline: none; appearance: none;
   transition: box-shadow 0.2s ease, background-color 0.2s ease;
 }
-.inp::placeholder { color: #8b8a85; }
+.inp::placeholder { color: var(--color-placeholder); }
 .inp:hover { box-shadow: inset 0 0 0 1px rgba(var(--k), 0.28); }
 .inp:focus-visible, .inp:focus { background: var(--color-card); box-shadow: inset 0 0 0 2px var(--color-emerald); }
 .inp[aria-invalid='true'] { box-shadow: inset 0 0 0 2px var(--color-error); background: var(--color-card); }
@@ -111,13 +100,7 @@
 .tg-expired .btn { margin-top: 14px; }
 @media (prefers-reduced-motion: reduce) { .wait .dot, .btn.is-busy::after { animation: none; } }
 
-/* анкета */
-.who { display: flex; flex-direction: column; align-items: center; gap: 8px; margin-bottom: 16px; }
-.who .pane-s { margin-top: 0; font-size: 15px; }
-[data-profile-form] { margin-top: 24px; }
-[data-profile-form] .au-seg { margin-top: 0; }
-.role-b { display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 0 14px; border-radius: 999px; background: var(--color-tint); color: var(--color-emerald); font-size: 15px; font-weight: 600; }
-[data-profile-form] > .role-b { display: flex; width: fit-content; margin: 0 auto 20px; }
+/* поля профиля: сферы-пилюли и ссылки на каналы (приложение) */
 .chips { display: flex; flex-wrap: wrap; gap: 6px; }
 .chip {
   display: inline-flex; align-items: center; gap: 6px; min-height: 44px; padding: 0 14px 0 11px; border-radius: 999px; max-width: 100%;
@@ -125,8 +108,8 @@
   transition: background-color 0.25s ease, color 0.25s ease, box-shadow 0.25s ease;
 }
 .chip .ic { color: var(--color-emerald); transition: color 0.25s ease; }
-.chip[aria-pressed='true'] { background: var(--color-dark); color: var(--color-on-dark); box-shadow: none; }
-.chip[aria-pressed='true'] .ic { color: var(--color-on-dark); }
+.chip[aria-pressed='true'] { background: var(--color-emerald-soft); color: var(--color-emerald-ink); box-shadow: inset 0 0 0 1.5px var(--color-emerald); }
+.chip[aria-pressed='true'] .ic { color: var(--color-emerald-ink); }
 @media (hover: hover) { .chip[aria-pressed='false']:hover { box-shadow: inset 0 0 0 1px rgba(var(--k), 0.3); } }
 .chip.is-static { cursor: default; padding: 0 14px; min-height: 36px; background: var(--color-panel); box-shadow: none; }
 .chans { display: grid; gap: 8px; }
@@ -136,22 +119,3 @@
 .chan .rm { position: absolute; right: 5px; top: 5px; width: 44px; height: 44px; border-radius: 999px; display: inline-flex; align-items: center; justify-content: center; color: var(--color-gray); cursor: pointer; }
 @media (hover: hover) { .chan .rm:hover { background: rgba(var(--k), 0.06); color: var(--color-ink); } }
 [data-add-channel] { margin-top: 2px; }
-[data-profile-form] > .btn { margin-top: 24px; }
-[data-profile-form] > .ferr[data-err='form'] { margin-top: 16px; }
-
-/* кабинет */
-.au-acc { padding-top: calc(var(--bar) + 40px); justify-content: flex-start; }
-@media (min-width: 768px) { .au-acc { padding-top: calc(var(--bar) + 72px); } }
-.au-card.acc { max-width: 480px; }
-.acc-head { display: flex; flex-direction: column; align-items: center; gap: 12px; }
-.acc-meta { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 8px 14px; font-size: 15px; color: var(--color-gray); }
-.acc-meta .city { display: inline-flex; align-items: center; gap: 4px; }
-.rows { margin-top: 24px; border-top: 1px solid var(--color-line); }
-.rows > div { display: grid; gap: 4px; padding: 14px 0; border-bottom: 1px solid var(--color-line); }
-.rows dt { font-size: 14px; color: var(--color-gray); }
-.rows dd { font-size: 16px; font-weight: 500; overflow-wrap: anywhere; }
-.rows .tags { display: flex; flex-wrap: wrap; gap: 6px; }
-.rows .links { display: grid; gap: 4px; }
-.rows .links a { color: var(--color-emerald); text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 4px; }
-.acc [data-logout] { margin-top: 20px; }
-.acc .ferr[data-err='form'] { margin-top: 16px; }

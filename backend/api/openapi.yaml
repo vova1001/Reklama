@@ -1,15 +1,20 @@
 openapi: 3.0.3
 info:
   title: Охват API
-  version: 0.3.0
+  version: 0.4.0
   description: |
-    API площадки «Охват»: данные главной, регистрация и вход (почта с кодом, Telegram, Google), анкета, кабинет.
+    API площадки «Охват»: данные главной, регистрация и вход (почта с кодом, Telegram, Google), приложение после входа:
+    один аккаунт — два режима («Бизнес» и «Автор»), профили режимов заполняются, когда понадобятся.
     Все ответы — JSON в UTF-8. Ошибки — в едином формате `Error`.
 
     Сессия — httpOnly cookie `ohvat_session` (Secure на https, SameSite=Lax), в базе только SHA-256 токена.
-    CSRF: все POST/PUT требуют заголовок `X-CSRF-Token`, равный cookie `ohvat_csrf` (токен выдаёт `GET /api/auth/config`),
-    и Origin, совпадающий с адресом сайта (PUBLIC_URL). Ограничение частоты для `/api/auth/*` (кроме config и logout) —
-    токен-бакет на адрес; превышение — 429 с заголовком `Retry-After`.
+    CSRF: все POST/PUT/PATCH требуют заголовок `X-CSRF-Token`, равный cookie `ohvat_csrf` (токен выдаёт `GET /api/auth/config`),
+    и Origin, совпадающий с адресом сайта (PUBLIC_URL).
+
+    Ограничение частоты (токен-бакеты; память процесса или Redis по `REDIS_URL`): весь `/api` — на адрес
+    (`RATE_LIMIT_API_*`); вход `/api/auth/*` (кроме config и logout) — строже, на адрес (`RATE_LIMIT_*`);
+    `/api/me*` — на пользователя (`RATE_LIMIT_USER_*`); вебхук бота — общий лимит (`TELEGRAM_WEBHOOK_*`).
+    Превышение — 429 `rate_limited` с заголовком `Retry-After`.
 servers:
   - url: http://localhost:8000
 paths:
@@ -200,12 +205,11 @@ paths:
     get:
       summary: Переход ко входу через Google
       description: |
-        OAuth 2.0 Authorization Code + PKCE (S256) + state. state, verifier и роль — в httpOnly cookie `ohvat_oauth`
+        OAuth 2.0 Authorization Code + PKCE (S256) + state. state и verifier — в httpOnly cookie `ohvat_oauth`
         на 10 минут. Ошибки — переход на `/login?error=google_off|consent|google`.
       operationId: startGoogle
       tags: [auth]
       parameters:
-        - { name: role, in: query, schema: { $ref: "#/components/schemas/Role" } }
         - { name: consent, in: query, required: true, schema: { type: string, enum: ["1"] }, description: Согласие на обработку данных }
       responses:
         "302": { description: Переход в Google }
@@ -215,7 +219,7 @@ paths:
     get:
       summary: Возврат из Google
       description: |
-        Сверка state, обмен кода (с verifier), вход. Успех — переход на `/account` или `/login?step=profile`;
+        Сверка state, обмен кода (с verifier), вход. Успех — переход в приложение `/app`;
         ошибка — `/login?error=google|google_state|google_cancel`.
       operationId: googleCallback
       tags: [auth]
@@ -224,7 +228,7 @@ paths:
         - { name: state, in: query, schema: { type: string } }
         - { name: error, in: query, schema: { type: string } }
       responses:
-        "303": { description: Переход в кабинет, анкету или на страницу входа }
+        "303": { description: Переход в приложение или на страницу входа }
         "429": { $ref: "#/components/responses/TooMany" }
   /api/auth/logout:
     post:
@@ -239,23 +243,23 @@ paths:
   /api/me:
     get:
       summary: Кто вошёл
+      description: Общие данные, активный режим, способы входа, какие профили режимов заполнены и прогресс заполнения.
       operationId: getMe
       tags: [account]
       security: [{ session: [] }]
       responses:
         "200":
-          description: Пользователь и способы входа
+          description: Пользователь, режим и профили
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Me" }
         "401": { $ref: "#/components/responses/Unauthorized" }
-  /api/me/profile:
-    put:
-      summary: Анкета первого входа
-      description: |
-        Бизнес — 1–5 тем (`categories.slug`); автор — 1–5 ссылок на каналы (https://… или @имя).
-        Имя и город — 2–80 символов. Роль после заполнения анкеты не меняется (409).
-      operationId: saveProfile
+        "429": { $ref: "#/components/responses/TooMany" }
+  /api/me/mode:
+    patch:
+      summary: Переключить режим «Бизнес / Автор»
+      description: Профиль режима заполнять не обязательно — приложение мягко подскажет.
+      operationId: switchMode
       tags: [account]
       security: [{ session: [] }]
       parameters: [{ $ref: "#/components/parameters/CSRF" }]
@@ -263,17 +267,134 @@ paths:
         required: true
         content:
           application/json:
-            schema: { $ref: "#/components/schemas/ProfileInput" }
+            schema: { $ref: "#/components/schemas/ModeInput" }
       responses:
-        "200": { $ref: "#/components/responses/LoggedIn" }
+        "200":
+          description: Режим включён
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Me" }
         "400": { $ref: "#/components/responses/BadRequest" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
-        "409":
-          description: role_locked
+        "429": { $ref: "#/components/responses/TooMany" }
+  /api/me/profile:
+    put:
+      summary: Общие данные профиля
+      description: Как вас называть и город — 2–80 символов. Первое сохранение отмечает `onboarded`.
+      operationId: saveBasics
+      tags: [account]
+      security: [{ session: [] }]
+      parameters: [{ $ref: "#/components/parameters/CSRF" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/BasicsInput" }
+      responses:
+        "200":
+          description: Сохранено
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/Error" }
+              schema: { $ref: "#/components/schemas/User" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "429": { $ref: "#/components/responses/TooMany" }
+  /api/me/profile/business:
+    get:
+      summary: Профиль режима «Бизнес»
+      operationId: getBusinessProfile
+      tags: [account]
+      security: [{ session: [] }]
+      responses:
+        "200":
+          description: Профиль (null — ещё не заполнен)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/BusinessProfileResult" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "429": { $ref: "#/components/responses/TooMany" }
+    put:
+      summary: Сохранить профиль бизнеса
+      description: Название и город — 2–80 символов; 1–5 сфер из справочника (`categories.slug`).
+      operationId: saveBusinessProfile
+      tags: [account]
+      security: [{ session: [] }]
+      parameters: [{ $ref: "#/components/parameters/CSRF" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/BusinessProfileInput" }
+      responses:
+        "200":
+          description: Сохранено
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/BusinessProfileResult" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "429": { $ref: "#/components/responses/TooMany" }
+  /api/me/profile/creator:
+    get:
+      summary: Профиль режима «Автор»
+      operationId: getCreatorProfile
+      tags: [account]
+      security: [{ session: [] }]
+      responses:
+        "200":
+          description: Профиль (null — ещё не заполнен)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CreatorProfileResult" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "429": { $ref: "#/components/responses/TooMany" }
+    put:
+      summary: Сохранить профиль автора
+      description: |
+        Имя и город — 2–80 символов; 1–5 тем из справочника; 1–5 каналов (https://… или @имя; http повышается до https).
+      operationId: saveCreatorProfile
+      tags: [account]
+      security: [{ session: [] }]
+      parameters: [{ $ref: "#/components/parameters/CSRF" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreatorProfileInput" }
+      responses:
+        "200":
+          description: Сохранено
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CreatorProfileResult" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "429": { $ref: "#/components/responses/TooMany" }
+  /api/me/logout-all:
+    post:
+      summary: Выйти на всех устройствах
+      description: Все сеансы аккаунта удаляются (включая этот), cookie стирается.
+      operationId: logoutAll
+      tags: [account]
+      security: [{ session: [] }]
+      parameters: [{ $ref: "#/components/parameters/CSRF" }]
+      responses:
+        "200":
+          description: Завершено сеансов
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [sessions]
+                properties:
+                  sessions: { type: integer, format: int64 }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "429": { $ref: "#/components/responses/TooMany" }
 components:
   securitySchemes:
     session: { type: apiKey, in: cookie, name: ohvat_session }
@@ -389,9 +510,10 @@ components:
         id: { type: integer, format: int64 }
         question: { type: string }
         answer: { type: string }
-    Role:
+    Mode:
       type: string
       enum: [business, creator]
+      description: Режим аккаунта — один аккаунт может быть и бизнесом, и автором
     AuthConfig:
       type: object
       required: [email, google, telegram, csrfToken]
@@ -414,7 +536,6 @@ components:
       additionalProperties: false
       properties:
         email: { type: string, maxLength: 254, example: anna@mail.ru }
-        role: { type: string, enum: [business, creator, ""], description: Роль при регистрации }
         consent: { type: boolean, description: Согласие на обработку персональных данных — должно быть true }
     CodeSent:
       type: object
@@ -435,7 +556,6 @@ components:
       required: [user, consent]
       additionalProperties: false
       properties:
-        role: { type: string, enum: [business, creator, ""] }
         consent: { type: boolean }
         user:
           type: object
@@ -446,7 +566,6 @@ components:
       required: [consent]
       additionalProperties: false
       properties:
-        role: { type: string, enum: [business, creator, ""] }
         consent: { type: boolean }
     BotLink:
       type: object
@@ -460,43 +579,109 @@ components:
       properties:
         status: { type: string, enum: [pending, ok] }
         user: { $ref: "#/components/schemas/User" }
-        next: { type: string, enum: [/account, /login?step=profile] }
+        next: { type: string, enum: [/app] }
         created: { type: boolean }
-    ProfileInput:
+    ModeInput:
+      type: object
+      required: [mode]
+      additionalProperties: false
+      properties:
+        mode: { $ref: "#/components/schemas/Mode" }
+    BasicsInput:
       type: object
       required: [name, city]
       additionalProperties: false
       properties:
-        role: { type: string, enum: [business, creator, ""], description: Обязательна, если ещё не выбрана }
-        name: { type: string, minLength: 2, maxLength: 80, description: Имя или название }
+        name: { type: string, minLength: 2, maxLength: 80, description: Как вас называть }
         city: { type: string, minLength: 2, maxLength: 80 }
-        spheres: { type: array, maxItems: 5, items: { type: string }, description: Бизнес — slug тем }
-        channels: { type: array, maxItems: 5, items: { type: string }, description: Автор — ссылки на каналы }
+    BusinessProfileInput:
+      type: object
+      required: [name, city, spheres]
+      additionalProperties: false
+      properties:
+        name: { type: string, minLength: 2, maxLength: 80, description: Название компании или бренда }
+        city: { type: string, minLength: 2, maxLength: 80 }
+        spheres: { type: array, minItems: 1, maxItems: 5, items: { type: string }, description: slug тем }
+    CreatorProfileInput:
+      type: object
+      required: [name, city, spheres, channels]
+      additionalProperties: false
+      properties:
+        name: { type: string, minLength: 2, maxLength: 80, description: Имя или псевдоним }
+        city: { type: string, minLength: 2, maxLength: 80 }
+        spheres: { type: array, minItems: 1, maxItems: 5, items: { type: string }, description: Темы (slug) }
+        channels: { type: array, minItems: 1, maxItems: 5, items: { type: string }, description: https://… или @имя }
+    BusinessProfile:
+      type: object
+      required: [name, city, spheres, updatedAt]
+      properties:
+        name: { type: string }
+        city: { type: string }
+        spheres: { type: array, items: { type: string } }
+        updatedAt: { type: string, format: date-time }
+    CreatorProfile:
+      type: object
+      required: [name, city, spheres, channels, updatedAt]
+      properties:
+        name: { type: string }
+        city: { type: string }
+        spheres: { type: array, items: { type: string } }
+        channels: { type: array, items: { type: string } }
+        updatedAt: { type: string, format: date-time }
+    BusinessProfileResult:
+      type: object
+      required: [profile]
+      properties:
+        profile:
+          nullable: true
+          allOf: [{ $ref: "#/components/schemas/BusinessProfile" }]
+    CreatorProfileResult:
+      type: object
+      required: [profile]
+      properties:
+        profile:
+          nullable: true
+          allOf: [{ $ref: "#/components/schemas/CreatorProfile" }]
     User:
       type: object
-      required: [id, role, name, email, avatarUrl, city, spheres, channels, onboarded]
+      required: [id, name, email, avatarUrl, city, mode, onboarded]
       properties:
         id: { type: integer, format: int64 }
-        role: { type: string, enum: [business, creator], nullable: true }
         name: { type: string }
         email: { type: string, nullable: true }
         avatarUrl: { type: string }
         city: { type: string }
-        spheres: { type: array, items: { type: string } }
-        channels: { type: array, items: { type: string } }
-        onboarded: { type: boolean, description: Анкета первого входа заполнена }
+        mode: { $ref: "#/components/schemas/Mode" }
+        onboarded: { type: boolean, description: Общие данные профиля сохранялись }
     LoginResult:
       type: object
       required: [user, next, created]
       properties:
         user: { $ref: "#/components/schemas/User" }
-        next: { type: string, enum: [/account, /login?step=profile], description: Куда перейти }
+        next: { type: string, enum: [/app], description: Куда перейти }
         created: { type: boolean, description: Аккаунт создан этим входом }
+    Step:
+      type: object
+      required: [key, done]
+      properties:
+        key: { type: string, enum: [basics, profile, telegram], description: "Общие данные | профиль активного режима | Telegram привязан" }
+        done: { type: boolean }
     Me:
       type: object
-      required: [user, providers]
+      required: [user, providers, profiles, checklist, completion]
       properties:
         user: { $ref: "#/components/schemas/User" }
         providers:
           type: array
           items: { type: string, enum: [email, telegram, google] }
+        profiles:
+          type: object
+          required: [business, creator]
+          description: Какие профили режимов заполнены
+          properties:
+            business: { type: boolean }
+            creator: { type: boolean }
+        checklist:
+          type: array
+          items: { $ref: "#/components/schemas/Step" }
+        completion: { type: integer, minimum: 0, maximum: 100, description: "Прогресс заполнения для активного режима, %" }

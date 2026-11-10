@@ -52,15 +52,12 @@ type TelegramBotStart struct {
 }
 
 // StartTelegramBot — начать вход через бота. Нужно согласие; лимит — BotLoginPerIP запусков в час с адреса.
-func (s *Auth) StartTelegramBot(ctx context.Context, role string, consent bool, ip string) (TelegramBotStart, error) {
+func (s *Auth) StartTelegramBot(ctx context.Context, consent bool, ip string) (TelegramBotStart, error) {
 	if !s.cfg.TelegramBot {
 		return TelegramBotStart{}, ErrProviderDisabled
 	}
 	if !consent {
 		return TelegramBotStart{}, errConsent()
-	}
-	if role != "" && !domain.ValidRole(role) {
-		return TelegramBotStart{}, &ValidationError{Fields: map[string]string{"role": "Выберите: бизнес или автор"}}
 	}
 	now := s.clock.Now()
 	n, first, err := s.tgLogins.TelegramLoginStats(ctx, ip, now.Add(-time.Hour))
@@ -80,7 +77,7 @@ func (s *Auth) StartTelegramBot(ctx context.Context, role string, consent bool, 
 		return TelegramBotStart{}, err
 	}
 	if err := s.tgLogins.CreateTelegramLogin(ctx, domain.NewTelegramLogin{
-		TokenHash: hashToken(token), BrowserHash: hashToken(secret), Role: role, IP: ip,
+		TokenHash: hashToken(token), BrowserHash: hashToken(secret), IP: ip,
 		CreatedAt: now, ExpiresAt: now.Add(s.cfg.BotLoginTTL),
 	}); err != nil {
 		return TelegramBotStart{}, err
@@ -202,7 +199,7 @@ func (s *Auth) tryConsumeBot(ctx context.Context, bh []byte) (BotLoginStatus, Lo
 	l, err := s.tgLogins.ConsumeTelegramLogin(ctx, bh, now)
 	if err == nil {
 		id := domain.Identity{Provider: domain.ProviderTelegram, Subject: strconv.FormatInt(l.TgUserID, 10)}
-		res, err := s.login(ctx, id, false, domain.NewUser{Role: l.Role, Name: clip(l.TgName, 80)})
+		res, err := s.login(ctx, id, false, domain.NewUser{Name: clip(l.TgName, 80)})
 		if err != nil {
 			return "", LoginResult{}, err
 		}

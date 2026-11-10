@@ -39,8 +39,8 @@ func NormalizeEmail(raw string) (string, error) {
 }
 
 // StartEmail — отправить код на почту. Лимиты: одно письмо на почту в ResendAfter, PerEmailHour в час на почту,
-// PerIPHour в час с адреса. Нужно согласие на обработку данных. role — выбранная при регистрации роль (может быть пустой).
-func (s *Auth) StartEmail(ctx context.Context, rawEmail, role string, consent bool, ip string) (CodeSent, error) {
+// PerIPHour в час с адреса. Нужно согласие на обработку данных.
+func (s *Auth) StartEmail(ctx context.Context, rawEmail string, consent bool, ip string) (CodeSent, error) {
 	if !s.cfg.EmailEnabled {
 		return CodeSent{}, ErrProviderDisabled
 	}
@@ -50,9 +50,6 @@ func (s *Auth) StartEmail(ctx context.Context, rawEmail, role string, consent bo
 	}
 	if err != nil {
 		return CodeSent{}, err
-	}
-	if role != "" && !domain.ValidRole(role) {
-		return CodeSent{}, &ValidationError{Fields: map[string]string{"role": "Выберите: бизнес или автор"}}
 	}
 	now := s.clock.Now()
 	hourAgo := now.Add(-time.Hour)
@@ -82,7 +79,7 @@ func (s *Auth) StartEmail(ctx context.Context, rawEmail, role string, consent bo
 		return CodeSent{}, err
 	}
 	if err := s.codes.CreateCode(ctx, domain.NewLoginCode{
-		Email: email, CodeHash: s.codeHash(email, code), Role: role, IP: ip,
+		Email: email, CodeHash: s.codeHash(email, code), IP: ip,
 		CreatedAt: now, ExpiresAt: now.Add(s.cfg.CodeTTL),
 	}); err != nil {
 		return CodeSent{}, err
@@ -135,7 +132,7 @@ func (s *Auth) VerifyEmail(ctx context.Context, rawEmail, code string) (LoginRes
 		return LoginResult{}, ErrCodeExpired
 	}
 	id := domain.Identity{Provider: domain.ProviderEmail, Subject: email, Email: email}
-	return s.login(ctx, id, true, domain.NewUser{Role: c.Role})
+	return s.login(ctx, id, true, domain.NewUser{})
 }
 
 // codeHash — HMAC-SHA256(секрет, почта:код): в базе нет самих кодов, а без секрета их не подобрать по хешу.

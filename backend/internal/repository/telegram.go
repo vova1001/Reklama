@@ -21,7 +21,7 @@ func NewTelegram(db store.DBTX) *Telegram { return &Telegram{q: store.New(db)} }
 // CreateTelegramLogin — записать новый вход (хеши токена и секрета браузера).
 func (r *Telegram) CreateTelegramLogin(ctx context.Context, l domain.NewTelegramLogin) error {
 	err := r.q.CreateTelegramLogin(ctx, store.CreateTelegramLoginParams{
-		TokenHash: l.TokenHash, BrowserHash: l.BrowserHash, Role: text(l.Role), Ip: l.IP,
+		TokenHash: l.TokenHash, BrowserHash: l.BrowserHash, Ip: l.IP,
 		CreatedAt: ts(l.CreatedAt), ExpiresAt: ts(l.ExpiresAt),
 	})
 	return dbErr("новый вход через бота", err)
@@ -118,7 +118,7 @@ func (r *Telegram) TouchDevice(ctx context.Context, userID int64, deviceHash []b
 
 func tgLoginOf(l store.TelegramLogin) domain.TelegramLogin {
 	out := domain.TelegramLogin{
-		ID: l.ID, BrowserHash: l.BrowserHash, Role: l.Role.String, TgUserID: l.TgUserID.Int64, TgName: l.TgName,
+		ID: l.ID, BrowserHash: l.BrowserHash, TgUserID: l.TgUserID.Int64, TgName: l.TgName,
 		TgUsername: l.TgUsername, CreatedAt: l.CreatedAt.Time, ExpiresAt: l.ExpiresAt.Time, Cancelled: l.Cancelled,
 	}
 	if l.ConfirmedAt.Valid {

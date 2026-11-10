@@ -28,7 +28,7 @@ logs:
 
 ## тесты бэка: модульные + интеграционные на PostgreSQL в Docker
 test:
-	$(COMPOSE) --profile test run --rm --build backend-test; s=$$?; $(COMPOSE) --profile test stop db-test >/dev/null 2>&1; exit $$s
+	$(COMPOSE) --profile test run --rm --build backend-test; s=$$?; $(COMPOSE) --profile test stop db-test redis-test >/dev/null 2>&1; exit $$s
 
 ## стек для e2e: как make dev + бот против подставного Telegram API (docker-compose.e2e.yml)
 e2e-up: env

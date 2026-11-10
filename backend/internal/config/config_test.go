@@ -126,3 +126,31 @@ func TestLoad(t *testing.T) {
 		})
 	}
 }
+
+func TestLimitsAndRedis(t *testing.T) {
+	base := map[string]string{"DATABASE_URL": "postgres://x"}
+	cfg, err := load(env(base))
+	if err != nil || cfg.APIRPS != 10 || cfg.APIBurst != 60 || cfg.UserRPS != 5 || cfg.UserBurst != 30 ||
+		cfg.WebhookRPS != 50 || cfg.WebhookBurst != 200 || cfg.RateRPS != 1 || cfg.RedisURL != "" {
+		t.Fatalf("по умолчанию: %v %+v", err, cfg)
+	}
+	set := func(k, v string) map[string]string {
+		m := map[string]string{}
+		for a, b := range base {
+			m[a] = b
+		}
+		m[k] = v
+		return m
+	}
+	if cfg, err := load(env(set("RATE_LIMIT_API_RPS", "2.5"))); err != nil || cfg.APIRPS != 2.5 {
+		t.Errorf("API RPS: %v %v", err, cfg.APIRPS)
+	}
+	if cfg, err := load(env(set("REDIS_URL", " rediss://u:p@redis:6380/0 "))); err != nil || cfg.RedisURL != "rediss://u:p@redis:6380/0" {
+		t.Errorf("REDIS_URL: %v %q", err, cfg.RedisURL)
+	}
+	for k, v := range map[string]string{"RATE_LIMIT_USER_RPS": "0", "TELEGRAM_WEBHOOK_RPS": "abc", "REDIS_URL": "http://redis"} {
+		if _, err := load(env(set(k, v))); err == nil || !strings.Contains(err.Error(), k) {
+			t.Errorf("%s=%s: %v", k, v, err)
+		}
+	}
+}

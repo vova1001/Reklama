@@ -18,7 +18,7 @@ func clientInfoOf(ctx context.Context) service.ClientInfo { return service.Clien
 
 func TestBotStart(t *testing.T) {
 	a := &fakeAuth{}
-	r := httptest.NewRequest(http.MethodPost, "/api/auth/telegram/bot/start", strings.NewReader(`{"role":"creator","consent":true}`))
+	r := httptest.NewRequest(http.MethodPost, "/api/auth/telegram/bot/start", strings.NewReader(`{"consent":true}`))
 	withCSRF(r)
 	r.Header.Set("X-Real-IP", "203.0.113.5")
 	r.Header.Set("User-Agent", "Firefox/131")
@@ -39,7 +39,7 @@ func TestBotStart(t *testing.T) {
 		t.Error("секрет браузера не должен быть в теле ответа")
 	}
 	got := a.last["botstart"].([]any)
-	if got[0] != "creator" || got[1] != true || got[2] != "203.0.113.5" {
+	if got[0] != true || got[1] != "203.0.113.5" {
 		t.Errorf("%v", got)
 	}
 	// cookie устройства ставится на /api/auth/*, сведения о клиенте — в контексте сервиса
@@ -88,7 +88,7 @@ func TestBotStatus(t *testing.T) {
 	}
 	// ждём
 	a := &fakeAuth{}
-	srv := New(fakeHome{}, fakeDB{}, a, Options{Origin: testOrigin, SecureCookies: true, BotWait: 3 * time.Second})
+	srv := New(fakeHome{}, fakeDB{}, a, &fakeProfiles{}, Options{Origin: testOrigin, SecureCookies: true, BotWait: 3 * time.Second})
 	rec := serve(srv, req())
 	if rec.Code != 200 || strings.TrimSpace(rec.Body.String()) != `{"status":"pending"}` || cookie(rec, sessionCookie) != nil {
 		t.Fatalf("%d %s", rec.Code, rec.Body.String())
@@ -98,12 +98,12 @@ func TestBotStatus(t *testing.T) {
 	}
 	// подтверждено — сессия, cookie входа стёрта
 	now := time.Now()
-	a.user = domain.User{ID: 1, Name: "Анна", Role: "creator", OnboardedAt: &now}
+	a.user = domain.User{ID: 1, Name: "Анна", ActiveMode: "business", OnboardedAt: &now}
 	a.botStatus = service.BotLoginDone
 	rec = serve(srv, req())
 	var out botStatusDTO
 	_ = json.Unmarshal(rec.Body.Bytes(), &out)
-	if rec.Code != 200 || out.Status != "ok" || out.Next != "/account" || out.User == nil || out.User.Name != "Анна" {
+	if rec.Code != 200 || out.Status != "ok" || out.Next != "/app" || out.User == nil || out.User.Name != "Анна" {
 		t.Fatalf("%s", rec.Body.String())
 	}
 	if s := cookie(rec, sessionCookie); s == nil || s.Value != "tok" || !s.HttpOnly {
@@ -137,11 +137,12 @@ func TestBotStatus(t *testing.T) {
 	}
 }
 
-// Вебхук бота — вне CSRF и вне общего лимита /api/auth; без бота маршрута нет.
+// Вебхук бота — вне CSRF и вне лимитов /api по адресу (у него свой); без бота маршрута нет.
 func TestWebhookMount(t *testing.T) {
 	var hit int
 	hook := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { hit++; w.WriteHeader(200) })
-	srv := New(fakeHome{}, fakeDB{}, &fakeAuth{}, Options{Origin: testOrigin, TelegramWebhook: hook, Limiter: NewRateLimiter(0.001, 1)})
+	srv := New(fakeHome{}, fakeDB{}, &fakeAuth{}, &fakeProfiles{}, Options{Origin: testOrigin, TelegramWebhook: hook,
+		APILimiter: newMemLimiter(0.001, 1), AuthLimiter: newMemLimiter(0.001, 1)})
 	for i := 0; i < 5; i++ {
 		r := httptest.NewRequest(http.MethodPost, "/api/telegram/webhook", strings.NewReader(`{}`))
 		r.Header.Set("Origin", "https://evil.example")

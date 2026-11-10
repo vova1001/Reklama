@@ -8,6 +8,15 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+type BusinessProfile struct {
+	UserID    int64
+	Name      string
+	City      string
+	Spheres   []string
+	CreatedAt pgtype.Timestamptz
+	UpdatedAt pgtype.Timestamptz
+}
+
 type Category struct {
 	ID        int64
 	Slug      string
@@ -16,6 +25,16 @@ type Category struct {
 	Position  int32
 	IsActive  bool
 	CreatedAt pgtype.Timestamptz
+}
+
+type CreatorProfile struct {
+	UserID    int64
+	Name      string
+	City      string
+	Spheres   []string
+	Channels  []string
+	CreatedAt pgtype.Timestamptz
+	UpdatedAt pgtype.Timestamptz
 }
 
 type Faq struct {
@@ -41,7 +60,6 @@ type LoginCode struct {
 	ID         int64
 	Email      string
 	CodeHash   []byte
-	Role       pgtype.Text
 	Ip         string
 	Attempts   int16
 	CreatedAt  pgtype.Timestamptz
@@ -92,7 +110,6 @@ type TelegramLogin struct {
 	ID          int64
 	TokenHash   []byte
 	BrowserHash []byte
-	Role        pgtype.Text
 	Ip          string
 	TgUserID    pgtype.Int8
 	TgName      string
@@ -106,17 +123,15 @@ type TelegramLogin struct {
 
 type User struct {
 	ID          int64
-	Role        pgtype.Text
 	Name        string
 	Email       pgtype.Text
 	AvatarUrl   string
 	City        string
-	Spheres     []string
-	Channels    []string
 	OnboardedAt pgtype.Timestamptz
 	CreatedAt   pgtype.Timestamptz
 	UpdatedAt   pgtype.Timestamptz
 	LastLoginAt pgtype.Timestamptz
+	ActiveMode  string
 }
 
 type UserDevice struct {

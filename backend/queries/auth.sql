@@ -11,8 +11,8 @@ JOIN users u ON u.id = i.user_id
 WHERE i.provider = $1 AND i.subject = $2;
 
 -- name: CreateUser :one
-INSERT INTO users (role, name, email, avatar_url)
-VALUES ($1, $2, $3, $4)
+INSERT INTO users (name, email, avatar_url)
+VALUES ($1, $2, $3)
 RETURNING *;
 
 -- name: TouchUserLogin :exec
@@ -22,13 +22,10 @@ UPDATE users SET last_login_at = now() WHERE id = $1;
 -- name: SetUserEmailIfEmpty :exec
 UPDATE users SET email = $2, updated_at = now() WHERE id = $1 AND email IS NULL;
 
--- name: SetUserRoleIfEmpty :exec
-UPDATE users SET role = $2, updated_at = now() WHERE id = $1 AND role IS NULL;
-
--- name: UpdateUserProfile :one
+-- Общие данные профиля; первое сохранение отмечает «общие данные заполнены».
+-- name: UpdateUserBasics :one
 UPDATE users
-SET role = $2, name = $3, city = $4, spheres = $5, channels = $6,
-    onboarded_at = COALESCE(onboarded_at, now()), updated_at = now()
+SET name = $2, city = $3, onboarded_at = COALESCE(onboarded_at, now()), updated_at = now()
 WHERE id = $1
 RETURNING *;
 
@@ -47,8 +44,8 @@ UPDATE identities SET last_used_at = now() WHERE provider = $1 AND subject = $2;
 UPDATE login_codes SET consumed_at = $2 WHERE email = $1 AND consumed_at IS NULL;
 
 -- name: CreateLoginCode :exec
-INSERT INTO login_codes (email, code_hash, role, ip, created_at, expires_at)
-VALUES ($1, $2, $3, $4, $5, $6);
+INSERT INTO login_codes (email, code_hash, ip, created_at, expires_at)
+VALUES ($1, $2, $3, $4, $5);
 
 -- name: GetActiveCode :one
 SELECT * FROM login_codes
@@ -92,6 +89,3 @@ DELETE FROM sessions WHERE token_hash = $1;
 
 -- name: DeleteExpiredSessions :execrows
 DELETE FROM sessions WHERE expires_at < $1;
-
--- name: CountActiveCategories :one
-SELECT count(*)::int FROM categories WHERE is_active AND slug = ANY(sqlc.arg(slugs)::text[]);

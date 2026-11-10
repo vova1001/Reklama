@@ -27,7 +27,6 @@ func (p TelegramProfile) Name() string {
 type TelegramLogin struct {
 	ID          int64
 	BrowserHash []byte
-	Role        string
 	TgUserID    int64 // 0 — ещё не подтверждён
 	TgName      string
 	TgUsername  string
@@ -42,7 +41,6 @@ type TelegramLogin struct {
 type NewTelegramLogin struct {
 	TokenHash   []byte
 	BrowserHash []byte
-	Role        string
 	IP          string
 	CreatedAt   time.Time
 	ExpiresAt   time.Time

@@ -35,3 +35,27 @@ func Down(pool *pgxpool.Pool) error {
 	}
 	return goose.DownTo(db, ".", 0)
 }
+
+// UpTo применяет миграции до версии version включительно (для проверки переноса данных в тестах).
+func UpTo(pool *pgxpool.Pool, version int64) error {
+	db := stdlib.OpenDBFromPool(pool)
+	defer db.Close()
+	goose.SetBaseFS(FS)
+	goose.SetLogger(goose.NopLogger())
+	if err := goose.SetDialect("postgres"); err != nil {
+		return err
+	}
+	return goose.UpTo(db, ".", version)
+}
+
+// DownTo откатывает миграции до версии version (она остаётся применённой).
+func DownTo(pool *pgxpool.Pool, version int64) error {
+	db := stdlib.OpenDBFromPool(pool)
+	defer db.Close()
+	goose.SetBaseFS(FS)
+	goose.SetLogger(goose.NopLogger())
+	if err := goose.SetDialect("postgres"); err != nil {
+		return err
+	}
+	return goose.DownTo(db, ".", version)
+}

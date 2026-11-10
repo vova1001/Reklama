@@ -6,21 +6,12 @@ import "ohvat/backend/internal/domain"
 
 type emailStartIn struct {
 	Email   string `json:"email"`
-	Role    string `json:"role"`
 	Consent bool   `json:"consent"`
 }
 
 type emailVerifyIn struct {
 	Email string `json:"email"`
 	Code  string `json:"code"`
-}
-
-type profileIn struct {
-	Role     string   `json:"role"`
-	Name     string   `json:"name"`
-	City     string   `json:"city"`
-	Spheres  []string `json:"spheres"`
-	Channels []string `json:"channels"`
 }
 
 type telegramDTO struct {
@@ -30,8 +21,7 @@ type telegramDTO struct {
 }
 
 type botStartIn struct {
-	Role    string `json:"role"`
-	Consent bool   `json:"consent"`
+	Consent bool `json:"consent"`
 }
 
 type botStartDTO struct {
@@ -60,15 +50,13 @@ type codeSentDTO struct {
 }
 
 type userDTO struct {
-	ID        int64    `json:"id"`
-	Role      *string  `json:"role"`
-	Name      string   `json:"name"`
-	Email     *string  `json:"email"`
-	AvatarURL string   `json:"avatarUrl"`
-	City      string   `json:"city"`
-	Spheres   []string `json:"spheres"`
-	Channels  []string `json:"channels"`
-	Onboarded bool     `json:"onboarded"`
+	ID        int64   `json:"id"`
+	Name      string  `json:"name"`
+	Email     *string `json:"email"`
+	AvatarURL string  `json:"avatarUrl"`
+	City      string  `json:"city"`
+	Mode      string  `json:"mode"`
+	Onboarded bool    `json:"onboarded"`
 }
 
 type loginDTO struct {
@@ -77,19 +65,10 @@ type loginDTO struct {
 	Created bool    `json:"created"`
 }
 
-type meDTO struct {
-	User      userDTO  `json:"user"`
-	Providers []string `json:"providers"`
-}
-
 func toUserDTO(u domain.User) userDTO {
-	out := userDTO{
-		ID: u.ID, Name: u.Name, AvatarURL: u.AvatarURL, City: u.City,
-		Spheres: nonNilStr(u.Spheres), Channels: nonNilStr(u.Channels), Onboarded: u.Onboarded(),
-	}
-	if u.Role != "" {
-		r := u.Role
-		out.Role = &r
+	out := userDTO{ID: u.ID, Name: u.Name, AvatarURL: u.AvatarURL, City: u.City, Mode: u.ActiveMode, Onboarded: u.Onboarded()}
+	if out.Mode == "" {
+		out.Mode = domain.ModeBusiness
 	}
 	if u.Email != "" {
 		e := u.Email

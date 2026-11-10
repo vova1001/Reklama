@@ -14,7 +14,7 @@ const me = Astro.locals.me;
     <ul>{NAV.map((n) => <li><a class="lnk" href={n.href}>{n.title}</a></li>)}</ul>
     <div class="r">
       {me ? (
-        <a class="me-link" href="/account" aria-label={`Кабинет: ${me.user.name || 'профиль'}`} data-me>
+        <a class="me-link" href="/app" aria-label={`Приложение: ${me.user.name || "профиль"}`} data-me>
           <Avatar user={me.user} size={36} /><span class="nm">{shortName(me.user)}</span>
         </a>
       ) : (
@@ -31,7 +31,7 @@ const me = Astro.locals.me;
   <div class="w">
     <ul>
       {NAV.map((n) => <li><a href={n.href}>{n.title}</a></li>)}
-      <li>{me ? <a href="/account">Кабинет</a> : <a href="/login">Войти</a>}</li>
+      <li>{me ? <a href="/app">Приложение</a> : <a href="/login">Войти</a>}</li>
     </ul>
     <div class="cta"><a class="btn b-l" href="/tasks/new">Разместить задание</a><a class="btn b-ol" href="/tasks">Найти заказы</a></div>
   </div>

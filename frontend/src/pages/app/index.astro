@@ -1,0 +1,85 @@
+---
+// Лента приложения. Автор — задания по темам (пока примеры), бизнес — «Создать задание» и как будет выглядеть
+// своё задание (пример). Обе ленты в разметке, видна лента включённого режима.
+import App from '../../layouts/App.astro';
+import Icon from '../../components/Icon.astro';
+import Nudge from '../../components/app/Nudge.astro';
+import Search from '../../components/app/Search.astro';
+import Side from '../../components/app/Side.astro';
+import { DEMO_OWN_TASK, DEMO_TASKS, FEED } from '../../content/app';
+import { shortName } from '../../lib/auth';
+
+const me = Astro.locals.me;
+if (!me) return Astro.redirect('/login', 303);
+const hello = me.user.name ? `Здравствуйте, ${shortName(me.user)}` : 'Здравствуйте';
+---
+<App title="Лента" page="feed">
+  <Search id="q" class="feed-search" />
+  <p class="hello">{hello}</p>
+
+  <!-- ===== автор ===== -->
+  <section class="lenta" data-for-mode="creator" aria-labelledby="feed-c">
+    <div class="feed-head">
+      <h1 id="feed-c">{FEED.creator.title}</h1>
+      <p class="muted">{FEED.creator.sub}</p>
+    </div>
+    <Nudge me={me} mode="creator" />
+    <ul class="tasks">
+      {DEMO_TASKS.map((t) => (
+        <li class="card task" data-demo>
+          <div class="task-top">
+            <span class="task-ic" aria-hidden="true"><Icon name={t.icon} size={22} /></span>
+            <div class="task-who">
+              <p class="task-brand">{t.brand}</p>
+              <p class="task-meta"><Icon name="map-pin" size={16} />{t.city} · {t.sphere}</p>
+            </div>
+            <span class="pill-badge warn">Пример</span>
+          </div>
+          <h2 class="task-t">{t.title}</h2>
+          <dl class="task-facts">
+            <div><dt>Оплата</dt><dd>{t.budget}</dd></div>
+            <div><dt>Результат</dt><dd>{t.goal}</dd></div>
+            <div><dt>Формат</dt><dd>{t.format}</dd></div>
+            <div><dt>Срок</dt><dd>{t.due}</dd></div>
+          </dl>
+          <div class="task-act">
+            <button class="btn pill-dark" type="button" data-respond>Откликнуться</button>
+            <p class="task-note" role="status" data-respond-note></p>
+          </div>
+        </li>
+      ))}
+    </ul>
+  </section>
+
+  <!-- ===== бизнес ===== -->
+  <section class="lenta" data-for-mode="business" aria-labelledby="feed-b">
+    <div class="feed-head">
+      <h1 id="feed-b">{FEED.business.title}</h1>
+      <p class="muted">{FEED.business.sub}</p>
+    </div>
+    <Nudge me={me} mode="business" />
+    <div class="card empty">
+      <span class="empty-ic" aria-hidden="true"><Icon name="list-plus" size={28} /></span>
+      <h2>Заданий пока нет</h2>
+      <p class="muted">Опишите, что снять, задайте условия — оплата только за результат.</p>
+      <a class="btn pill-emerald" href="/tasks/new" data-create-task><Icon name="plus" size={20} />Создать задание</a>
+    </div>
+    <p class="feed-lbl">Так будет выглядеть ваше задание</p>
+    <div class="card task own" data-demo>
+      <div class="task-top">
+        <span class="task-ic" aria-hidden="true"><Icon name="coffee" size={22} /></span>
+        <div class="task-who">
+          <h2 class="task-t">{DEMO_OWN_TASK.title}</h2>
+          <p class="task-meta">{DEMO_OWN_TASK.budget} · {DEMO_OWN_TASK.goal}</p>
+        </div>
+        <span class="pill-badge warn">Пример</span>
+      </div>
+      <div class="own-row">
+        <span class="pill-badge ok"><span class="live" aria-hidden="true"></span>{DEMO_OWN_TASK.status}</span>
+        <span class="own-n"><Icon name="users" size={18} />Откликов: {DEMO_OWN_TASK.responses}</span>
+      </div>
+    </div>
+  </section>
+
+  <Side slot="aside" me={me} />
+</App>

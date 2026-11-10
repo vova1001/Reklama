@@ -90,17 +90,6 @@ func (q *Queries) ConsumeCode(ctx context.Context, arg ConsumeCodeParams) (int64
 	return result.RowsAffected(), nil
 }
 
-const countActiveCategories = `-- name: CountActiveCategories :one
-SELECT count(*)::int FROM categories WHERE is_active AND slug = ANY($1::text[])
-`
-
-func (q *Queries) CountActiveCategories(ctx context.Context, slugs []string) (int32, error) {
-	row := q.db.QueryRow(ctx, countActiveCategories, slugs)
-	var column_1 int32
-	err := row.Scan(&column_1)
-	return column_1, err
-}
-
 const createIdentity = `-- name: CreateIdentity :exec
 INSERT INTO identities (user_id, provider, subject, email)
 VALUES ($1, $2, $3, $4)
@@ -124,14 +113,13 @@ func (q *Queries) CreateIdentity(ctx context.Context, arg CreateIdentityParams) 
 }
 
 const createLoginCode = `-- name: CreateLoginCode :exec
-INSERT INTO login_codes (email, code_hash, role, ip, created_at, expires_at)
-VALUES ($1, $2, $3, $4, $5, $6)
+INSERT INTO login_codes (email, code_hash, ip, created_at, expires_at)
+VALUES ($1, $2, $3, $4, $5)
 `
 
 type CreateLoginCodeParams struct {
 	Email     string
 	CodeHash  []byte
-	Role      pgtype.Text
 	Ip        string
 	CreatedAt pgtype.Timestamptz
 	ExpiresAt pgtype.Timestamptz
@@ -141,7 +129,6 @@ func (q *Queries) CreateLoginCode(ctx context.Context, arg CreateLoginCodeParams
 	_, err := q.db.Exec(ctx, createLoginCode,
 		arg.Email,
 		arg.CodeHash,
-		arg.Role,
 		arg.Ip,
 		arg.CreatedAt,
 		arg.ExpiresAt,
@@ -165,39 +152,31 @@ func (q *Queries) CreateSession(ctx context.Context, arg CreateSessionParams) er
 }
 
 const createUser = `-- name: CreateUser :one
-INSERT INTO users (role, name, email, avatar_url)
-VALUES ($1, $2, $3, $4)
-RETURNING id, role, name, email, avatar_url, city, spheres, channels, onboarded_at, created_at, updated_at, last_login_at
+INSERT INTO users (name, email, avatar_url)
+VALUES ($1, $2, $3)
+RETURNING id, name, email, avatar_url, city, onboarded_at, created_at, updated_at, last_login_at, active_mode
 `
 
 type CreateUserParams struct {
-	Role      pgtype.Text
 	Name      string
 	Email     pgtype.Text
 	AvatarUrl string
 }
 
 func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, error) {
-	row := q.db.QueryRow(ctx, createUser,
-		arg.Role,
-		arg.Name,
-		arg.Email,
-		arg.AvatarUrl,
-	)
+	row := q.db.QueryRow(ctx, createUser, arg.Name, arg.Email, arg.AvatarUrl)
 	var i User
 	err := row.Scan(
 		&i.ID,
-		&i.Role,
 		&i.Name,
 		&i.Email,
 		&i.AvatarUrl,
 		&i.City,
-		&i.Spheres,
-		&i.Channels,
 		&i.OnboardedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.LastLoginAt,
+		&i.ActiveMode,
 	)
 	return i, err
 }
@@ -236,7 +215,7 @@ func (q *Queries) DeleteSession(ctx context.Context, tokenHash []byte) error {
 }
 
 const getActiveCode = `-- name: GetActiveCode :one
-SELECT id, email, code_hash, role, ip, attempts, created_at, expires_at, consumed_at FROM login_codes
+SELECT id, email, code_hash, ip, attempts, created_at, expires_at, consumed_at FROM login_codes
 WHERE email = $1 AND consumed_at IS NULL AND expires_at > $2
 ORDER BY created_at DESC
 LIMIT 1
@@ -254,7 +233,6 @@ func (q *Queries) GetActiveCode(ctx context.Context, arg GetActiveCodeParams) (L
 		&i.ID,
 		&i.Email,
 		&i.CodeHash,
-		&i.Role,
 		&i.Ip,
 		&i.Attempts,
 		&i.CreatedAt,
@@ -265,7 +243,7 @@ func (q *Queries) GetActiveCode(ctx context.Context, arg GetActiveCodeParams) (L
 }
 
 const getSessionUser = `-- name: GetSessionUser :one
-SELECT u.id, u.role, u.name, u.email, u.avatar_url, u.city, u.spheres, u.channels, u.onboarded_at, u.created_at, u.updated_at, u.last_login_at
+SELECT u.id, u.name, u.email, u.avatar_url, u.city, u.onboarded_at, u.created_at, u.updated_at, u.last_login_at, u.active_mode
 FROM sessions s
 JOIN users u ON u.id = s.user_id
 WHERE s.token_hash = $1 AND s.expires_at > $2
@@ -281,23 +259,21 @@ func (q *Queries) GetSessionUser(ctx context.Context, arg GetSessionUserParams) 
 	var i User
 	err := row.Scan(
 		&i.ID,
-		&i.Role,
 		&i.Name,
 		&i.Email,
 		&i.AvatarUrl,
 		&i.City,
-		&i.Spheres,
-		&i.Channels,
 		&i.OnboardedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.LastLoginAt,
+		&i.ActiveMode,
 	)
 	return i, err
 }
 
 const getUser = `-- name: GetUser :one
-SELECT id, role, name, email, avatar_url, city, spheres, channels, onboarded_at, created_at, updated_at, last_login_at FROM users WHERE id = $1
+SELECT id, name, email, avatar_url, city, onboarded_at, created_at, updated_at, last_login_at, active_mode FROM users WHERE id = $1
 `
 
 func (q *Queries) GetUser(ctx context.Context, id int64) (User, error) {
@@ -305,23 +281,21 @@ func (q *Queries) GetUser(ctx context.Context, id int64) (User, error) {
 	var i User
 	err := row.Scan(
 		&i.ID,
-		&i.Role,
 		&i.Name,
 		&i.Email,
 		&i.AvatarUrl,
 		&i.City,
-		&i.Spheres,
-		&i.Channels,
 		&i.OnboardedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.LastLoginAt,
+		&i.ActiveMode,
 	)
 	return i, err
 }
 
 const getUserByEmail = `-- name: GetUserByEmail :one
-SELECT id, role, name, email, avatar_url, city, spheres, channels, onboarded_at, created_at, updated_at, last_login_at FROM users WHERE email = $1
+SELECT id, name, email, avatar_url, city, onboarded_at, created_at, updated_at, last_login_at, active_mode FROM users WHERE email = $1
 `
 
 func (q *Queries) GetUserByEmail(ctx context.Context, email pgtype.Text) (User, error) {
@@ -329,23 +303,21 @@ func (q *Queries) GetUserByEmail(ctx context.Context, email pgtype.Text) (User, 
 	var i User
 	err := row.Scan(
 		&i.ID,
-		&i.Role,
 		&i.Name,
 		&i.Email,
 		&i.AvatarUrl,
 		&i.City,
-		&i.Spheres,
-		&i.Channels,
 		&i.OnboardedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.LastLoginAt,
+		&i.ActiveMode,
 	)
 	return i, err
 }
 
 const getUserByIdentity = `-- name: GetUserByIdentity :one
-SELECT u.id, u.role, u.name, u.email, u.avatar_url, u.city, u.spheres, u.channels, u.onboarded_at, u.created_at, u.updated_at, u.last_login_at
+SELECT u.id, u.name, u.email, u.avatar_url, u.city, u.onboarded_at, u.created_at, u.updated_at, u.last_login_at, u.active_mode
 FROM identities i
 JOIN users u ON u.id = i.user_id
 WHERE i.provider = $1 AND i.subject = $2
@@ -361,17 +333,15 @@ func (q *Queries) GetUserByIdentity(ctx context.Context, arg GetUserByIdentityPa
 	var i User
 	err := row.Scan(
 		&i.ID,
-		&i.Role,
 		&i.Name,
 		&i.Email,
 		&i.AvatarUrl,
 		&i.City,
-		&i.Spheres,
-		&i.Channels,
 		&i.OnboardedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.LastLoginAt,
+		&i.ActiveMode,
 	)
 	return i, err
 }
@@ -434,20 +404,6 @@ func (q *Queries) SetUserEmailIfEmpty(ctx context.Context, arg SetUserEmailIfEmp
 	return err
 }
 
-const setUserRoleIfEmpty = `-- name: SetUserRoleIfEmpty :exec
-UPDATE users SET role = $2, updated_at = now() WHERE id = $1 AND role IS NULL
-`
-
-type SetUserRoleIfEmptyParams struct {
-	ID   int64
-	Role pgtype.Text
-}
-
-func (q *Queries) SetUserRoleIfEmpty(ctx context.Context, arg SetUserRoleIfEmptyParams) error {
-	_, err := q.db.Exec(ctx, setUserRoleIfEmpty, arg.ID, arg.Role)
-	return err
-}
-
 const touchIdentity = `-- name: TouchIdentity :exec
 UPDATE identities SET last_used_at = now() WHERE provider = $1 AND subject = $2
 `
@@ -471,46 +427,34 @@ func (q *Queries) TouchUserLogin(ctx context.Context, id int64) error {
 	return err
 }
 
-const updateUserProfile = `-- name: UpdateUserProfile :one
+const updateUserBasics = `-- name: UpdateUserBasics :one
 UPDATE users
-SET role = $2, name = $3, city = $4, spheres = $5, channels = $6,
-    onboarded_at = COALESCE(onboarded_at, now()), updated_at = now()
+SET name = $2, city = $3, onboarded_at = COALESCE(onboarded_at, now()), updated_at = now()
 WHERE id = $1
-RETURNING id, role, name, email, avatar_url, city, spheres, channels, onboarded_at, created_at, updated_at, last_login_at
+RETURNING id, name, email, avatar_url, city, onboarded_at, created_at, updated_at, last_login_at, active_mode
 `
 
-type UpdateUserProfileParams struct {
-	ID       int64
-	Role     pgtype.Text
-	Name     string
-	City     string
-	Spheres  []string
-	Channels []string
+type UpdateUserBasicsParams struct {
+	ID   int64
+	Name string
+	City string
 }
 
-func (q *Queries) UpdateUserProfile(ctx context.Context, arg UpdateUserProfileParams) (User, error) {
-	row := q.db.QueryRow(ctx, updateUserProfile,
-		arg.ID,
-		arg.Role,
-		arg.Name,
-		arg.City,
-		arg.Spheres,
-		arg.Channels,
-	)
+// Общие данные профиля; первое сохранение отмечает «общие данные заполнены».
+func (q *Queries) UpdateUserBasics(ctx context.Context, arg UpdateUserBasicsParams) (User, error) {
+	row := q.db.QueryRow(ctx, updateUserBasics, arg.ID, arg.Name, arg.City)
 	var i User
 	err := row.Scan(
 		&i.ID,
-		&i.Role,
 		&i.Name,
 		&i.Email,
 		&i.AvatarUrl,
 		&i.City,
-		&i.Spheres,
-		&i.Channels,
 		&i.OnboardedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.LastLoginAt,
+		&i.ActiveMode,
 	)
 	return i, err
 }

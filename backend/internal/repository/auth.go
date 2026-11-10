@@ -68,7 +68,7 @@ func (r *Auth) CreateUserWithIdentity(ctx context.Context, nu domain.NewUser, id
 	err := r.inTx(ctx, func(q *store.Queries) error {
 		var err error
 		out, err = q.CreateUser(ctx, store.CreateUserParams{
-			Role: text(nu.Role), Name: nu.Name, Email: text(nu.Email), AvatarUrl: nu.AvatarURL,
+			Name: nu.Name, Email: text(nu.Email), AvatarUrl: nu.AvatarURL,
 		})
 		if err != nil {
 			return err
@@ -96,19 +96,13 @@ func (r *Auth) LinkIdentity(ctx context.Context, userID int64, id domain.Identit
 	return dbErr("привязка способа входа", err)
 }
 
-// TouchLogin — отметить вход; роль записывается, только если ещё не выбрана.
-func (r *Auth) TouchLogin(ctx context.Context, userID int64, id domain.Identity, role string) error {
+// TouchLogin — отметить вход: время входа пользователя и способа.
+func (r *Auth) TouchLogin(ctx context.Context, userID int64, id domain.Identity) error {
 	err := r.inTx(ctx, func(q *store.Queries) error {
 		if err := q.TouchUserLogin(ctx, userID); err != nil {
 			return err
 		}
-		if err := q.TouchIdentity(ctx, store.TouchIdentityParams{Provider: id.Provider, Subject: id.Subject}); err != nil {
-			return err
-		}
-		if role == "" {
-			return nil
-		}
-		return q.SetUserRoleIfEmpty(ctx, store.SetUserRoleIfEmptyParams{ID: userID, Role: text(role)})
+		return q.TouchIdentity(ctx, store.TouchIdentityParams{Provider: id.Provider, Subject: id.Subject})
 	})
 	return dbErr("отметка входа", err)
 }
@@ -117,20 +111,6 @@ func (r *Auth) TouchLogin(ctx context.Context, userID int64, id domain.Identity,
 func (r *Auth) Providers(ctx context.Context, userID int64) ([]string, error) {
 	p, err := r.q.ListUserProviders(ctx, userID)
 	return p, dbErr("способы входа", err)
-}
-
-// UpdateProfile — сохранить анкету (первое сохранение отмечает «анкета заполнена»).
-func (r *Auth) UpdateProfile(ctx context.Context, userID int64, p domain.Profile) (domain.User, error) {
-	u, err := r.q.UpdateUserProfile(ctx, store.UpdateUserProfileParams{
-		ID: userID, Role: text(p.Role), Name: p.Name, City: p.City, Spheres: nonNil(p.Spheres), Channels: nonNil(p.Channels),
-	})
-	return userOf(u), dbErr("анкета", err)
-}
-
-// CountCategories — сколько из переданных тем существует и активно.
-func (r *Auth) CountCategories(ctx context.Context, slugs []string) (int, error) {
-	n, err := r.q.CountActiveCategories(ctx, nonNil(slugs))
-	return int(n), dbErr("темы", err)
 }
 
 // ===== коды =====
@@ -154,7 +134,7 @@ func (r *Auth) CreateCode(ctx context.Context, c domain.NewLoginCode) error {
 			return err
 		}
 		return q.CreateLoginCode(ctx, store.CreateLoginCodeParams{
-			Email: c.Email, CodeHash: c.CodeHash, Role: text(c.Role), Ip: c.IP, CreatedAt: ts(c.CreatedAt), ExpiresAt: ts(c.ExpiresAt),
+			Email: c.Email, CodeHash: c.CodeHash, Ip: c.IP, CreatedAt: ts(c.CreatedAt), ExpiresAt: ts(c.ExpiresAt),
 		})
 	})
 	return dbErr("новый код", err)
@@ -167,7 +147,7 @@ func (r *Auth) ActiveCode(ctx context.Context, email string, now time.Time) (dom
 		return domain.LoginCode{}, dbErr("код", err)
 	}
 	return domain.LoginCode{
-		ID: c.ID, Email: c.Email, CodeHash: c.CodeHash, Role: c.Role.String, Attempts: int(c.Attempts),
+		ID: c.ID, Email: c.Email, CodeHash: c.CodeHash, Attempts: int(c.Attempts),
 		CreatedAt: c.CreatedAt.Time, ExpiresAt: c.ExpiresAt.Time,
 	}, nil
 }
@@ -240,8 +220,8 @@ func dbErr(what string, err error) error {
 
 func userOf(u store.User) domain.User {
 	out := domain.User{
-		ID: u.ID, Role: u.Role.String, Name: u.Name, Email: u.Email.String, AvatarURL: u.AvatarUrl, City: u.City,
-		Spheres: nonNil(u.Spheres), Channels: nonNil(u.Channels), CreatedAt: u.CreatedAt.Time,
+		ID: u.ID, Name: u.Name, Email: u.Email.String, AvatarURL: u.AvatarUrl, City: u.City,
+		ActiveMode: u.ActiveMode, CreatedAt: u.CreatedAt.Time,
 	}
 	if u.OnboardedAt.Valid {
 		t := u.OnboardedAt.Time

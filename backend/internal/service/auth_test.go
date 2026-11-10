@@ -69,17 +69,15 @@ func TestStartEmail(t *testing.T) {
 		name    string
 		prep    func(e env)
 		email   string
-		role    string
 		consent bool
 		ip      string
 		reason  string // ожидаемая причина лимита
 		field   string // ожидаемое поле ошибки
 		err     error
 	}{
-		{name: "успех", email: "Anna@Mail.ru", role: "business", consent: true, ip: "1.1.1.1"},
+		{name: "успех", email: "Anna@Mail.ru", consent: true, ip: "1.1.1.1"},
 		{name: "без согласия", email: "a@mail.ru", ip: "1.1.1.1", field: "consent"},
 		{name: "плохая почта", email: "anna", consent: true, ip: "1.1.1.1", field: "email"},
-		{name: "плохая роль", email: "a@mail.ru", role: "admin", consent: true, ip: "1.1.1.1", field: "role"},
 		{name: "повтор раньше 60 с", email: "a@mail.ru", consent: true, ip: "1.1.1.1", reason: "email_cooldown",
 			prep: func(e env) { mustStart(t, e, "a@mail.ru", "2.2.2.2"); e.clk.add(30 * time.Second) }},
 		{name: "6-е письмо за час на почту", email: "a@mail.ru", consent: true, ip: "9.9.9.9", reason: "email_hourly",
@@ -112,7 +110,7 @@ func TestStartEmail(t *testing.T) {
 			if c.prep != nil {
 				c.prep(e)
 			}
-			sent, err := e.a.StartEmail(ctx, c.email, c.role, c.consent, c.ip)
+			sent, err := e.a.StartEmail(ctx, c.email, c.consent, c.ip)
 			var le *LimitError
 			var ve *ValidationError
 			switch {
@@ -163,7 +161,7 @@ func TestEmailCooldownPasses(t *testing.T) {
 
 func mustStart(t *testing.T, e env, email, ip string) {
 	t.Helper()
-	if _, err := e.a.StartEmail(context.Background(), email, "", true, ip); err != nil {
+	if _, err := e.a.StartEmail(context.Background(), email, true, ip); err != nil {
 		t.Fatalf("StartEmail(%s): %v", email, err)
 	}
 }
@@ -177,16 +175,16 @@ func wrong(code string) string {
 
 func TestVerifyEmail(t *testing.T) {
 	ctx := context.Background()
-	t.Run("успех: новый пользователь с ролью и сессией", func(t *testing.T) {
+	t.Run("успех: новый пользователь в режиме «Бизнес» и сессия", func(t *testing.T) {
 		e := newEnv(t)
-		if _, err := e.a.StartEmail(ctx, "a@mail.ru", "creator", true, "1.1.1.1"); err != nil {
+		if _, err := e.a.StartEmail(ctx, "a@mail.ru", true, "1.1.1.1"); err != nil {
 			t.Fatal(err)
 		}
 		res, err := e.a.VerifyEmail(ctx, " A@mail.ru ", e.mail.code("a@mail.ru"))
 		if err != nil {
 			t.Fatal(err)
 		}
-		if !res.Created || res.User.Role != "creator" || res.User.Email != "a@mail.ru" || res.Token == "" {
+		if !res.Created || res.User.ActiveMode != "business" || res.User.Email != "a@mail.ru" || res.Token == "" {
 			t.Fatalf("%+v", res)
 		}
 		if !res.ExpiresAt.Equal(t0.Add(30 * 24 * time.Hour)) {
@@ -353,16 +351,16 @@ func TestLoginTelegram(t *testing.T) {
 	e := newEnv(t)
 	d := signTelegram("123456:TEST-token", map[string]string{"id": "7", "first_name": "Иван", "auth_date": strconv.FormatInt(t0.Unix(), 10)})
 	var ve *ValidationError
-	if _, err := e.a.LoginTelegram(ctx, d, "business", false); !errors.As(err, &ve) || ve.Fields["consent"] == "" {
+	if _, err := e.a.LoginTelegram(ctx, d, false); !errors.As(err, &ve) || ve.Fields["consent"] == "" {
 		t.Fatalf("без согласия: %v", err)
 	}
-	res, err := e.a.LoginTelegram(ctx, d, "business", true)
-	if err != nil || !res.Created || res.User.Name != "Иван" || res.User.Role != "business" || res.User.Email != "" {
+	res, err := e.a.LoginTelegram(ctx, d, true)
+	if err != nil || !res.Created || res.User.Name != "Иван" || res.User.Email != "" {
 		t.Fatalf("%v %+v", err, res)
 	}
-	res2, err := e.a.LoginTelegram(ctx, d, "creator", true)
-	if err != nil || res2.User.ID != res.User.ID || res2.User.Role != "business" {
-		t.Fatalf("повторный вход не меняет роль: %v %+v", err, res2)
+	res2, err := e.a.LoginTelegram(ctx, d, true)
+	if err != nil || res2.User.ID != res.User.ID || res2.Created {
+		t.Fatalf("повторный вход — тот же аккаунт: %v %+v", err, res2)
 	}
 	if m := e.a.Methods(); m.TelegramBotID != "123456" || !m.Email || !m.Google {
 		t.Errorf("способы: %+v", m)
@@ -393,16 +391,15 @@ func TestGoogle(t *testing.T) {
 			t.Fatal(err)
 		}
 		e.g.p = GoogleProfile{Subject: "g-1", Email: "Anna@Gmail.com", EmailVerified: true, Name: "Anna", Picture: "https://lh3/a.png"}
-		res, err := e.a.LoginGoogle(ctx, "code", "verifier", "")
+		res, err := e.a.LoginGoogle(ctx, "code", "verifier")
 		if err != nil || res.User.ID != first.User.ID || res.Created {
 			t.Fatalf("%v %+v", err, res)
 		}
 		if e.g.got.verifier != "verifier" {
 			t.Error("verifier не передан в обмен")
 		}
-		acc, _ := e.a.Account(ctx, res.User)
-		if strings.Join(acc.Providers, ",") != "email,google" {
-			t.Errorf("способы входа: %v", acc.Providers)
+		if p, _ := e.repo.Providers(ctx, res.User.ID); strings.Join(p, ",") != "email,google" {
+			t.Errorf("способы входа: %v", p)
 		}
 	})
 	t.Run("неподтверждённая почта — отдельный аккаунт без почты", func(t *testing.T) {
@@ -410,15 +407,15 @@ func TestGoogle(t *testing.T) {
 		mustStart(t, e, "anna@gmail.com", "1.1.1.1")
 		first, _ := e.a.VerifyEmail(ctx, "anna@gmail.com", e.mail.code("anna@gmail.com"))
 		e.g.p = GoogleProfile{Subject: "g-2", Email: "anna@gmail.com", EmailVerified: false}
-		res, err := e.a.LoginGoogle(ctx, "code", "v", "creator")
-		if err != nil || res.User.ID == first.User.ID || res.User.Email != "" || res.User.Role != "creator" {
+		res, err := e.a.LoginGoogle(ctx, "code", "v")
+		if err != nil || res.User.ID == first.User.ID || res.User.Email != "" {
 			t.Fatalf("%v %+v", err, res)
 		}
 	})
 	t.Run("после Google вход по той же почте — тот же аккаунт", func(t *testing.T) {
 		e := newEnv(t)
 		e.g.p = GoogleProfile{Subject: "g-3", Email: "ivan@gmail.com", EmailVerified: true}
-		g, err := e.a.LoginGoogle(ctx, "c", "v", "business")
+		g, err := e.a.LoginGoogle(ctx, "c", "v")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -443,7 +440,7 @@ func TestGoogle(t *testing.T) {
 		t.Run(c.name, func(t *testing.T) {
 			e := newEnv(t)
 			e.g.p, e.g.err = c.p, c.exErr
-			if _, err := e.a.LoginGoogle(ctx, c.code, c.vr, ""); !errors.Is(err, ErrGoogleFailed) {
+			if _, err := e.a.LoginGoogle(ctx, c.code, c.vr); !errors.Is(err, ErrGoogleFailed) {
 				t.Fatal(err)
 			}
 		})
@@ -453,7 +450,7 @@ func TestGoogle(t *testing.T) {
 		if _, err := e.a.StartGoogle(true); !errors.Is(err, ErrProviderDisabled) {
 			t.Fatal(err)
 		}
-		if _, err := e.a.LoginGoogle(ctx, "c", "v", ""); !errors.Is(err, ErrProviderDisabled) {
+		if _, err := e.a.LoginGoogle(ctx, "c", "v"); !errors.Is(err, ErrProviderDisabled) {
 			t.Fatal(err)
 		}
 		if e.a.Methods().Google {
@@ -466,13 +463,13 @@ func TestLoginRaceConflictRetries(t *testing.T) {
 	// двойной клик: второй запрос создаёт пользователя одновременно → конфликт → повторный поиск находит первого
 	e := newEnv(t)
 	e.g.p = GoogleProfile{Subject: "g-9"}
-	first, err := e.a.LoginGoogle(context.Background(), "c", "v", "")
+	first, err := e.a.LoginGoogle(context.Background(), "c", "v")
 	if err != nil {
 		t.Fatal(err)
 	}
 	r := &conflictOnce{memRepo: e.repo}
 	a := NewAuth(AuthDeps{Users: r, Codes: e.repo, Sessions: e.repo, Google: e.g, Clock: e.clk}, AuthConfig{})
-	res, err := a.LoginGoogle(context.Background(), "c", "v", "")
+	res, err := a.LoginGoogle(context.Background(), "c", "v")
 	if err != nil || res.User.ID != first.User.ID {
 		t.Fatalf("%v %+v", err, res)
 	}
@@ -521,90 +518,6 @@ func TestSessionAndLogout(t *testing.T) {
 	if _, err := e.a.Session(ctx, res2.Token); !errors.Is(err, ErrUnauthorized) {
 		t.Error("истёкшая сессия должна быть недействительна")
 	}
-}
-
-func TestSaveProfile(t *testing.T) {
-	ctx := context.Background()
-	newUser := func(e env, role string) domain.User {
-		u, err := e.repo.CreateUserWithIdentity(ctx, domain.NewUser{Role: role}, domain.Identity{Provider: "email", Subject: role + "@x.ru"})
-		if err != nil {
-			t.Fatal(err)
-		}
-		return u
-	}
-	cases := []struct {
-		name   string
-		role   string // роль пользователя
-		in     domain.Profile
-		fields []string
-		check  func(t *testing.T, u domain.User)
-	}{
-		{name: "бизнес", role: "business", in: domain.Profile{Name: "  Кофейня   «Зерно» ", City: "Казань", Spheres: []string{"food", "food", "beauty"}},
-			check: func(t *testing.T, u domain.User) {
-				if u.Name != "Кофейня «Зерно»" || len(u.Spheres) != 2 || u.Channels != nil || !u.Onboarded() {
-					t.Errorf("%+v", u)
-				}
-			}},
-		{name: "автор, роль выбирается в анкете", role: "", in: domain.Profile{Role: "creator", Name: "Алина", City: "Москва",
-			Channels: []string{"youtube.com/@alina", "@alina_tg", "http://vk.com/alina"}},
-			check: func(t *testing.T, u domain.User) {
-				want := "https://youtube.com/@alina,@alina_tg,https://vk.com/alina"
-				if u.Role != "creator" || strings.Join(u.Channels, ",") != want || u.Spheres != nil {
-					t.Errorf("%+v", u)
-				}
-			}},
-		{name: "пустая анкета", role: "", in: domain.Profile{}, fields: []string{"role", "name", "city"}},
-		{name: "бизнес без сфер", role: "business", in: domain.Profile{Name: "Ок", City: "Ок"}, fields: []string{"spheres"}},
-		{name: "бизнес: 6 сфер", role: "business", in: domain.Profile{Name: "Ок", City: "Ок", Spheres: []string{"a", "b", "c", "d", "e", "f"}}, fields: []string{"spheres"}},
-		{name: "бизнес: сфера не из списка", role: "business", in: domain.Profile{Name: "Ок", City: "Ок", Spheres: []string{"food", "nope"}}, fields: []string{"spheres"}},
-		{name: "бизнес: сфера с мусором", role: "business", in: domain.Profile{Name: "Ок", City: "Ок", Spheres: []string{"DROP TABLE"}}, fields: []string{"spheres"}},
-		{name: "автор без каналов", role: "creator", in: domain.Profile{Name: "Ок", City: "Ок"}, fields: []string{"channels"}},
-		{name: "автор: плохая ссылка", role: "creator", in: domain.Profile{Name: "Ок", City: "Ок", Channels: []string{"javascript:alert(1)"}}, fields: []string{"channels"}},
-		{name: "автор: 6 каналов", role: "creator", in: domain.Profile{Name: "Ок", City: "Ок", Channels: []string{"a.ru", "b.ru", "c.ru", "d.ru", "e.ru", "f.ru"}}, fields: []string{"channels"}},
-		{name: "длинное имя", role: "business", in: domain.Profile{Name: strings.Repeat("я", 81), City: "Ок", Spheres: []string{"food"}}, fields: []string{"name"}},
-	}
-	for _, c := range cases {
-		t.Run(c.name, func(t *testing.T) {
-			e := newEnv(t)
-			u := newUser(e, c.role)
-			got, err := e.a.SaveProfile(ctx, u, c.in)
-			if len(c.fields) > 0 {
-				var ve *ValidationError
-				if !errors.As(err, &ve) {
-					t.Fatalf("ждали ошибки полей, получили %v", err)
-				}
-				for _, f := range c.fields {
-					if ve.Fields[f] == "" {
-						t.Errorf("нет ошибки поля %s: %v", f, ve.Fields)
-					}
-				}
-				return
-			}
-			if err != nil {
-				t.Fatal(err)
-			}
-			c.check(t, got)
-		})
-	}
-	t.Run("роль после анкеты не меняется", func(t *testing.T) {
-		e := newEnv(t)
-		u := newUser(e, "business")
-		u, err := e.a.SaveProfile(ctx, u, domain.Profile{Name: "Ок", City: "Ок", Spheres: []string{"food"}})
-		if err != nil {
-			t.Fatal(err)
-		}
-		if _, err := e.a.SaveProfile(ctx, u, domain.Profile{Role: "creator", Name: "Ок", City: "Ок", Channels: []string{"a.ru"}}); !errors.Is(err, ErrRoleLocked) {
-			t.Fatal(err)
-		}
-	})
-	t.Run("ошибка справочника", func(t *testing.T) {
-		e := newEnv(t)
-		u := newUser(e, "business")
-		e.repo.fail["CountCategories"] = errBoom
-		if _, err := e.a.SaveProfile(ctx, u, domain.Profile{Name: "Ок", City: "Ок", Spheres: []string{"food"}}); !errors.Is(err, errBoom) {
-			t.Fatal(err)
-		}
-	})
 }
 
 func TestCleanup(t *testing.T) {

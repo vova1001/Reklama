@@ -37,7 +37,7 @@ func (s *Server) postEmailStart(w http.ResponseWriter, r *http.Request) {
 	if !decode(w, r, &in) {
 		return
 	}
-	sent, err := s.auth.StartEmail(r.Context(), in.Email, in.Role, in.Consent, clientIP(r))
+	sent, err := s.auth.StartEmail(r.Context(), in.Email, in.Consent, clientIP(r))
 	if err != nil {
 		s.fail(w, r, err)
 		return
@@ -61,10 +61,9 @@ func (s *Server) postEmailVerify(w http.ResponseWriter, r *http.Request) {
 	s.loggedIn(w, res)
 }
 
-// POST /api/auth/telegram — данные Telegram Login (подписанные Telegram) и роль.
+// POST /api/auth/telegram — данные Telegram Login (подписанные Telegram).
 func (s *Server) postTelegram(w http.ResponseWriter, r *http.Request) {
 	var in struct {
-		Role    string                     `json:"role"`
 		Consent bool                       `json:"consent"`
 		User    map[string]json.RawMessage `json:"user"`
 	}
@@ -80,7 +79,7 @@ func (s *Server) postTelegram(w http.ResponseWriter, r *http.Request) {
 		}
 		data[k] = v
 	}
-	res, err := s.auth.LoginTelegram(r.Context(), data, in.Role, in.Consent)
+	res, err := s.auth.LoginTelegram(r.Context(), data, in.Consent)
 	if err != nil {
 		s.fail(w, r, err)
 		return
@@ -95,7 +94,7 @@ func (s *Server) postBotStart(w http.ResponseWriter, r *http.Request) {
 	if !decode(w, r, &in) {
 		return
 	}
-	st, err := s.auth.StartTelegramBot(r.Context(), in.Role, in.Consent, clientIP(r))
+	st, err := s.auth.StartTelegramBot(r.Context(), in.Consent, clientIP(r))
 	if err != nil {
 		s.fail(w, r, err)
 		return
@@ -135,12 +134,8 @@ func (s *Server) postBotStatus(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, botStatusDTO{Status: string(service.BotLoginDone), User: &u, Next: nextPath(res.User), Created: res.Created})
 }
 
-// GET /api/auth/google/start?role=&consent=1 — переход в Google; state, PKCE verifier и роль — в короткой httpOnly-cookie.
+// GET /api/auth/google/start?consent=1 — переход в Google; state и PKCE verifier — в короткой httpOnly-cookie.
 func (s *Server) getGoogleStart(w http.ResponseWriter, r *http.Request) {
-	role := r.URL.Query().Get("role")
-	if !domain.ValidRole(role) {
-		role = ""
-	}
 	st, err := s.auth.StartGoogle(r.URL.Query().Get("consent") == "1")
 	if err != nil {
 		var ve *service.ValidationError
@@ -157,13 +152,13 @@ func (s *Server) getGoogleStart(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	http.SetCookie(w, &http.Cookie{
-		Name: oauthCookie, Value: st.State + "." + st.Verifier + "." + role, Path: "/api/auth/google", MaxAge: 600,
+		Name: oauthCookie, Value: st.State + "." + st.Verifier, Path: "/api/auth/google", MaxAge: 600,
 		HttpOnly: true, Secure: s.opt.SecureCookies, SameSite: http.SameSiteLaxMode,
 	})
 	http.Redirect(w, r, st.URL, http.StatusFound)
 }
 
-// GET /api/auth/google/callback — возврат из Google: сверка state, обмен кода, вход, переход в кабинет или анкету.
+// GET /api/auth/google/callback — возврат из Google: сверка state, обмен кода, вход, переход в приложение.
 func (s *Server) getGoogleCallback(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	c, cerr := r.Cookie(oauthCookie)
@@ -172,11 +167,12 @@ func (s *Server) getGoogleCallback(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/login?error=google_cancel", http.StatusSeeOther)
 		return
 	}
-	var state, verifier, role string
+	var state, verifier string
 	if cerr == nil {
+		// «state.verifier»; третья часть (роль) — от прежней версии, игнорируется
 		parts := strings.SplitN(c.Value, ".", 3)
-		if len(parts) == 3 {
-			state, verifier, role = parts[0], parts[1], parts[2]
+		if len(parts) >= 2 {
+			state, verifier = parts[0], parts[1]
 		}
 	}
 	got := q.Get("state")
@@ -185,7 +181,7 @@ func (s *Server) getGoogleCallback(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/login?error=google_state", http.StatusSeeOther)
 		return
 	}
-	res, err := s.auth.LoginGoogle(r.Context(), q.Get("code"), verifier, role)
+	res, err := s.auth.LoginGoogle(r.Context(), q.Get("code"), verifier)
 	if err != nil {
 		if !errors.Is(err, service.ErrGoogleFailed) {
 			slog.ErrorContext(r.Context(), "Google: вход", "err", err)
@@ -209,45 +205,16 @@ func (s *Server) postLogout(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// GET /api/me — кто вошёл.
-func (s *Server) getMe(w http.ResponseWriter, r *http.Request) {
-	acc, err := s.auth.Account(r.Context(), currentUser(r))
-	if err != nil {
-		s.fail(w, r, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, meDTO{User: toUserDTO(acc.User), Providers: nonNilStr(acc.Providers)})
-}
-
-// PUT /api/me/profile — анкета первого входа.
-func (s *Server) putProfile(w http.ResponseWriter, r *http.Request) {
-	var in profileIn
-	if !decode(w, r, &in) {
-		return
-	}
-	u, err := s.auth.SaveProfile(r.Context(), currentUser(r), domain.Profile{
-		Role: in.Role, Name: in.Name, City: in.City, Spheres: in.Spheres, Channels: in.Channels,
-	})
-	if err != nil {
-		s.fail(w, r, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, loginDTO{User: toUserDTO(u), Next: nextPath(u)})
-}
-
 // loggedIn — сессия в cookie и ответ «кто вошёл и куда дальше».
 func (s *Server) loggedIn(w http.ResponseWriter, res service.LoginResult) {
 	s.setSession(w, res.Token, res.ExpiresAt)
 	writeJSON(w, http.StatusOK, loginDTO{User: toUserDTO(res.User), Next: nextPath(res.User), Created: res.Created})
 }
 
-// nextPath — после входа: анкета, если она не заполнена, иначе кабинет.
-func nextPath(u domain.User) string {
-	if !u.Onboarded() {
-		return "/login?step=profile"
-	}
-	return "/account"
-}
+// AppPath — куда вести после входа: сразу в приложение (профиль заполняется, когда понадобится).
+const AppPath = "/app"
+
+func nextPath(domain.User) string { return AppPath }
 
 // decode читает JSON тела (до 16 КБ, без лишних полей); ошибка — ответ 400.
 func decode(w http.ResponseWriter, r *http.Request, v any) bool {
@@ -315,8 +282,6 @@ func (s *Server) fail(w http.ResponseWriter, r *http.Request, err error) {
 		writeError(w, http.StatusGone, "login_expired", "Ссылка для входа устарела. Нажмите «Войти через Telegram» ещё раз.")
 	case errors.Is(err, service.ErrBotLoginCancelled):
 		writeError(w, http.StatusGone, "login_cancelled", "Вход отменён в Telegram.")
-	case errors.Is(err, service.ErrRoleLocked):
-		writeError(w, http.StatusConflict, "role_locked", "Роль уже выбрана — для другой роли нужен отдельный аккаунт.")
 	default:
 		slog.ErrorContext(r.Context(), "ошибка запроса", "path", r.URL.Path, "err", err)
 		writeError(w, http.StatusInternalServerError, "internal", "Что-то пошло не так. Попробуйте позже.")

@@ -1,0 +1,19 @@
+---
+// Мягкая подсказка «заполните профиль режима» — не блокирует; скрывается крестиком (запоминается в браузере).
+import Icon from '../Icon.astro';
+import { NUDGE } from '../../content/app';
+import type { Me, Mode } from '../../lib/auth';
+interface Props { me: Me; mode: Mode }
+const { me, mode } = Astro.props;
+const n = NUDGE[mode];
+const filled = me.profiles[mode];
+---
+<div class="nudge" data-for-mode={mode} data-nudge={mode} hidden={filled} role="note">
+  <span class="nudge-ic" aria-hidden="true"><Icon name="user-round-pen" size={22} /></span>
+  <div class="nudge-tx">
+    <p class="nudge-t">{n.title}</p>
+    <p>{n.text}</p>
+  </div>
+  <a class="btn pill-emerald nudge-go" href={`/app/profile?tab=${mode}`}>{n.cta}</a>
+  <button class="nudge-x" type="button" aria-label="Скрыть подсказку" data-nudge-close><Icon name="x" size={18} /></button>
+</div>

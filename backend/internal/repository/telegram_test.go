@@ -17,7 +17,7 @@ func TestTelegramLogins(t *testing.T) {
 	r := repository.NewTelegram(pool)
 	now := time.Now().UTC().Truncate(time.Microsecond)
 	tok, br := []byte("token-hash-1"), []byte("browser-hash-1")
-	if err := r.CreateTelegramLogin(ctx, domain.NewTelegramLogin{TokenHash: tok, BrowserHash: br, Role: "creator", IP: "1.1.1.1",
+	if err := r.CreateTelegramLogin(ctx, domain.NewTelegramLogin{TokenHash: tok, BrowserHash: br, IP: "1.1.1.1",
 		CreatedAt: now, ExpiresAt: now.Add(5 * time.Minute)}); err != nil {
 		t.Fatal(err)
 	}
@@ -28,7 +28,7 @@ func TestTelegramLogins(t *testing.T) {
 		t.Errorf("%d %v %v", n, first, err)
 	}
 	l, err := r.PendingTelegramLogin(ctx, tok, now)
-	if err != nil || l.Role != "creator" || l.ConfirmedAt != nil {
+	if err != nil || l.ConfirmedAt != nil {
 		t.Fatalf("%v %+v", err, l)
 	}
 	if _, err := r.PendingTelegramLogin(ctx, tok, now.Add(6*time.Minute)); !errors.Is(err, domain.ErrNotFound) {

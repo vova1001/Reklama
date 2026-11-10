@@ -26,7 +26,7 @@ func (q *Queries) BlockTelegramChat(ctx context.Context, chatID int64) (int64, e
 const cancelTelegramLogin = `-- name: CancelTelegramLogin :one
 UPDATE telegram_logins SET consumed_at = $2, cancelled = true
 WHERE token_hash = $1 AND consumed_at IS NULL AND confirmed_at IS NULL
-RETURNING id, token_hash, browser_hash, role, ip, tg_user_id, tg_name, tg_username, created_at, expires_at, confirmed_at, consumed_at, cancelled
+RETURNING id, token_hash, browser_hash, ip, tg_user_id, tg_name, tg_username, created_at, expires_at, confirmed_at, consumed_at, cancelled
 `
 
 type CancelTelegramLoginParams struct {
@@ -41,7 +41,6 @@ func (q *Queries) CancelTelegramLogin(ctx context.Context, arg CancelTelegramLog
 		&i.ID,
 		&i.TokenHash,
 		&i.BrowserHash,
-		&i.Role,
 		&i.Ip,
 		&i.TgUserID,
 		&i.TgName,
@@ -60,7 +59,7 @@ UPDATE telegram_logins
 SET tg_user_id = $3, tg_name = $4, tg_username = $5, confirmed_at = COALESCE(confirmed_at, $2), expires_at = GREATEST(expires_at, $6)
 WHERE token_hash = $1 AND consumed_at IS NULL AND expires_at > $2
   AND (tg_user_id IS NULL OR tg_user_id = $3)
-RETURNING id, token_hash, browser_hash, role, ip, tg_user_id, tg_name, tg_username, created_at, expires_at, confirmed_at, consumed_at, cancelled
+RETURNING id, token_hash, browser_hash, ip, tg_user_id, tg_name, tg_username, created_at, expires_at, confirmed_at, consumed_at, cancelled
 `
 
 type ConfirmTelegramLoginParams struct {
@@ -88,7 +87,6 @@ func (q *Queries) ConfirmTelegramLogin(ctx context.Context, arg ConfirmTelegramL
 		&i.ID,
 		&i.TokenHash,
 		&i.BrowserHash,
-		&i.Role,
 		&i.Ip,
 		&i.TgUserID,
 		&i.TgName,
@@ -105,7 +103,7 @@ func (q *Queries) ConfirmTelegramLogin(ctx context.Context, arg ConfirmTelegramL
 const consumeTelegramLogin = `-- name: ConsumeTelegramLogin :one
 UPDATE telegram_logins SET consumed_at = $2
 WHERE browser_hash = $1 AND confirmed_at IS NOT NULL AND consumed_at IS NULL AND expires_at > $2
-RETURNING id, token_hash, browser_hash, role, ip, tg_user_id, tg_name, tg_username, created_at, expires_at, confirmed_at, consumed_at, cancelled
+RETURNING id, token_hash, browser_hash, ip, tg_user_id, tg_name, tg_username, created_at, expires_at, confirmed_at, consumed_at, cancelled
 `
 
 type ConsumeTelegramLoginParams struct {
@@ -121,7 +119,6 @@ func (q *Queries) ConsumeTelegramLogin(ctx context.Context, arg ConsumeTelegramL
 		&i.ID,
 		&i.TokenHash,
 		&i.BrowserHash,
-		&i.Role,
 		&i.Ip,
 		&i.TgUserID,
 		&i.TgName,
@@ -158,14 +155,13 @@ func (q *Queries) CountTelegramLoginsByIP(ctx context.Context, arg CountTelegram
 }
 
 const createTelegramLogin = `-- name: CreateTelegramLogin :exec
-INSERT INTO telegram_logins (token_hash, browser_hash, role, ip, created_at, expires_at)
-VALUES ($1, $2, $3, $4, $5, $6)
+INSERT INTO telegram_logins (token_hash, browser_hash, ip, created_at, expires_at)
+VALUES ($1, $2, $3, $4, $5)
 `
 
 type CreateTelegramLoginParams struct {
 	TokenHash   []byte
 	BrowserHash []byte
-	Role        pgtype.Text
 	Ip          string
 	CreatedAt   pgtype.Timestamptz
 	ExpiresAt   pgtype.Timestamptz
@@ -175,7 +171,6 @@ func (q *Queries) CreateTelegramLogin(ctx context.Context, arg CreateTelegramLog
 	_, err := q.db.Exec(ctx, createTelegramLogin,
 		arg.TokenHash,
 		arg.BrowserHash,
-		arg.Role,
 		arg.Ip,
 		arg.CreatedAt,
 		arg.ExpiresAt,
@@ -208,7 +203,7 @@ func (q *Queries) DeleteUserSessions(ctx context.Context, userID int64) (int64, 
 }
 
 const getPendingTelegramLogin = `-- name: GetPendingTelegramLogin :one
-SELECT id, token_hash, browser_hash, role, ip, tg_user_id, tg_name, tg_username, created_at, expires_at, confirmed_at, consumed_at, cancelled FROM telegram_logins
+SELECT id, token_hash, browser_hash, ip, tg_user_id, tg_name, tg_username, created_at, expires_at, confirmed_at, consumed_at, cancelled FROM telegram_logins
 WHERE token_hash = $1 AND consumed_at IS NULL AND expires_at > $2
 `
 
@@ -225,7 +220,6 @@ func (q *Queries) GetPendingTelegramLogin(ctx context.Context, arg GetPendingTel
 		&i.ID,
 		&i.TokenHash,
 		&i.BrowserHash,
-		&i.Role,
 		&i.Ip,
 		&i.TgUserID,
 		&i.TgName,
@@ -259,7 +253,7 @@ func (q *Queries) GetTelegramChat(ctx context.Context, tgUserID int64) (Telegram
 }
 
 const getTelegramLoginByBrowser = `-- name: GetTelegramLoginByBrowser :one
-SELECT id, token_hash, browser_hash, role, ip, tg_user_id, tg_name, tg_username, created_at, expires_at, confirmed_at, consumed_at, cancelled FROM telegram_logins WHERE browser_hash = $1
+SELECT id, token_hash, browser_hash, ip, tg_user_id, tg_name, tg_username, created_at, expires_at, confirmed_at, consumed_at, cancelled FROM telegram_logins WHERE browser_hash = $1
 `
 
 // Состояние входа для браузера (по секрету из cookie).
@@ -270,7 +264,6 @@ func (q *Queries) GetTelegramLoginByBrowser(ctx context.Context, browserHash []b
 		&i.ID,
 		&i.TokenHash,
 		&i.BrowserHash,
-		&i.Role,
 		&i.Ip,
 		&i.TgUserID,
 		&i.TgName,

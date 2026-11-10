@@ -1,0 +1,66 @@
+---
+// Настройки: способы входа, уведомления, сеансы (выйти / выйти со всех устройств).
+import App from '../../layouts/App.astro';
+import Icon from '../../components/Icon.astro';
+import Side from '../../components/app/Side.astro';
+import { PROVIDERS } from '../../content/app';
+import { fetchAuthConfig } from '../../lib/auth';
+
+const me = Astro.locals.me;
+if (!me) return Astro.redirect('/login', 303);
+const cfg = await fetchAuthConfig();
+const has = (p: string) => me.providers.includes(p as (typeof me.providers)[number]);
+const botName = cfg.telegram?.botName ?? '';
+---
+<App title="Настройки входа" page="settings">
+  <div class="page-head">
+    <h1>Настройки</h1>
+    <button class="btn pill-ghost" type="button" data-logout><Icon name="log-out" size={20} />Выйти</button>
+  </div>
+
+  <section class="card pane" aria-labelledby="ways-t">
+    <h2 id="ways-t" class="pane-h">Способы входа</h2>
+    <p class="muted">Без паролей. Способы с одной подтверждённой почтой — это один аккаунт.</p>
+    <ul class="rows-list">
+      {PROVIDERS.map((p) => (
+        <li data-provider={p.id}>
+          <span class="row-ic" aria-hidden="true"><Icon name={p.icon} size={22} /></span>
+          <div class="row-tx">
+            <p class="row-t">{p.title}{p.id === 'email' && me.user.email ? <span class="muted"> · {me.user.email}</span> : null}</p>
+            {!has(p.id) && <p class="muted">{p.id !== 'telegram' && !me.user.email ? 'Сначала нужна почта в аккаунте — добавление почты появится в ближайшем обновлении.' : p.how}</p>}
+          </div>
+          {has(p.id) ? <span class="pill-badge ok">Подключён</span> : <span class="pill-badge">Не подключён</span>}
+        </li>
+      ))}
+    </ul>
+  </section>
+
+  <section class="card pane" id="notify" aria-labelledby="notify-t">
+    <h2 id="notify-t" class="pane-h">Уведомления</h2>
+    <ul class="rows-list">
+      <li>
+        <span class="row-ic" aria-hidden="true"><Icon name="bell-ring" size={22} /></span>
+        <div class="row-tx">
+          <p class="row-t">Telegram-бот{botName && <span class="muted"> · @{botName}</span>}</p>
+          <p class="muted">
+            {has('telegram')
+              ? 'Вход с нового устройства, новые задания, отклики и выплаты. Выключить — команда /stop в боте, включить — /start.'
+              : 'Уведомления приходят в Telegram тем, кто входит через Telegram.'}
+          </p>
+        </div>
+        {has('telegram') ? <span class="pill-badge ok">Через бота</span> : <span class="pill-badge">Нет</span>}
+      </li>
+    </ul>
+  </section>
+
+  <section class="card pane" aria-labelledby="sess-t">
+    <h2 id="sess-t" class="pane-h">Сеансы</h2>
+    <p class="muted">Если входили с чужого устройства или потеряли телефон — завершите все сеансы. Войти снова можно любым способом.</p>
+    <div class="form-act">
+      <button class="btn pill-danger-ol" type="button" data-logout-all><Icon name="monitor-smartphone" size={20} />Выйти со всех устройств</button>
+    </div>
+    <p class="ferr" data-err="form" role="alert"></p>
+  </section>
+
+  <Side slot="aside" me={me} actions={false} />
+</App>

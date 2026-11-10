@@ -12,8 +12,8 @@ import (
 	"ohvat/backend/internal/domain"
 )
 
-// memRepo — хранилище в памяти: пользователи, способы входа, коды, сессии (фейк UserRepository,
-// CodeRepository, SessionRepository). fail — ошибка по имени метода.
+// memRepo — хранилище в памяти: пользователи, способы входа, коды, сессии, профили режимов (фейк UserRepository,
+// CodeRepository, SessionRepository, ProfileRepository, ProviderLister). fail — ошибка по имени метода.
 type memRepo struct {
 	mu       sync.Mutex
 	users    map[int64]*domain.User
@@ -22,6 +22,8 @@ type memRepo struct {
 	codes    []*memCode
 	sessions map[string]memSession
 	cats     map[string]bool
+	biz      map[int64]domain.BusinessProfile
+	cre      map[int64]domain.CreatorProfile
 	nextID   int64
 	fail     map[string]error
 }
@@ -41,6 +43,7 @@ func newMem() *memRepo {
 	return &memRepo{
 		users: map[int64]*domain.User{}, ids: map[string]int64{}, provs: map[int64][]string{},
 		sessions: map[string]memSession{}, cats: map[string]bool{"food": true, "beauty": true, "sport": true},
+		biz: map[int64]domain.BusinessProfile{}, cre: map[int64]domain.CreatorProfile{},
 		fail: map[string]error{},
 	}
 }
@@ -83,7 +86,7 @@ func (m *memRepo) CreateUserWithIdentity(_ context.Context, nu domain.NewUser, i
 		return domain.User{}, domain.ErrConflict
 	}
 	m.nextID++
-	u := &domain.User{ID: m.nextID, Role: nu.Role, Name: nu.Name, Email: nu.Email, AvatarURL: nu.AvatarURL}
+	u := &domain.User{ID: m.nextID, ActiveMode: domain.ModeBusiness, Name: nu.Name, Email: nu.Email, AvatarURL: nu.AvatarURL}
 	m.users[u.ID] = u
 	m.ids[id.Provider+":"+id.Subject] = u.ID
 	m.provs[u.ID] = append(m.provs[u.ID], id.Provider)
@@ -104,16 +107,8 @@ func (m *memRepo) LinkIdentity(_ context.Context, uid int64, id domain.Identity)
 	return nil
 }
 
-func (m *memRepo) TouchLogin(_ context.Context, uid int64, _ domain.Identity, role string) error {
-	if err := m.err("TouchLogin"); err != nil {
-		return err
-	}
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	if m.users[uid].Role == "" {
-		m.users[uid].Role = role
-	}
-	return nil
+func (m *memRepo) TouchLogin(_ context.Context, _ int64, _ domain.Identity) error {
+	return m.err("TouchLogin")
 }
 
 func (m *memRepo) Providers(_ context.Context, uid int64) ([]string, error) {
@@ -127,19 +122,81 @@ func (m *memRepo) Providers(_ context.Context, uid int64) ([]string, error) {
 	return p, nil
 }
 
-func (m *memRepo) UpdateProfile(_ context.Context, uid int64, p domain.Profile) (domain.User, error) {
-	if err := m.err("UpdateProfile"); err != nil {
+func (m *memRepo) SetMode(_ context.Context, uid int64, mode string) (domain.User, error) {
+	if err := m.err("SetMode"); err != nil {
+		return domain.User{}, err
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	u, ok := m.users[uid]
+	if !ok {
+		return domain.User{}, domain.ErrNotFound
+	}
+	u.ActiveMode = mode
+	return *u, nil
+}
+
+func (m *memRepo) UpdateBasics(_ context.Context, uid int64, b domain.Basics) (domain.User, error) {
+	if err := m.err("UpdateBasics"); err != nil {
 		return domain.User{}, err
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	u := m.users[uid]
-	u.Role, u.Name, u.City, u.Spheres, u.Channels = p.Role, p.Name, p.City, p.Spheres, p.Channels
+	u.Name, u.City = b.Name, b.City
 	if u.OnboardedAt == nil {
 		t := time.Now()
 		u.OnboardedAt = &t
 	}
 	return *u, nil
+}
+
+func (m *memRepo) BusinessProfile(_ context.Context, uid int64) (domain.BusinessProfile, error) {
+	if err := m.err("BusinessProfile"); err != nil {
+		return domain.BusinessProfile{}, err
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	p, ok := m.biz[uid]
+	if !ok {
+		return domain.BusinessProfile{}, domain.ErrNotFound
+	}
+	return p, nil
+}
+
+func (m *memRepo) CreatorProfile(_ context.Context, uid int64) (domain.CreatorProfile, error) {
+	if err := m.err("CreatorProfile"); err != nil {
+		return domain.CreatorProfile{}, err
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	p, ok := m.cre[uid]
+	if !ok {
+		return domain.CreatorProfile{}, domain.ErrNotFound
+	}
+	return p, nil
+}
+
+func (m *memRepo) SaveBusinessProfile(_ context.Context, uid int64, p domain.BusinessProfile) (domain.BusinessProfile, error) {
+	if err := m.err("SaveBusinessProfile"); err != nil {
+		return domain.BusinessProfile{}, err
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	p.UpdatedAt = time.Now()
+	m.biz[uid] = p
+	return p, nil
+}
+
+func (m *memRepo) SaveCreatorProfile(_ context.Context, uid int64, p domain.CreatorProfile) (domain.CreatorProfile, error) {
+	if err := m.err("SaveCreatorProfile"); err != nil {
+		return domain.CreatorProfile{}, err
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	p.UpdatedAt = time.Now()
+	m.cre[uid] = p
+	return p, nil
 }
 
 func (m *memRepo) CountCategories(_ context.Context, slugs []string) (int, error) {
@@ -202,7 +259,7 @@ func (m *memRepo) CreateCode(_ context.Context, c domain.NewLoginCode) error {
 		}
 	}
 	m.codes = append(m.codes, &memCode{LoginCode: domain.LoginCode{
-		ID: int64(len(m.codes) + 1), Email: c.Email, CodeHash: c.CodeHash, Role: c.Role, CreatedAt: c.CreatedAt, ExpiresAt: c.ExpiresAt,
+		ID: int64(len(m.codes) + 1), Email: c.Email, CodeHash: c.CodeHash, CreatedAt: c.CreatedAt, ExpiresAt: c.ExpiresAt,
 	}, ip: c.IP})
 	return nil
 }
@@ -424,7 +481,7 @@ func (m *memTG) CreateTelegramLogin(_ context.Context, l domain.NewTelegramLogin
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.logins = append(m.logins, &memLogin{TelegramLogin: domain.TelegramLogin{ID: int64(len(m.logins) + 1), BrowserHash: l.BrowserHash,
-		Role: l.Role, CreatedAt: l.CreatedAt, ExpiresAt: l.ExpiresAt}, token: l.TokenHash, ip: l.IP})
+		CreatedAt: l.CreatedAt, ExpiresAt: l.ExpiresAt}, token: l.TokenHash, ip: l.IP})
 	return nil
 }
 

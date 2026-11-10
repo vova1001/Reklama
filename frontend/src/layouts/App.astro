@@ -1,0 +1,47 @@
+---
+// Оболочка приложения после входа: верхняя панель (знак, режим, поиск, аватар-меню), центр — содержимое страницы,
+// справа — колонка с полезным; на телефоне — нижняя навигация, правая колонка уходит под содержимое.
+// Режим переключается без перезагрузки: элементы с data-for-mode показываются по data-mode корня (скрипт app.ts).
+import Base from './Base.astro';
+import AppBar from '../components/app/AppBar.astro';
+import BottomNav from '../components/app/BottomNav.astro';
+import Icon from '../components/Icon.astro';
+import '../styles/auth.css';
+import '../styles/app.css';
+
+interface Props { title: string; page: 'feed' | 'profile' | 'settings' }
+const { title, page } = Astro.props;
+const me = Astro.locals.me!;
+Astro.response.headers.set('Cache-Control', 'private, no-store');
+---
+<Base title={`${title} — Охват`} description="Приложение Охвата: задания, отклики и профиль." noindex theme="#FFFFFF" bodyClass="app-body">
+  <div class="app" data-app data-mode={me.user.mode} data-page={page}
+    data-business-filled={String(me.profiles.business)} data-creator-filled={String(me.profiles.creator)}>
+    <a class="skip" href="#main">К содержимому</a>
+    <AppBar me={me} />
+    <div class="app-grid">
+      <main id="main" class="app-main" tabindex="-1">
+        <slot />
+      </main>
+      <aside class="app-side" aria-label="Полезное">
+        <slot name="aside" />
+      </aside>
+    </div>
+    <BottomNav page={page} />
+
+    <!-- подтверждение (свой диалог вместо confirm) -->
+    <dialog class="dlg" data-confirm aria-labelledby="dlg-t" aria-describedby="dlg-s">
+      <form method="dialog" class="dlg-card">
+        <span class="dlg-ic" aria-hidden="true"><Icon name="shield-check" size={24} /></span>
+        <h2 id="dlg-t" data-confirm-title>Подтвердите</h2>
+        <p id="dlg-s" data-confirm-text></p>
+        <div class="dlg-act">
+          <button class="btn pill-ghost" value="cancel" type="submit">Отмена</button>
+          <button class="btn pill-danger" value="ok" type="submit" data-confirm-ok>Да</button>
+        </div>
+      </form>
+    </dialog>
+    <div class="toast" role="status" aria-live="polite" data-toast></div>
+  </div>
+</Base>
+<script src="../scripts/app.ts"></script>

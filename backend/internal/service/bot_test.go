@@ -57,10 +57,10 @@ func TestBotCommands(t *testing.T) {
 		t.Error("start после stop")
 	}
 	// /profile вошедшего
-	_, _ = e.repo.CreateUserWithIdentity(ctx, domain.NewUser{Role: "business", Name: "Кафе <Б>", Email: "cafe@mail.ru"}, domain.Identity{Provider: "telegram", Subject: "777"})
+	_, _ = e.repo.CreateUserWithIdentity(ctx, domain.NewUser{Name: "Кафе <Б>", Email: "cafe@mail.ru"}, domain.Identity{Provider: "telegram", Subject: "777"})
 	_ = e.bot.Handle(ctx, msg("/profile"))
-	if m := e.out.last(); !strings.Contains(m.Text, "<b>Кафе &lt;Б&gt;</b>") || !strings.Contains(m.Text, "Роль: бизнес") ||
-		!strings.Contains(m.Text, "c***@mail.ru") || !strings.Contains(m.Text, "включены") || m.Buttons[0][0].URL != "https://ohvat.test/account" {
+	if m := e.out.last(); !strings.Contains(m.Text, "<b>Кафе &lt;Б&gt;</b>") || !strings.Contains(m.Text, "Режим: бизнес") ||
+		!strings.Contains(m.Text, "c***@mail.ru") || !strings.Contains(m.Text, "включены") || m.Buttons[0][0].URL != "https://ohvat.test/app" {
 		t.Errorf("%+v", m)
 	}
 }
@@ -119,7 +119,7 @@ func TestBotIgnoresAndErrors(t *testing.T) {
 func TestBotLoginButtons(t *testing.T) {
 	ctx := context.Background()
 	e := newBotEnv(t)
-	st, _ := e.a.StartTelegramBot(ctx, "business", true, "ip")
+	st, _ := e.a.StartTelegramBot(ctx, true, "ip")
 	tok := tokenOf(t, st.URL)
 
 	// /start с токеном → кнопки «Подтвердить вход» и «Это не я»
@@ -138,7 +138,7 @@ func TestBotLoginButtons(t *testing.T) {
 	if m := e.out.last(); m.EditMessageID != 55 || !strings.Contains(m.Text, "Вход подтверждён") || e.out.answers[len(e.out.answers)-1] != "Вход подтверждён" {
 		t.Fatalf("%+v", m)
 	}
-	if s, res, err := e.a.WaitTelegramBot(ctx, st.BrowserSecret, time.Millisecond); err != nil || s != BotLoginDone || res.User.Role != "business" {
+	if s, res, err := e.a.WaitTelegramBot(ctx, st.BrowserSecret, time.Millisecond); err != nil || s != BotLoginDone || res.User.ActiveMode != "business" {
 		t.Fatal(s, err)
 	}
 	// повторное нажатие после входа — «устарела»
@@ -147,7 +147,7 @@ func TestBotLoginButtons(t *testing.T) {
 		t.Error("повтор")
 	}
 	// «Это не я»
-	st2, _ := e.a.StartTelegramBot(ctx, "", true, "ip")
+	st2, _ := e.a.StartTelegramBot(ctx, true, "ip")
 	tok2 := tokenOf(t, st2.URL)
 	_ = e.bot.Handle(ctx, press("no:"+tok2))
 	if m := e.out.last(); m.EditMessageID != 55 || !strings.Contains(m.Text, "отменён") {
@@ -163,7 +163,7 @@ func TestBotLoginButtons(t *testing.T) {
 		}
 	}
 	// сбой базы при подтверждении — ошибка
-	st3, _ := e.a.StartTelegramBot(ctx, "", true, "ip")
+	st3, _ := e.a.StartTelegramBot(ctx, true, "ip")
 	e.tg.fail["ConfirmTelegramLogin"] = errBoom
 	if err := e.bot.Handle(ctx, press("ok:"+tokenOf(t, st3.URL))); !errors.Is(err, errBoom) {
 		t.Error(err)
@@ -216,9 +216,9 @@ func TestBotNotifier(t *testing.T) {
 			[]string{"нового устройства", "Способ: Google", "Chrome, Windows", "1.2.3.x", "10.11.2026 15:00 МСК"}, "out:1", false},
 		{Notification{Kind: NotifyNewTask, Title: "Обзор <кафе>", Topic: "Еда", Path: "/tasks/5"},
 			[]string{"по теме «Еда»", "Обзор &lt;кафе&gt;"}, "https://ohvat.test/tasks/5", false},
-		{Notification{Kind: NotifyNewTask, Title: "Без темы", Path: "//evil.com"}, []string{"<b>Новое задание</b>"}, "https://ohvat.test/account", false},
-		{Notification{Kind: NotifyNewResponse, Title: "Обзор", From: "Иван"}, []string{"Новый отклик", "От: Иван"}, "https://ohvat.test/account", false},
-		{Notification{Kind: NotifyPayout, AmountKopecks: 150000, Status: PayoutDone}, []string{"Выплата 1 500 ₽</b> зачислена"}, "https://ohvat.test/account", false},
+		{Notification{Kind: NotifyNewTask, Title: "Без темы", Path: "//evil.com"}, []string{"<b>Новое задание</b>"}, "https://ohvat.test/app", false},
+		{Notification{Kind: NotifyNewResponse, Title: "Обзор", From: "Иван"}, []string{"Новый отклик", "От: Иван"}, "https://ohvat.test/app", false},
+		{Notification{Kind: NotifyPayout, AmountKopecks: 150000, Status: PayoutDone}, []string{"Выплата 1 500 ₽</b> зачислена"}, "https://ohvat.test/app", false},
 		{Notification{Kind: NotifyPayout, AmountKopecks: 100, Status: "lost"}, nil, "", true},
 		{Notification{Kind: NotifyNewTask}, nil, "", true},
 		{Notification{Kind: "spam"}, nil, "", true},

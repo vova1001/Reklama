@@ -263,3 +263,50 @@ func TestPoller(t *testing.T) {
 		t.Errorf("обработано %d, offset %v", bot.n(), src.seen)
 	}
 }
+
+// stepLimiter — пропускает n обновлений, затем 429; err — хранилище лимитов недоступно.
+type stepLimiter struct {
+	mu   sync.Mutex
+	n    int
+	err  error
+	keys []string
+}
+
+func (l *stepLimiter) Allow(_ context.Context, key string) (bool, time.Duration, error) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.keys = append(l.keys, key)
+	if l.err != nil {
+		return false, 0, l.err
+	}
+	if l.n <= 0 {
+		return false, 1500 * time.Millisecond, nil
+	}
+	l.n--
+	return true, 0, nil
+}
+
+func TestWebhookLimiter(t *testing.T) {
+	bot := &fakeBot{}
+	lim := &stepLimiter{n: 1}
+	h := New(bot, Options{Secret: secret, Log: quiet, Limiter: lim, UserBurst: 100})
+	// чужой секрет не тратит лимит
+	if c := post(h, start(1, "/help"), "wrong"); c != 401 || len(lim.keys) != 0 {
+		t.Fatalf("чужой: %d %v", c, lim.keys)
+	}
+	if c := post(h, start(2, "/help"), secret); c != 200 {
+		t.Fatalf("первое: %d", c)
+	}
+	r := httptest.NewRequest(http.MethodPost, "/api/telegram/webhook", strings.NewReader(start(3, "/help")))
+	r.Header.Set(SecretHeader, secret)
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, r)
+	if w.Code != 429 || w.Header().Get("Retry-After") != "2" || bot.n() != 1 || lim.keys[0] != "telegram" {
+		t.Fatalf("сверх лимита: %d %v %d %v", w.Code, w.Header(), bot.n(), lim.keys)
+	}
+	// лимит не проверен — обновление всё равно принимается
+	lim.err = errors.New("redis down")
+	if c := post(h, start(4, "/help"), secret); c != 200 || bot.n() != 2 {
+		t.Fatalf("сбой лимита: %d %d", c, bot.n())
+	}
+}

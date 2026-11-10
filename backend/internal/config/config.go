@@ -67,6 +67,13 @@ type Config struct {
 	SessionTTL   time.Duration // AUTH_SESSION_DAYS, 30
 	RateRPS      float64       // RATE_LIMIT_RPS — запросов входа в секунду с адреса, 1
 	RateBurst    int           // RATE_LIMIT_BURST — запас подряд, 10
+	APIRPS       float64       // RATE_LIMIT_API_RPS — запросов ко всему /api в секунду с адреса, 10
+	APIBurst     int           // RATE_LIMIT_API_BURST, 60
+	UserRPS      float64       // RATE_LIMIT_USER_RPS — запросов к /api/me* в секунду на пользователя, 5
+	UserBurst    int           // RATE_LIMIT_USER_BURST, 30
+	WebhookRPS   float64       // TELEGRAM_WEBHOOK_RPS — обновлений бота в секунду на весь вебхук, 50
+	WebhookBurst int           // TELEGRAM_WEBHOOK_BURST, 200
+	RedisURL     string        // REDIS_URL — общие лимиты для нескольких серверов; пусто — лимиты в памяти процесса
 	MailWorkers  int           // MAIL_WORKERS, 2
 
 	Warnings []string // некритичные замечания для журнала при запуске
@@ -255,14 +262,28 @@ func load(get func(string) string) (Config, error) {
 			c.TelegramSendRPS = f
 		}
 	}
-	c.RateRPS = 1
-	if v := strings.TrimSpace(get("RATE_LIMIT_RPS")); v != "" {
+	rate := func(key string, def float64) float64 {
+		v := strings.TrimSpace(get(key))
+		if v == "" {
+			return def
+		}
 		f, err := strconv.ParseFloat(v, 64)
 		if err != nil || f <= 0 {
-			errs = append(errs, errors.New("RATE_LIMIT_RPS: число больше 0, например 1 или 0.5"))
-		} else {
-			c.RateRPS = f
+			errs = append(errs, fmt.Errorf("%s: число больше 0, например 1 или 0.5", key))
+			return def
 		}
+		return f
+	}
+	c.RateRPS = rate("RATE_LIMIT_RPS", 1)
+	c.APIRPS = rate("RATE_LIMIT_API_RPS", 10)
+	c.APIBurst = num("RATE_LIMIT_API_BURST", 60)
+	c.UserRPS = rate("RATE_LIMIT_USER_RPS", 5)
+	c.UserBurst = num("RATE_LIMIT_USER_BURST", 30)
+	c.WebhookRPS = rate("TELEGRAM_WEBHOOK_RPS", 50)
+	c.WebhookBurst = num("TELEGRAM_WEBHOOK_BURST", 200)
+	c.RedisURL = strings.TrimSpace(get("REDIS_URL"))
+	if c.RedisURL != "" && !strings.HasPrefix(c.RedisURL, "redis://") && !strings.HasPrefix(c.RedisURL, "rediss://") {
+		errs = append(errs, errors.New("REDIS_URL: адрес вида redis://… или rediss://…"))
 	}
 	return c, errors.Join(errs...)
 }

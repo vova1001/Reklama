@@ -23,11 +23,8 @@ type UserRepository interface {
 	CreateUserWithIdentity(ctx context.Context, u domain.NewUser, id domain.Identity) (domain.User, error)
 	// LinkIdentity привязывает способ входа к пользователю (и подтверждённую почту, если её не было).
 	LinkIdentity(ctx context.Context, userID int64, id domain.Identity) error
-	// TouchLogin отмечает вход: время входа, способ, роль — если ещё не выбрана.
-	TouchLogin(ctx context.Context, userID int64, id domain.Identity, role string) error
-	Providers(ctx context.Context, userID int64) ([]string, error)
-	UpdateProfile(ctx context.Context, userID int64, p domain.Profile) (domain.User, error)
-	CountCategories(ctx context.Context, slugs []string) (int, error)
+	// TouchLogin отмечает вход: время входа и способ.
+	TouchLogin(ctx context.Context, userID int64, id domain.Identity) error
 }
 
 // CodeRepository — одноразовые коды из письма.
@@ -150,7 +147,6 @@ var (
 	ErrGoogleFailed     = errors.New("вход через Google не удался")
 	ErrProviderDisabled = errors.New("способ входа не подключён")
 	ErrMailUnavailable  = errors.New("письмо не отправлено")
-	ErrRoleLocked       = errors.New("роль уже выбрана")
 )
 
 // CodeInvalidError — неверный код; Left — сколько попыток осталось.
@@ -206,7 +202,7 @@ type AuthDeps struct {
 	Log       *slog.Logger            // nil — slog.Default()
 }
 
-// Auth — регистрация и вход: почта с кодом, Telegram, Google; сессии; анкета.
+// Auth — регистрация и вход: почта с кодом, Telegram, Google; сессии.
 type Auth struct {
 	users    UserRepository
 	codes    CodeRepository
@@ -286,11 +282,8 @@ func (s *Auth) login(ctx context.Context, id domain.Identity, emailVerified bool
 	if err != nil {
 		return LoginResult{}, err
 	}
-	if err := s.users.TouchLogin(ctx, u.ID, id, nu.Role); err != nil {
+	if err := s.users.TouchLogin(ctx, u.ID, id); err != nil {
 		return LoginResult{}, err
-	}
-	if u.Role == "" && domain.ValidRole(nu.Role) {
-		u.Role = nu.Role
 	}
 	tok, exp, err := s.newSession(ctx, u.ID)
 	if err != nil {
@@ -322,9 +315,6 @@ func (s *Auth) resolveUser(ctx context.Context, id domain.Identity, emailVerifie
 		nu.Email = id.Email
 	} else {
 		nu.Email = ""
-	}
-	if !domain.ValidRole(nu.Role) {
-		nu.Role = ""
 	}
 	u, err = s.users.CreateUserWithIdentity(ctx, nu, id)
 	if err != nil {
@@ -363,21 +353,6 @@ func (s *Auth) Logout(ctx context.Context, token string) error {
 		return nil
 	}
 	return s.sessions.DeleteSession(ctx, hashToken(token))
-}
-
-// Account — пользователь и его способы входа.
-type Account struct {
-	User      domain.User
-	Providers []string
-}
-
-// Account — данные кабинета.
-func (s *Auth) Account(ctx context.Context, u domain.User) (Account, error) {
-	p, err := s.users.Providers(ctx, u.ID)
-	if err != nil {
-		return Account{}, err
-	}
-	return Account{User: u, Providers: p}, nil
 }
 
 // Cleanup удаляет старые коды (старше срока хранения) и истёкшие сессии.
