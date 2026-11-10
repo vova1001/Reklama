@@ -28,43 +28,52 @@ test.beforeEach(async ({ context }) => {
 async function requestCode(page: Page, email: string, role?: 'business' | 'creator') {
   await page.goto('/login');
   if (role) await page.getByRole('radio', { name: role === 'business' ? 'Я бизнес' : 'Я автор' }).click();
-  await page.getByRole('checkbox').click();
+  await page.getByRole('button', { name: 'Войти по почте' }).click();
   await page.getByLabel('Почта').fill(email);
   await page.getByRole('button', { name: 'Получить код' }).click();
   await expect(page.getByRole('heading', { name: 'Введите код' })).toBeVisible();
 }
 
-test('страница входа: роль, способы входа, согласие, без прокрутки вбок', async ({ page }) => {
+test('страница входа: одна карточка, роль, способы входа, согласие строкой, без прокрутки вбок', async ({ page }) => {
   const errors = jsErrors(page);
   const res = await page.goto('/login');
   expect(res?.status()).toBe(200);
-  await expect(page.locator('h1')).toHaveText(/Вход и\s*регистрация/);
+  await expect(page.locator('h1')).toHaveText('Вход в Охват');
+  // минимализм: без шапки сайта и колонки преимуществ, знак ведёт на главную
+  await expect(page.locator('.bar')).toHaveCount(0);
+  await expect(page.locator('.au-mark')).toHaveAttribute('href', '/');
+  const card = await page.locator('.au-card').boundingBox();
+  expect(card!.width).toBeLessThanOrEqual(420);
   const roles = page.getByRole('radio');
   await expect(roles).toHaveCount(2);
   await expect(roles.first()).toHaveAttribute('aria-checked', 'true');
-  // клавиатура: стрелка переключает роль
   await roles.first().focus();
   await page.keyboard.press('ArrowRight');
   await expect(roles.nth(1)).toHaveAttribute('aria-checked', 'true');
   await expect(roles.nth(1)).toBeFocused();
-  // кнопки Google и Telegram — только если ключи заданы
+  // способы входа — пилюли одна под другой: Telegram, Google, почта
   const cfg = await (await page.request.get('/api/auth/config')).json();
-  await expect(page.getByRole('link', { name: 'Войти через Google' })).toHaveCount(cfg.google ? 1 : 0);
-  await expect(page.getByRole('button', { name: 'Войти через Telegram' })).toHaveCount(cfg.telegram ? 1 : 0);
-  // согласие — свой чекбокс, пробел переключает
-  const chk = page.getByRole('checkbox');
-  await chk.focus();
-  await page.keyboard.press('Space');
-  await expect(chk).toHaveAttribute('aria-checked', 'true');
-  for (const w of [320, 360]) {
+  const ways = page.locator('.ways > .way');
+  const names = ['Войти через Telegram', 'Войти через Google', 'Войти по почте'].filter((_, i) => [!!cfg.telegram, cfg.google, cfg.email][i]);
+  await expect(ways).toHaveText(names);
+  const boxes = await Promise.all((await ways.all()).map((w) => w.boundingBox()));
+  for (let i = 1; i < boxes.length; i++) expect(boxes[i]!.y).toBeGreaterThan(boxes[i - 1]!.y + boxes[i - 1]!.height - 1);
+  // согласие — одна строка мелко (не меньше 14px), без чекбокса
+  await expect(page.getByRole('checkbox')).toHaveCount(0);
+  const legal = page.locator('.au-legal');
+  await expect(legal).toContainText('Продолжая, вы принимаете');
+  expect(parseFloat(await legal.evaluate((e) => getComputedStyle(e).fontSize))).toBeGreaterThanOrEqual(14);
+  for (const w of [320, 360, 375, 768, 1440]) {
     await page.setViewportSize({ width: w, height: 740 });
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(w);
   }
   expect(errors).toEqual([]);
 });
 
-test('ошибки формы: пустая почта, неверный адрес, нет согласия, нет связи', async ({ page }) => {
+test('ошибки формы почты: пустая, неверный адрес, нет связи; назад к способам', async ({ page }) => {
   await page.goto('/login');
+  await page.getByRole('button', { name: 'Войти по почте' }).click();
+  await expect(page.getByLabel('Почта')).toBeFocused();
   const submit = page.getByRole('button', { name: 'Получить код' });
   await submit.click();
   await expect(page.locator('[data-err="email"]')).toHaveText('Введите почту');
@@ -73,15 +82,12 @@ test('ошибки формы: пустая почта, неверный адр�
   await submit.click();
   await expect(page.locator('[data-err="email"]')).toContainText('Проверьте адрес почты');
   await page.getByLabel('Почта').fill('anna@mail.ru');
-  await submit.click();
-  await expect(page.locator('[data-err="consent"]')).toContainText('Отметьте согласие');
-  await expect(page.getByRole('checkbox')).toBeFocused();
-  // сеть пропала
   await page.route('**/api/auth/email/start', (r) => r.abort());
-  await page.getByRole('checkbox').click();
   await submit.click();
-  await expect(page.locator('[data-err="form"]')).toContainText('Нет связи с сервером');
+  await expect(page.locator('[data-pane="email"] [data-err="form"]')).toContainText('Нет связи с сервером');
   await expect(submit).toBeEnabled();
+  await page.getByRole('button', { name: 'Назад' }).click();
+  await expect(page.locator('h1')).toBeVisible();
 });
 
 test('вход по почте → анкета автора → кабинет → выход', async ({ page }, info) => {
@@ -125,7 +131,7 @@ test('вход по почте → анкета автора → кабинет 
 
   await page.waitForURL('**/account');
   await expect(page.locator('h1')).toHaveText('Алина');
-  await expect(page.locator('.rows')).toContainText('https://youtube.com/@alina'.replace('https://', ''));
+  await expect(page.locator('.rows')).toContainText('youtube.com/@alina');
   await expect(page.locator('.rows')).toContainText(email);
   // шапка: вместо «Войти» — аватар
   await expect(page.locator('[data-me]')).toHaveAttribute('href', '/account');
@@ -151,7 +157,7 @@ test('бизнес: роль выбирается в анкете, сферы �
   const email = uniq(info.project.name, 'biz');
   await page.goto('/login');
   // роль по умолчанию «бизнес» — сохраняется при регистрации
-  await page.getByRole('checkbox').click();
+  await page.getByRole('button', { name: 'Войти по почте' }).click();
   await page.getByLabel('Почта').fill(email);
   await page.getByRole('button', { name: 'Получить код' }).click();
   await expect(page.getByRole('heading', { name: 'Введите код' })).toBeVisible();
@@ -178,7 +184,7 @@ test('повторная отправка кода: таймер 60 с, лими
   // назад и сразу ещё раз — сервер отвечает 429, кнопка показывает таймер
   await page.getByRole('button', { name: 'Другая почта' }).click();
   await page.getByRole('button', { name: 'Получить код' }).click();
-  await expect(page.locator('[data-err="form"]')).toContainText('Новый код можно запросить через');
+  await expect(page.locator('[data-pane="email"] [data-err="form"]')).toContainText('Новый код можно запросить через');
   await expect(page.locator('[data-submit]')).toBeDisabled();
   await expect(page.locator('[data-submit]')).toContainText(/Повторить через 0:\d\d/);
 });
@@ -193,4 +199,22 @@ test('без CSRF-токена изменяющий запрос отклоня�
   const res = await request.post('/api/auth/email/start', { data: { email: 'a@mail.ru', consent: true } });
   expect(res.status()).toBe(403);
   expect((await res.json()).error.code).toBe('csrf');
+});
+
+test('Google: переход с state и PKCE; возврат с чужим state или отменой — понятная ошибка', async ({ page, request }) => {
+  const cfg = await (await request.get('/api/auth/config')).json();
+  test.skip(!cfg.google, 'ключи Google не заданы');
+  const r = await request.get('/api/auth/google/start?consent=1&role=creator', { maxRedirects: 0 });
+  expect(r.status()).toBe(302);
+  const loc = new URL(r.headers()['location']);
+  expect(loc.host).toBe('accounts.google.com');
+  expect(loc.searchParams.get('code_challenge_method')).toBe('S256');
+  expect(loc.searchParams.get('state')).toBeTruthy();
+  expect(r.headers()['set-cookie']).toMatch(/ohvat_oauth=.*HttpOnly/i);
+  // эмуляция возврата из Google (обмен кода не вызывается — state не совпал / человек отменил)
+  await page.goto('/api/auth/google/callback?state=forged&code=x');
+  await expect(page).toHaveURL(/\/login$/);
+  await expect(page.locator('[data-flash]')).toContainText('Вход через Google прервался');
+  await page.goto('/api/auth/google/callback?error=access_denied');
+  await expect(page.locator('[data-flash]')).toContainText('Вход через Google отменён');
 });

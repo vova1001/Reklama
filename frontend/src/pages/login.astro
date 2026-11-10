@@ -1,9 +1,9 @@
 ---
-// Вход и регистрация: роль → Google / Telegram / почта с кодом → анкета первого входа.
-// Шаги «почта» и «код» — на одной странице (скрипт), анкета — когда человек уже вошёл, но не заполнил её.
+// Вход и регистрация — одна узкая карточка по центру: знак, заголовок, роль, способы входа пилюлями, одна строка
+// согласия. Шаги «почта», «код», «Telegram» — внутри карточки (скрипт). Анкета — когда человек вошёл, но не заполнил её.
 import Base from '../layouts/Base.astro';
-import Header from '../components/Header.astro';
 import Icon from '../components/Icon.astro';
+import Mark from '../components/Mark.astro';
 import Avatar from '../components/Avatar.astro';
 import { fetchAuthConfig, ROLE_TITLE } from '../lib/auth';
 import { getHome, type Category } from '../lib/api';
@@ -28,188 +28,175 @@ const ERRORS: Record<string, string> = {
   google_state: 'Вход через Google прервался — страница была открыта слишком долго. Нажмите кнопку ещё раз.',
   google_cancel: 'Вход через Google отменён.',
   google_off: 'Вход через Google сейчас недоступен. Выберите другой способ.',
-  consent: 'Чтобы продолжить, отметьте согласие на обработку данных.',
+  consent: 'Чтобы продолжить, нужно согласие на обработку данных.',
 };
-const errKey = Astro.url.searchParams.get('error') ?? '';
-const error = ERRORS[errKey] ?? '';
-const social = cfg.google || !!cfg.telegram;
-const anyMethod = social || cfg.email;
+const error = ERRORS[Astro.url.searchParams.get('error') ?? ''] ?? '';
+const tg = cfg.telegram;
+const anyMethod = cfg.google || !!tg || cfg.email;
 const role = me?.user.role ?? null;
 const ROLES = [
   { id: 'business', title: 'Я бизнес', icon: 'store' },
   { id: 'creator', title: 'Я автор', icon: 'video' },
 ] as const;
+const TG_ICON = '<svg class="brand" width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="12" fill="#2AABEE"/><path fill="#fff" d="M5.4 11.8 16.9 7.4c.5-.2 1 .1.8.9l-2 9.3c-.1.6-.5.8-1 .5l-3-2.2-1.4 1.4c-.2.2-.3.3-.6.3l.2-3.1 5.6-5c.2-.2 0-.3-.3-.1l-6.9 4.3-3-.9c-.6-.2-.6-.6.1-.9z"/></svg>';
 ---
-<Base title={step === 'profile' ? 'Анкета — Охват' : 'Вход и регистрация — Охват'} description="Вход и регистрация в Охвате: через Google, Telegram или по коду из письма." noindex>
-  <Header />
-  <main class="auth light" data-auth data-step={step} data-telegram-bot={cfg.telegram?.botId ?? ''}>
-    <div class="w auth-grid">
-      <div class="auth-intro">
-        {step === 'profile' ? (
-          <>
-            <p class="eyebrow"><Icon name="user-round-pen" size={20} />Последний шаг</p>
-            <h1>Расскажите о себе</h1>
-            <p class="lead">Пара полей — и кабинет готов.</p>
-          </>
-        ) : (
-          <>
-            <p class="eyebrow"><Icon name="zap" size={20} />Вход за минуту</p>
-            <h1>Вход и<br class="br-md" /> регистрация</h1>
-            <p class="lead">Один аккаунт — для заданий, откликов и оплаты. Без пароля.</p>
-            <ul class="auth-points">
-              <li><i class="ring"><Icon name="shield-check" size={22} /></i>Безопасная сделка для бизнеса и авторов</li>
-              <li><i class="ring"><Icon name="mail" size={22} /></i>Код из письма, Google или Telegram</li>
-              <li><i class="ring"><Icon name="badge-check" size={22} /></i>Начать можно бесплатно</li>
-            </ul>
-          </>
-        )}
-      </div>
+<Base title={step === 'profile' ? 'Анкета — Охват' : 'Вход — Охват'} description="Вход и регистрация в Охвате: через Telegram, Google или по коду из письма." noindex>
+  <main class="au" data-auth data-step={step} data-telegram-bot={tg?.botId ?? ''} data-telegram-mode={tg ? (tg.bot ? 'bot' : 'widget') : ''}>
+    <a class="au-mark" href="/" aria-label="Охват — на главную"><Mark size={44} /></a>
 
-      <div class="auth-card cd">
-        <!-- шаг 1: роль и способ входа; шаг 2: код из письма -->
-        {step === 'start' && (
-          <>
-            <section data-pane="start" aria-labelledby="t-start">
-              <h2 id="t-start" class="sr-only">Способ входа</h2>
-              {error && <p class="note err" role="alert" data-flash><Icon name="circle-alert" size={20} />{error}</p>}
-              {anyMethod ? (
-                <>
-                  <div class="field">
-                    <span class="lbl" id="role-l">Кто вы <span class="hint">· важно при первом входе</span></span>
-                    <div class="roles" role="radiogroup" aria-labelledby="role-l" data-roles>
-                      {ROLES.map((r, i) => (
-                        <button type="button" role="radio" aria-checked={i === 0 ? 'true' : 'false'} tabindex={i === 0 ? 0 : -1} data-role={r.id}>
-                          <Icon name={r.icon} size={20} />{r.title}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div class="consent" data-consent-wrap>
-                    <button class="chk" type="button" role="checkbox" aria-checked="false" aria-labelledby="consent-t" aria-describedby="consent-err" data-consent>
-                      <Icon name="check" size={18} />
+    <div class="au-card">
+      {step === 'start' && (
+        <>
+          <!-- способ входа -->
+          <section data-pane="start" aria-labelledby="t-start">
+            <h1 id="t-start">Вход в Охват</h1>
+            <p class="au-sub">Без пароля. Аккаунт создастся при первом входе.</p>
+            {error && <p class="note err" role="alert" data-flash><Icon name="circle-alert" size={20} />{error}</p>}
+            {anyMethod ? (
+              <>
+                <div class="au-seg" role="radiogroup" aria-label="Кто вы" data-roles>
+                  {ROLES.map((r, i) => (
+                    <button type="button" role="radio" aria-checked={i === 0 ? 'true' : 'false'} tabindex={i === 0 ? 0 : -1} data-role={r.id}>
+                      <Icon name={r.icon} size={18} />{r.title}
                     </button>
-                    <p id="consent-t">Принимаю <a href="/docs/terms">условия сервиса</a> и даю <a href="/docs/consent">согласие на обработку персональных данных</a></p>
-                  </div>
-                  <p class="ferr" id="consent-err" data-err="consent" aria-live="polite"></p>
-                  {social && (
-                    <div class="soc">
-                      {cfg.google && (
-                        <a class="btn b-od wide" href="/api/auth/google/start" data-google>
-                          <svg class="brand" width="22" height="22" viewBox="0 0 48 48" aria-hidden="true"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.7 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.4-.4-3.5z"/><path fill="#FF3D00" d="m6.3 14.7 6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.2 0-9.6-3.3-11.3-7.9l-6.5 5C9.5 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.3-.1-2.4-.4-3.5z"/></svg>
-                          Войти через Google
-                        </a>
-                      )}
-                      {cfg.telegram && (
-                        <button class="btn b-od wide" type="button" data-telegram>
-                          <svg class="brand" width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="12" fill="#2AABEE"/><path fill="#fff" d="M5.4 11.8 16.9 7.4c.5-.2 1 .1.8.9l-2 9.3c-.1.6-.5.8-1 .5l-3-2.2-1.4 1.4c-.2.2-.3.3-.6.3l.2-3.1 5.6-5c.2-.2 0-.3-.3-.1l-6.9 4.3-3-.9c-.6-.2-.6-.6.1-.9z"/></svg>
-                          Войти через Telegram
-                        </button>
-                      )}
-                    </div>
+                  ))}
+                </div>
+                <div class="ways">
+                  {tg && (
+                    <button class="btn way" type="button" data-telegram><Fragment set:html={TG_ICON} />Войти через Telegram</button>
                   )}
-
-                  {social && cfg.email && <p class="or"><span>или</span></p>}
-
+                  {cfg.google && (
+                    <a class="btn way" href="/api/auth/google/start" data-google>
+                      <svg class="brand" width="22" height="22" viewBox="0 0 48 48" aria-hidden="true"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.7 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.4-.4-3.5z"/><path fill="#FF3D00" d="m6.3 14.7 6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.2 0-9.6-3.3-11.3-7.9l-6.5 5C9.5 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.3-.1-2.4-.4-3.5z"/></svg>
+                      Войти через Google
+                    </a>
+                  )}
                   {cfg.email && (
-                    <form class="em" novalidate data-email-form>
-                      <div class="field">
-                        <label class="lbl" for="email">Почта</label>
-                        <input class="inp" id="email" name="email" type="email" inputmode="email" autocomplete="email" spellcheck="false" maxlength="254" placeholder="name@mail.ru" aria-describedby="email-err" />
-                        <p class="ferr" id="email-err" data-err="email" aria-live="polite"></p>
-                      </div>
-                      <button class="btn b-d wide" type="submit" data-submit><span>Получить код</span></button>
-                    </form>
+                    <button class="btn way" type="button" data-to-email><Icon name="mail" size={22} />Войти по почте</button>
                   )}
-
-                  <p class="ferr" data-err="form" role="alert"></p>
-                </>
-              ) : (
-                <p class="note" role="status">Вход временно недоступен — мы уже разбираемся. Попробуйте через несколько минут.</p>
-              )}
-            </section>
-
-            <section data-pane="code" hidden aria-labelledby="t-code">
-              <button class="back" type="button" data-back><Icon name="arrow-left" size={20} />Другая почта</button>
-              <h2 id="t-code" class="pane-t" tabindex="-1">Введите код</h2>
-              <p class="pane-s">Отправили 6 цифр на <b data-sent-to></b>. Код действует 10 минут.</p>
-              <form novalidate data-code-form>
-                <div class="otp" role="group" aria-label="Код из письма" aria-describedby="code-err">
-                  {[0, 1, 2, 3, 4, 5].map((i) => (
-                    <input class="inp" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="6" autocomplete={i === 0 ? 'one-time-code' : 'off'} aria-label={`Цифра ${i + 1} из 6`} data-digit />
-                  ))}
                 </div>
-                <p class="ferr" id="code-err" data-err="code" aria-live="polite"></p>
-                <button class="btn b-d wide" type="submit" data-verify><span>Войти</span></button>
-              </form>
-              <div class="resend">
-                <p data-resend-wait aria-live="polite"></p>
-                <button class="lnk-btn" type="button" data-resend hidden>Отправить ещё раз</button>
-              </div>
-              <p class="pane-hint">Письма нет? Проверьте папку «Спам»{social ? ' или войдите другим способом' : ''}.</p>
-            </section>
-          </>
-        )}
+                <p class="ferr" data-err="form" role="alert"></p>
+                <p class="au-legal">Продолжая, вы принимаете <a href="/docs/terms">условия сервиса</a> и даёте <a href="/docs/consent">согласие на обработку персональных данных</a>.</p>
+              </>
+            ) : (
+              <p class="note" role="status">Вход временно недоступен — мы уже разбираемся. Попробуйте через несколько минут.</p>
+            )}
+          </section>
 
-        <!-- шаг 3: анкета первого входа -->
-        {step === 'profile' && me && (
-          <section data-pane="profile" aria-labelledby="t-profile">
-            <div class="who">
-              <Avatar user={me.user} size={48} />
-              <div><h2 id="t-profile" class="pane-t">Анкета</h2><p class="pane-s">{me.user.email ?? 'Вход выполнен'}</p></div>
-            </div>
-            <form novalidate data-profile-form data-role={role ?? ''}>
-              {role ? (
-                <p class="role-b"><Icon name={role === 'business' ? 'store' : 'video'} size={20} />{ROLE_TITLE[role]}</p>
-              ) : (
-                <div class="field">
-                  <span class="lbl" id="prole-l">Кто вы</span>
-                  <div class="roles" role="radiogroup" aria-labelledby="prole-l" aria-describedby="role-err" data-roles>
-                    {ROLES.map((r, i) => (
-                      <button type="button" role="radio" aria-checked="false" tabindex={i === 0 ? 0 : -1} data-role={r.id}>
-                        <Icon name={r.icon} size={20} />{r.title}
-                      </button>
-                    ))}
-                  </div>
-                  <p class="ferr" id="role-err" data-err="role" aria-live="polite"></p>
-                </div>
-              )}
+          <!-- почта -->
+          <section data-pane="email" hidden aria-labelledby="t-email">
+            <button class="back" type="button" data-back><Icon name="arrow-left" size={20} />Назад</button>
+            <h2 id="t-email" class="pane-t" tabindex="-1">Вход по почте</h2>
+            <p class="pane-s">Пришлём код из 6 цифр.</p>
+            <form class="em" novalidate data-email-form>
               <div class="field">
-                <label class="lbl" for="name" data-name-label>{role === 'creator' ? 'Имя или псевдоним' : role === 'business' ? 'Название компании или бренда' : 'Имя или название'}</label>
-                <input class="inp" id="name" name="name" autocomplete="name" maxlength="80" value={me.user.name} aria-describedby="name-err" />
-                <p class="ferr" id="name-err" data-err="name" aria-live="polite"></p>
+                <label class="lbl sr-only" for="email">Почта</label>
+                <input class="inp" id="email" name="email" type="email" inputmode="email" autocomplete="email" spellcheck="false" maxlength="254" placeholder="name@mail.ru" aria-describedby="email-err" />
+                <p class="ferr" id="email-err" data-err="email" aria-live="polite"></p>
               </div>
-              <div class="field">
-                <label class="lbl" for="city">Город</label>
-                <input class="inp" id="city" name="city" autocomplete="address-level2" maxlength="80" value={me.user.city} placeholder="Например, Казань" aria-describedby="city-err" />
-                <p class="ferr" id="city-err" data-err="city" aria-live="polite"></p>
-              </div>
-              <div class="field" data-for="business" hidden={role !== 'business'}>
-                <span class="lbl" id="sph-l">Сфера <span class="hint">· до 5</span></span>
-                <div class="chips" role="group" aria-labelledby="sph-l" aria-describedby="spheres-err" data-spheres>
-                  {categories.map((c) => (
-                    <button type="button" class="chip" aria-pressed="false" data-slug={c.slug}><Icon name={c.icon} size={18} />{c.title}</button>
-                  ))}
-                </div>
-                <p class="ferr" id="spheres-err" data-err="spheres" aria-live="polite"></p>
-              </div>
-              <div class="field" data-for="creator" hidden={role !== 'creator'}>
-                <span class="lbl" id="ch-l">Ваши каналы <span class="hint">· ссылка или @имя, до 5</span></span>
-                <div class="chans" role="group" aria-labelledby="ch-l" aria-describedby="channels-err" data-channels>
-                  <div class="chan">
-                    <Icon name="link" size={20} />
-                    <input class="inp" type="text" inputmode="url" maxlength="200" placeholder="youtube.com/@канал" aria-label="Канал 1" />
-                  </div>
-                </div>
-                <button class="lnk-btn" type="button" data-add-channel><Icon name="plus" size={18} />Добавить ещё</button>
-                <p class="ferr" id="channels-err" data-err="channels" aria-live="polite"></p>
-              </div>
+              <button class="btn b-d wide" type="submit" data-submit><span>Получить код</span></button>
               <p class="ferr" data-err="form" role="alert"></p>
-              <button class="btn b-d wide" type="submit" data-submit><span>Готово</span></button>
             </form>
           </section>
-        )}
-      </div>
+
+          <!-- код из письма -->
+          <section data-pane="code" hidden aria-labelledby="t-code">
+            <button class="back" type="button" data-back-email><Icon name="arrow-left" size={20} />Другая почта</button>
+            <h2 id="t-code" class="pane-t" tabindex="-1">Введите код</h2>
+            <p class="pane-s">Отправили на <b data-sent-to></b>. Код действует 10 минут.</p>
+            <form novalidate data-code-form>
+              <div class="otp" role="group" aria-label="Код из письма" aria-describedby="code-err">
+                {[0, 1, 2, 3, 4, 5].map((i) => (
+                  <input class="inp" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="6" autocomplete={i === 0 ? 'one-time-code' : 'off'} aria-label={`Цифра ${i + 1} из 6`} data-digit />
+                ))}
+              </div>
+              <p class="ferr" id="code-err" data-err="code" aria-live="polite"></p>
+              <button class="btn b-d wide" type="submit" data-verify><span>Войти</span></button>
+            </form>
+            <div class="resend">
+              <p data-resend-wait aria-live="polite"></p>
+              <button class="lnk-btn" type="button" data-resend hidden>Отправить ещё раз</button>
+            </div>
+            <p class="pane-hint">Письма нет? Проверьте «Спам» или войдите другим способом.</p>
+          </section>
+
+          <!-- Telegram: подтверждение в боте -->
+          {tg && (
+            <section data-pane="tg" hidden aria-labelledby="t-tg">
+              <button class="back" type="button" data-back><Icon name="arrow-left" size={20} />Другой способ</button>
+              <h2 id="t-tg" class="pane-t" tabindex="-1">Подтвердите вход в Telegram</h2>
+              <p class="pane-s">Откройте бота @{tg.botName} и нажмите «Подтвердить вход» — кабинет откроется здесь сам.</p>
+              <a class="btn way tg-open" href={`https://t.me/${tg.botName}`} target="_blank" rel="noopener noreferrer" data-tg-open><Fragment set:html={TG_ICON} />Открыть Telegram</a>
+              <p class="wait" data-tg-wait aria-live="polite"><span class="dot" aria-hidden="true"></span><span data-tg-wait-text>Ждём подтверждения…</span></p>
+              <div class="tg-expired" data-tg-expired hidden>
+                <p class="ferr" data-err="tg" role="alert"></p>
+                <button class="btn b-d wide" type="button" data-tg-again><span>Получить новую ссылку</span></button>
+              </div>
+              {tg.bot && <button class="lnk-btn small" type="button" data-tg-widget>Не открывается? Войти через окно Telegram</button>}
+            </section>
+          )}
+        </>
+      )}
+
+      {step === 'profile' && me && (
+        <section data-pane="profile" aria-labelledby="t-profile">
+          <div class="who">
+            <Avatar user={me.user} size={44} />
+            <p class="pane-s">{me.user.email ?? 'Вход выполнен'}</p>
+          </div>
+          <h1 id="t-profile">Расскажите о себе</h1>
+          <p class="au-sub">Пара полей — и кабинет готов.</p>
+          <form novalidate data-profile-form data-role={role ?? ''}>
+            {role ? (
+              <p class="role-b"><Icon name={role === 'business' ? 'store' : 'video'} size={18} />{ROLE_TITLE[role]}</p>
+            ) : (
+              <div class="field">
+                <span class="lbl" id="prole-l">Кто вы</span>
+                <div class="au-seg" role="radiogroup" aria-labelledby="prole-l" aria-describedby="role-err" data-roles>
+                  {ROLES.map((r, i) => (
+                    <button type="button" role="radio" aria-checked="false" tabindex={i === 0 ? 0 : -1} data-role={r.id}>
+                      <Icon name={r.icon} size={18} />{r.title}
+                    </button>
+                  ))}
+                </div>
+                <p class="ferr" id="role-err" data-err="role" aria-live="polite"></p>
+              </div>
+            )}
+            <div class="field">
+              <label class="lbl" for="name" data-name-label>{role === 'creator' ? 'Имя или псевдоним' : role === 'business' ? 'Название компании или бренда' : 'Имя или название'}</label>
+              <input class="inp" id="name" name="name" autocomplete="name" maxlength="80" value={me.user.name} aria-describedby="name-err" />
+              <p class="ferr" id="name-err" data-err="name" aria-live="polite"></p>
+            </div>
+            <div class="field">
+              <label class="lbl" for="city">Город</label>
+              <input class="inp" id="city" name="city" autocomplete="address-level2" maxlength="80" value={me.user.city} placeholder="Например, Казань" aria-describedby="city-err" />
+              <p class="ferr" id="city-err" data-err="city" aria-live="polite"></p>
+            </div>
+            <div class="field" data-for="business" hidden={role !== 'business'}>
+              <span class="lbl" id="sph-l">Сфера <span class="hint">· до 5</span></span>
+              <div class="chips" role="group" aria-labelledby="sph-l" aria-describedby="spheres-err" data-spheres>
+                {categories.map((c) => (
+                  <button type="button" class="chip" aria-pressed="false" data-slug={c.slug}><Icon name={c.icon} size={18} />{c.title}</button>
+                ))}
+              </div>
+              <p class="ferr" id="spheres-err" data-err="spheres" aria-live="polite"></p>
+            </div>
+            <div class="field" data-for="creator" hidden={role !== 'creator'}>
+              <span class="lbl" id="ch-l">Ваши каналы <span class="hint">· ссылка или @имя</span></span>
+              <div class="chans" role="group" aria-labelledby="ch-l" aria-describedby="channels-err" data-channels>
+                <div class="chan">
+                  <Icon name="link" size={20} />
+                  <input class="inp" type="text" inputmode="url" maxlength="200" placeholder="youtube.com/@канал" aria-label="Канал 1" />
+                </div>
+              </div>
+              <button class="lnk-btn" type="button" data-add-channel><Icon name="plus" size={18} />Добавить ещё</button>
+              <p class="ferr" id="channels-err" data-err="channels" aria-live="polite"></p>
+            </div>
+            <p class="ferr" data-err="form" role="alert"></p>
+            <button class="btn b-d wide" type="submit" data-submit><span>Готово</span></button>
+          </form>
+        </section>
+      )}
     </div>
   </main>
 </Base>

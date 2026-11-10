@@ -1,0 +1,34 @@
+# e2e: бот Telegram против подставного Bot API (настоящий Telegram не вызывается).
+# docker compose -f docker-compose.yml -f docker-compose.e2e.yml up --build -d --wait  (make e2e-up)
+# Токен и секрет здесь — фиктивные, только для подставного сервера.
+services:
+  faketg:
+    build:
+      context: ./backend
+      args:
+        REGISTRY: ${REGISTRY:-docker.io/library}
+    entrypoint: ["faketelegram"]
+    environment:
+      FAKE_BOT_NAME: ohvat_test_bot
+    ports:
+      - "127.0.0.1:8081:8081"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8081/healthz >/dev/null || exit 1"]
+      interval: 2s
+      timeout: 2s
+      retries: 20
+
+  backend:
+    environment:
+      TELEGRAM_BOT_TOKEN: "100000:e2e-fake-token"
+      TELEGRAM_BOT_NAME: ohvat_test_bot
+      TELEGRAM_WEBHOOK_SECRET: e2e-webhook-secret
+      TELEGRAM_API_URL: http://faketg:8081
+      TELEGRAM_SEND_RPS: "30"
+      # все браузеры e2e — с одного адреса: лимиты на адрес шире (сами лимиты проверяют Go-тесты и e2e почты)
+      TELEGRAM_LOGIN_PER_IP_HOUR: "1000"
+      RATE_LIMIT_RPS: "20"
+      RATE_LIMIT_BURST: "200"
+    depends_on:
+      faketg:
+        condition: service_healthy

@@ -9,11 +9,12 @@ RUN cat /tmp/certs/*.crt >> /etc/ssl/certs/ca-certificates.crt 2>/dev/null || tr
 COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
-RUN go build -trimpath -ldflags="-s -w" -o /out/server ./cmd/server
+RUN go build -trimpath -ldflags="-s -w" -o /out/server ./cmd/server && \
+    go build -trimpath -ldflags="-s -w" -o /out/faketelegram ./cmd/faketelegram
 
 FROM ${REGISTRY}/alpine:3.20
 RUN adduser -D -u 10001 app
-COPY --from=build /out/server /usr/local/bin/server
+COPY --from=build /out/server /out/faketelegram /usr/local/bin/
 USER app
 EXPOSE 8080
 HEALTHCHECK --interval=10s --timeout=3s --start-period=20s --retries=5 CMD wget -qO- http://127.0.0.1:8080/healthz >/dev/null || exit 1

@@ -30,7 +30,9 @@ for (const [w, h, mobile] of [[375, 812, true], [768, 1024, false], [1440, 900, 
   await page.evaluate(() => document.fonts.ready);
   await shot(page, `login-${w}`);
 
-  // пустая почта и нет согласия — ошибки рядом с полями
+  // почта: пустая и неверная — ошибки рядом с полем
+  if (w !== 768) await page.click('[data-role="creator"]');
+  await page.click('[data-to-email]');
   await page.click('[data-submit]');
   await page.fill('#email', 'name');
   await page.click('[data-submit]');
@@ -39,8 +41,6 @@ for (const [w, h, mobile] of [[375, 812, true], [768, 1024, false], [1440, 900, 
   // код
   const email = `screens-${w}-${stamp}@example.com`;
   await page.fill('#email', email);
-  await page.click('[data-consent]');
-  if (w !== 768) await page.click('[data-role="creator"]');
   await page.click('[data-submit]');
   await page.waitForSelector('[data-pane="code"]:not([hidden])');
   await shot(page, `code-${w}`);

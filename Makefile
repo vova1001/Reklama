@@ -2,7 +2,7 @@
 SHELL := /bin/sh
 COMPOSE := docker compose
 
-.PHONY: env dev up down logs test e2e screens lint gen prod
+.PHONY: env dev up down logs test e2e e2e-up screens lint gen prod
 
 ## .env из .env.example со случайным паролем базы и AUTH_SECRET (если .env ещё нет)
 env:
@@ -30,7 +30,11 @@ logs:
 test:
 	$(COMPOSE) --profile test run --rm --build backend-test; s=$$?; $(COMPOSE) --profile test stop db-test >/dev/null 2>&1; exit $$s
 
-## e2e (Playwright) против поднятого стека (make dev)
+## стек для e2e: как make dev + бот против подставного Telegram API (docker-compose.e2e.yml)
+e2e-up: env
+	$(COMPOSE) -f docker-compose.yml -f docker-compose.e2e.yml up --build -d --wait
+
+## e2e (Playwright) против поднятого стека (make e2e-up; без бота — make dev, тесты бота пропускаются)
 e2e:
 	cd frontend && npx playwright test
 
