@@ -46,6 +46,16 @@ services:
         sync: false
       - key: TELEGRAM_BOT_NAME
         value: reklama_auth_bot
+      - key: TELEGRAM_WEBHOOK_SECRET # секрет вебхука бота (openssl rand -hex 32); вебхук ставится сам при старте
+        sync: false
+      - key: TELEGRAM_MODE # webhook: setWebhook на ${PUBLIC_URL}/api/telegram/webhook
+        value: webhook
+      - key: TELEGRAM_LOGIN_TTL_MIN # срок ссылки входа через бота, минут
+        value: "5"
+      - key: TELEGRAM_LOGIN_PER_IP_HOUR
+        value: "30"
+      - key: TELEGRAM_SEND_RPS # сообщений бота в секунду (лимит Telegram ~30)
+        value: "25"
       # ----- Google -----
       - key: GOOGLE_CLIENT_ID # [ПЕРЕЕЗД] новый домен — добавить redirect URI в Google Cloud
         sync: false

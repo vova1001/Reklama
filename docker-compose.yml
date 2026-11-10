@@ -39,6 +39,12 @@ services:
       SMTP_FROM: ${SMTP_FROM:-}
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
       TELEGRAM_BOT_NAME: ${TELEGRAM_BOT_NAME:-}
+      TELEGRAM_WEBHOOK_SECRET: ${TELEGRAM_WEBHOOK_SECRET:-}
+      TELEGRAM_MODE: ${TELEGRAM_MODE:-}
+      TELEGRAM_API_URL: ${TELEGRAM_API_URL:-}
+      TELEGRAM_LOGIN_TTL_MIN: ${TELEGRAM_LOGIN_TTL_MIN:-}
+      TELEGRAM_LOGIN_PER_IP_HOUR: ${TELEGRAM_LOGIN_PER_IP_HOUR:-}
+      TELEGRAM_SEND_RPS: ${TELEGRAM_SEND_RPS:-}
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
       GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
       AUTH_CODE_TTL_MIN: ${AUTH_CODE_TTL_MIN:-}
@@ -105,7 +111,7 @@ services:
       TEST_DATABASE_URL: postgres://test:test@db-test:5432/test?sslmode=disable
     command: >
       sh -c "go vet ./... &&
-             go test -count=1 -p 1 -coverpkg=./internal/service,./internal/repository,./internal/transport/http -coverprofile=/tmp/c.out ./... &&
+             go test -count=1 -p 1 -race -coverpkg=./internal/service,./internal/repository,./internal/transport/...,./internal/gateway/telegram -coverprofile=/tmp/c.out ./... &&
              go tool cover -func=/tmp/c.out | tail -1"
     depends_on:
       db-test:

@@ -119,6 +119,71 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/auth/telegram/bot/start": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Вход через бота — ссылка на бота
+         * @description Одноразовый токен (в базе — SHA-256) в ссылке `https://t.me/<бот>?start=login_<токен>`, срок — TELEGRAM_LOGIN_TTL_MIN
+         *     (5 мин). Секрет браузера — в httpOnly-cookie `ohvat_tglogin` (Path=/api/auth/telegram/bot): забрать вход может только
+         *     этот браузер. Лимит — TELEGRAM_LOGIN_PER_IP_HOUR запусков с адреса в час.
+         */
+        post: operations["startTelegramBot"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/auth/telegram/bot/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Вход через бота — ждать подтверждения (long-poll до 25 с)
+         * @description По cookie `ohvat_tglogin`. Подтверждено в боте — сессия (`status: ok`, cookie `ohvat_session`), иначе по истечении
+         *     ожидания `status: pending` — запросить снова. Вход забирается один раз.
+         */
+        post: operations["waitTelegramBot"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/telegram/webhook": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Вебхук бота Telegram
+         * @description Обновления Telegram (message, callback_query, my_chat_member). Без CSRF; заголовок
+         *     `X-Telegram-Bot-Api-Secret-Token` = TELEGRAM_WEBHOOK_SECRET. Вебхук ставится при старте сервера
+         *     (setWebhook на ${PUBLIC_URL}/api/telegram/webhook). Повтор одного update_id обрабатывается один раз.
+         */
+        post: operations["telegramWebhook"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/auth/google/start": {
         parameters: {
             query?: never;
@@ -315,10 +380,12 @@ export interface components {
             google: boolean;
             /** @description null — бот не подключён, кнопка скрыта */
             telegram: {
-                /** @description Числовой id бота для Telegram Login */
+                /** @description Числовой id бота для Telegram Login (запасной способ — окно-виджет) */
                 botId: string;
                 /** @description Имя бота без @ */
                 botName: string;
+                /** @description Вход через бота доступен (основной способ) */
+                bot: boolean;
             } | null;
             csrfToken: string;
         };
@@ -358,6 +425,28 @@ export interface components {
             user: {
                 [key: string]: unknown;
             };
+        };
+        BotStart: {
+            /** @enum {string} */
+            role?: "business" | "creator" | "";
+            consent: boolean;
+        };
+        BotLink: {
+            /** @example https://t.me/reklama_auth_bot?start=login_AbC… */
+            url: string;
+            /**
+             * @description Срок ссылки
+             * @example 300
+             */
+            expiresIn: number;
+        };
+        BotStatus: {
+            /** @enum {string} */
+            status: "pending" | "ok";
+            user?: components["schemas"]["User"];
+            /** @enum {string} */
+            next?: "/account" | "/login?step=profile";
+            created?: boolean;
         };
         ProfileInput: {
             /**
@@ -633,6 +722,128 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             429: components["responses"]["TooMany"];
             503: components["responses"]["Unavailable"];
+        };
+    };
+    startTelegramBot: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Значение из `GET /api/auth/config` (равно cookie `ohvat_csrf`) */
+                "X-CSRF-Token": components["parameters"]["CSRF"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BotStart"];
+            };
+        };
+        responses: {
+            /** @description Ссылка на бота */
+            201: {
+                headers: {
+                    /** @description ohvat_tglogin=…; HttpOnly; Secure; SameSite=Lax; Path=/api/auth/telegram/bot */
+                    "Set-Cookie"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BotLink"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            403: components["responses"]["Forbidden"];
+            429: components["responses"]["TooMany"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    waitTelegramBot: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Значение из `GET /api/auth/config` (равно cookie `ohvat_csrf`) */
+                "X-CSRF-Token": components["parameters"]["CSRF"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description pending — ещё ждём; ok — вошли */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BotStatus"];
+                };
+            };
+            403: components["responses"]["Forbidden"];
+            /** @description login_expired — ссылка устарела или уже использована | login_cancelled — «Это не я» в боте */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            429: components["responses"]["TooMany"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    telegramWebhook: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-Telegram-Bot-Api-Secret-Token": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    [key: string]: unknown;
+                };
+            };
+        };
+        responses: {
+            /** @description Принято (или не нужно боту) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Секрет не совпал */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Бот не подключён */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Сбой — Telegram повторит */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Перегрузка — Telegram повторит */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
         };
     };
     startGoogle: {

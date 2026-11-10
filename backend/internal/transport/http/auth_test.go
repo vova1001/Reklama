@@ -21,11 +21,12 @@ const testCSRF = "csrf-token-csrf-token-csrf-token-csrf-token" // 43 симво�
 
 // fakeAuth — подставной сервис входа: err — ошибка для любого метода, last — что передали.
 type fakeAuth struct {
-	mu      sync.Mutex
-	err     error
-	user    domain.User
-	methods service.Methods
-	last    map[string]any
+	mu        sync.Mutex
+	err       error
+	user      domain.User
+	methods   service.Methods
+	last      map[string]any
+	botStatus service.BotLoginStatus
 }
 
 func (f *fakeAuth) remember(k string, v any) {
@@ -90,6 +91,30 @@ func (f *fakeAuth) SaveProfile(_ context.Context, u domain.User, p domain.Profil
 	now := time.Now()
 	u.Name, u.OnboardedAt = p.Name, &now
 	return u, nil
+}
+
+func (f *fakeAuth) StartTelegramBot(ctx context.Context, role string, consent bool, ip string) (service.TelegramBotStart, error) {
+	f.remember("botstart", []any{role, consent, ip})
+	f.remember("client", clientInfoOf(ctx))
+	if f.err != nil {
+		return service.TelegramBotStart{}, f.err
+	}
+	return service.TelegramBotStart{URL: "https://t.me/reklama_auth_bot?start=login_x", BrowserSecret: "browser-secret", ExpiresIn: 5 * time.Minute}, nil
+}
+
+func (f *fakeAuth) WaitTelegramBot(ctx context.Context, secret string, wait time.Duration) (service.BotLoginStatus, service.LoginResult, error) {
+	f.remember("botwait", []any{secret, wait})
+	f.mu.Lock()
+	st := f.botStatus
+	f.mu.Unlock()
+	if f.err != nil {
+		return "", service.LoginResult{}, f.err
+	}
+	if st == service.BotLoginDone {
+		res, _ := f.login()
+		return st, res, nil
+	}
+	return service.BotLoginWaiting, service.LoginResult{}, nil
 }
 
 func newSrv(home HomeService, health HealthService) *Server {

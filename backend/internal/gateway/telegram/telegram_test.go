@@ -248,7 +248,9 @@ func (a *apiFunc) SendMessage(_ context.Context, chat int64, text string, _ *Mar
 func (a *apiFunc) EditMessageText(_ context.Context, chat, _ int64, text string, _ *Markup) error {
 	return a.do("edit:"+text, chat)
 }
-func (a *apiFunc) AnswerCallbackQuery(_ context.Context, id, _ string) error { return a.do("answer:"+id, 0) }
+func (a *apiFunc) AnswerCallbackQuery(_ context.Context, id, _ string) error {
+	return a.do("answer:"+id, 0)
+}
 
 func (a *apiFunc) calls() []string {
 	a.mu.Lock()

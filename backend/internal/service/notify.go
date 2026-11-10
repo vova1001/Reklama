@@ -124,3 +124,6 @@ func MaskIP(ip string) string {
 	b := p.To16()
 	return fmt.Sprintf("%x:%x:%x::x", uint16(b[0])<<8|uint16(b[1]), uint16(b[2])<<8|uint16(b[3]), uint16(b[4])<<8|uint16(b[5]))
 }
+
+// ClientFromContext — сведения о клиенте из контекста (для проверок транспорта).
+func ClientFromContext(ctx context.Context) ClientInfo { return clientFrom(ctx) }

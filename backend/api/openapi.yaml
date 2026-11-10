@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: Охват API
-  version: 0.2.0
+  version: 0.3.0
   description: |
     API площадки «Охват»: данные главной, регистрация и вход (почта с кодом, Telegram, Google), анкета, кабинет.
     Все ответы — JSON в UTF-8. Ошибки — в едином формате `Error`.
@@ -121,6 +121,81 @@ paths:
         "403": { $ref: "#/components/responses/Forbidden" }
         "429": { $ref: "#/components/responses/TooMany" }
         "503": { $ref: "#/components/responses/Unavailable" }
+  /api/auth/telegram/bot/start:
+    post:
+      summary: Вход через бота — ссылка на бота
+      description: |
+        Одноразовый токен (в базе — SHA-256) в ссылке `https://t.me/<бот>?start=login_<токен>`, срок — TELEGRAM_LOGIN_TTL_MIN
+        (5 мин). Секрет браузера — в httpOnly-cookie `ohvat_tglogin` (Path=/api/auth/telegram/bot): забрать вход может только
+        этот браузер. Лимит — TELEGRAM_LOGIN_PER_IP_HOUR запусков с адреса в час.
+      operationId: startTelegramBot
+      tags: [auth]
+      parameters: [{ $ref: "#/components/parameters/CSRF" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/BotStart" }
+      responses:
+        "201":
+          description: Ссылка на бота
+          headers:
+            Set-Cookie: { schema: { type: string }, description: "ohvat_tglogin=…; HttpOnly; Secure; SameSite=Lax; Path=/api/auth/telegram/bot" }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/BotLink" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "429": { $ref: "#/components/responses/TooMany" }
+        "503": { $ref: "#/components/responses/Unavailable" }
+  /api/auth/telegram/bot/status:
+    post:
+      summary: Вход через бота — ждать подтверждения (long-poll до 25 с)
+      description: |
+        По cookie `ohvat_tglogin`. Подтверждено в боте — сессия (`status: ok`, cookie `ohvat_session`), иначе по истечении
+        ожидания `status: pending` — запросить снова. Вход забирается один раз.
+      operationId: waitTelegramBot
+      tags: [auth]
+      parameters: [{ $ref: "#/components/parameters/CSRF" }]
+      responses:
+        "200":
+          description: pending — ещё ждём; ok — вошли
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/BotStatus" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "410":
+          description: "login_expired — ссылка устарела или уже использована | login_cancelled — «Это не я» в боте"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "429": { $ref: "#/components/responses/TooMany" }
+        "503": { $ref: "#/components/responses/Unavailable" }
+  /api/telegram/webhook:
+    post:
+      summary: Вебхук бота Telegram
+      description: |
+        Обновления Telegram (message, callback_query, my_chat_member). Без CSRF; заголовок
+        `X-Telegram-Bot-Api-Secret-Token` = TELEGRAM_WEBHOOK_SECRET. Вебхук ставится при старте сервера
+        (setWebhook на ${PUBLIC_URL}/api/telegram/webhook). Повтор одного update_id обрабатывается один раз.
+      operationId: telegramWebhook
+      tags: [telegram]
+      parameters:
+        - name: X-Telegram-Bot-Api-Secret-Token
+          in: header
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true, description: Update из Bot API }
+      responses:
+        "200": { description: Принято (или не нужно боту) }
+        "401": { description: Секрет не совпал }
+        "404": { description: Бот не подключён }
+        "500": { description: Сбой — Telegram повторит }
+        "503": { description: Перегрузка — Telegram повторит }
   /api/auth/google/start:
     get:
       summary: Переход ко входу через Google
@@ -327,10 +402,11 @@ components:
           nullable: true
           description: null — бот не подключён, кнопка скрыта
           type: object
-          required: [botId, botName]
+          required: [botId, botName, bot]
           properties:
-            botId: { type: string, description: Числовой id бота для Telegram Login }
+            botId: { type: string, description: Числовой id бота для Telegram Login (запасной способ — окно-виджет) }
             botName: { type: string, description: Имя бота без @ }
+            bot: { type: boolean, description: Вход через бота доступен (основной способ) }
         csrfToken: { type: string }
     EmailStart:
       type: object
@@ -365,6 +441,27 @@ components:
           type: object
           description: Объект из Telegram Login как есть (id, first_name, last_name, username, photo_url, auth_date, hash)
           additionalProperties: true
+    BotStart:
+      type: object
+      required: [consent]
+      additionalProperties: false
+      properties:
+        role: { type: string, enum: [business, creator, ""] }
+        consent: { type: boolean }
+    BotLink:
+      type: object
+      required: [url, expiresIn]
+      properties:
+        url: { type: string, example: "https://t.me/reklama_auth_bot?start=login_AbC…" }
+        expiresIn: { type: integer, example: 300, description: Срок ссылки, секунд }
+    BotStatus:
+      type: object
+      required: [status]
+      properties:
+        status: { type: string, enum: [pending, ok] }
+        user: { $ref: "#/components/schemas/User" }
+        next: { type: string, enum: [/account, /login?step=profile] }
+        created: { type: boolean }
     ProfileInput:
       type: object
       required: [name, city]
