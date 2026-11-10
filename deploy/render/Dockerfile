@@ -4,7 +4,7 @@
 # Локальный docker compose этот файл не трогает.
 ARG REGISTRY=docker.io/library
 
-FROM ${REGISTRY}/golang:1.24-alpine AS api
+FROM ${REGISTRY}/golang:1.25-alpine AS api
 ENV CGO_ENABLED=0
 WORKDIR /src
 COPY backend/certs/ /tmp/certs/

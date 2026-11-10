@@ -25,6 +25,31 @@ services:
         REGISTRY: ${REGISTRY:-docker.io/library}
     environment:
       DATABASE_URL: postgres://ohvat:${POSTGRES_PASSWORD:-local-only}@db:5432/ohvat?sslmode=disable
+      # всё остальное — из .env (список и пояснения — .env.example); пусто — значение по умолчанию
+      APP_ENV: ${APP_ENV:-development}
+      PUBLIC_URL: ${PUBLIC_URL:-http://localhost:8000}
+      AUTH_SECRET: ${AUTH_SECRET:-}
+      MAIL_PROVIDER: ${MAIL_PROVIDER:-}
+      MAIL_FROM: ${MAIL_FROM:-}
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_FROM: ${SMTP_FROM:-}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      TELEGRAM_BOT_NAME: ${TELEGRAM_BOT_NAME:-}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      AUTH_CODE_TTL_MIN: ${AUTH_CODE_TTL_MIN:-}
+      AUTH_CODE_MAX_ATTEMPTS: ${AUTH_CODE_MAX_ATTEMPTS:-}
+      AUTH_CODE_RESEND_SEC: ${AUTH_CODE_RESEND_SEC:-}
+      AUTH_CODE_PER_EMAIL_HOUR: ${AUTH_CODE_PER_EMAIL_HOUR:-}
+      AUTH_CODE_PER_IP_HOUR: ${AUTH_CODE_PER_IP_HOUR:-}
+      AUTH_SESSION_DAYS: ${AUTH_SESSION_DAYS:-}
+      RATE_LIMIT_RPS: ${RATE_LIMIT_RPS:-}
+      RATE_LIMIT_BURST: ${RATE_LIMIT_BURST:-}
+      MAIL_WORKERS: ${MAIL_WORKERS:-}
     depends_on:
       db:
         condition: service_healthy
@@ -80,7 +105,7 @@ services:
       TEST_DATABASE_URL: postgres://test:test@db-test:5432/test?sslmode=disable
     command: >
       sh -c "go vet ./... &&
-             go test -count=1 -p 1 -coverpkg=./internal/service,./internal/repository,./internal/httpapi -coverprofile=/tmp/c.out ./... &&
+             go test -count=1 -p 1 -coverpkg=./internal/service,./internal/repository,./internal/transport/http -coverprofile=/tmp/c.out ./... &&
              go tool cover -func=/tmp/c.out | tail -1"
     depends_on:
       db-test:

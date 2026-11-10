@@ -1,0 +1,10 @@
+---
+// Аватар: фото из Telegram/Google или первая буква имени на изумрудном тинте.
+import type { User } from '../lib/auth';
+import { initial } from '../lib/auth';
+interface Props { user: User; size?: number }
+const { user, size = 40 } = Astro.props;
+---
+<span class="ava" style={`--s:${size}px`} aria-hidden="true">
+  {user.avatarUrl ? <img src={user.avatarUrl} alt="" width={size} height={size} referrerpolicy="no-referrer" loading="lazy" decoding="async" /> : initial(user)}
+</span>

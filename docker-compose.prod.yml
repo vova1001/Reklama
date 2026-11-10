@@ -1,0 +1,95 @@
+# Свой сервер / VPS: те же образы и переменные (.env, список — .env.example), https — Caddy с автосертификатом по DOMAIN.
+# Запуск: заполнить .env (APP_ENV=production, PUBLIC_URL=https://DOMAIN, DOMAIN, ключи) →
+#   docker compose -f docker-compose.prod.yml up --build -d --wait      (или make prod)
+# Наружу — только 80 и 443 (Caddy); база и API снаружи недоступны.
+name: ohvat-prod
+
+x-backend-env: &backend-env
+  APP_ENV: ${APP_ENV:-production}
+  # своя база в контейнере db; внешняя (Neon и т. п.) — задайте DATABASE_URL в .env
+  DATABASE_URL: ${DATABASE_URL:-postgres://ohvat:${POSTGRES_PASSWORD}@db:5432/ohvat?sslmode=disable}
+  PUBLIC_URL: ${PUBLIC_URL:?задайте PUBLIC_URL=https://домен}
+  AUTH_SECRET: ${AUTH_SECRET:?задайте AUTH_SECRET (openssl rand -base64 48)}
+  MAIL_PROVIDER: ${MAIL_PROVIDER:-}
+  MAIL_FROM: ${MAIL_FROM:-}
+  RESEND_API_KEY: ${RESEND_API_KEY:-}
+  SMTP_HOST: ${SMTP_HOST:-}
+  SMTP_PORT: ${SMTP_PORT:-}
+  SMTP_USER: ${SMTP_USER:-}
+  SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+  SMTP_FROM: ${SMTP_FROM:-}
+  TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+  TELEGRAM_BOT_NAME: ${TELEGRAM_BOT_NAME:-}
+  GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+  GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+  AUTH_CODE_TTL_MIN: ${AUTH_CODE_TTL_MIN:-}
+  AUTH_CODE_MAX_ATTEMPTS: ${AUTH_CODE_MAX_ATTEMPTS:-}
+  AUTH_CODE_RESEND_SEC: ${AUTH_CODE_RESEND_SEC:-}
+  AUTH_CODE_PER_EMAIL_HOUR: ${AUTH_CODE_PER_EMAIL_HOUR:-}
+  AUTH_CODE_PER_IP_HOUR: ${AUTH_CODE_PER_IP_HOUR:-}
+  AUTH_SESSION_DAYS: ${AUTH_SESSION_DAYS:-}
+  RATE_LIMIT_RPS: ${RATE_LIMIT_RPS:-}
+  RATE_LIMIT_BURST: ${RATE_LIMIT_BURST:-}
+  MAIL_WORKERS: ${MAIL_WORKERS:-}
+
+services:
+  db:
+    image: ${REGISTRY:-docker.io/library}/postgres:16-alpine
+    environment:
+      POSTGRES_DB: ohvat
+      POSTGRES_USER: ohvat
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?задайте POSTGRES_PASSWORD}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ohvat -d ohvat"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  backend:
+    build:
+      context: ./backend
+      args:
+        REGISTRY: ${REGISTRY:-docker.io/library}
+    environment: *backend-env
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        REGISTRY: ${REGISTRY:-docker.io/library}
+    environment:
+      BACKEND_URL: http://backend:8080
+      PUBLIC_URL: ${PUBLIC_URL}
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+
+  caddy:
+    image: ${REGISTRY:-docker.io/library}/caddy:2-alpine
+    environment:
+      DOMAIN: ${DOMAIN:?задайте DOMAIN, например ohvat.ru}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data # сертификаты переживают перезапуск
+      - caddy_config:/config
+    depends_on:
+      frontend:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  caddy_data:
+  caddy_config:

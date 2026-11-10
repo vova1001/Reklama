@@ -5,8 +5,11 @@ import "ohvat/backend/internal/service"
 // Ответы — строго по api/openapi.yaml.
 
 type errorBody struct {
-	Code    string `json:"code"`
-	Message string `json:"message"`
+	Code         string            `json:"code"`
+	Message      string            `json:"message"`
+	Fields       map[string]string `json:"fields,omitempty"`       // ошибки полей: поле → текст
+	RetryAfter   int               `json:"retryAfter,omitempty"`   // через сколько секунд можно повторить
+	AttemptsLeft *int              `json:"attemptsLeft,omitempty"` // сколько попыток ввода кода осталось
 }
 
 type errorDTO struct {

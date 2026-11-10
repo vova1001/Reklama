@@ -71,7 +71,7 @@ test('вопросы раскрываются и сворачиваются', as
 });
 
 test('кнопки ведут на будущие страницы «Скоро», неизвестный адрес — 404', async ({ page }) => {
-  for (const path of ['/tasks', '/creators', '/tasks/new', '/creators/new', '/pricing', '/login']) {
+  for (const path of ['/tasks', '/creators', '/tasks/new', '/creators/new', '/pricing']) {
     const res = await page.goto(path);
     expect(res?.status(), path).toBe(200);
     await expect(page.locator('h1')).toHaveText('Скоро');

@@ -1,10 +1,15 @@
 openapi: 3.0.3
 info:
   title: Охват API
-  version: 0.1.0
+  version: 0.2.0
   description: |
-    API площадки «Охват». Сейчас — данные главной страницы (темы, тарифы, вопросы).
+    API площадки «Охват»: данные главной, регистрация и вход (почта с кодом, Telegram, Google), анкета, кабинет.
     Все ответы — JSON в UTF-8. Ошибки — в едином формате `Error`.
+
+    Сессия — httpOnly cookie `ohvat_session` (Secure на https, SameSite=Lax), в базе только SHA-256 токена.
+    CSRF: все POST/PUT требуют заголовок `X-CSRF-Token`, равный cookie `ohvat_csrf` (токен выдаёт `GET /api/auth/config`),
+    и Origin, совпадающий с адресом сайта (PUBLIC_URL). Ограничение частоты для `/api/auth/*` (кроме config и logout) —
+    токен-бакет на адрес; превышение — 429 с заголовком `Retry-After`.
 servers:
   - url: http://localhost:8000
 paths:
@@ -42,7 +47,203 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
+  /api/auth/config:
+    get:
+      summary: Способы входа и CSRF-токен
+      description: Ставит cookie `ohvat_csrf` (если её нет) и возвращает тот же токен для заголовка `X-CSRF-Token`.
+      operationId: getAuthConfig
+      tags: [auth]
+      responses:
+        "200":
+          description: Включённые способы входа
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AuthConfig" }
+  /api/auth/email/start:
+    post:
+      summary: Отправить код на почту
+      description: |
+        Код — 6 цифр, действует 10 минут, 5 попыток; в базе только HMAC. Новый код гасит прежние.
+        Лимиты: одно письмо на почту в 60 с, 5 писем на почту в час, 20 писем с адреса в час.
+      operationId: startEmail
+      tags: [auth]
+      parameters: [{ $ref: "#/components/parameters/CSRF" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/EmailStart" }
+      responses:
+        "202":
+          description: Письмо поставлено в отправку
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CodeSent" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "429": { $ref: "#/components/responses/TooMany" }
+        "503": { $ref: "#/components/responses/Unavailable" }
+  /api/auth/email/verify:
+    post:
+      summary: Проверить код и войти
+      operationId: verifyEmail
+      tags: [auth]
+      parameters: [{ $ref: "#/components/parameters/CSRF" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/EmailVerify" }
+      responses:
+        "200": { $ref: "#/components/responses/LoggedIn" }
+        "400":
+          description: "validation | code_invalid (attemptsLeft) | code_expired"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "429": { $ref: "#/components/responses/TooMany" }
+  /api/auth/telegram:
+    post:
+      summary: Вход через Telegram
+      description: Данные Telegram Login как есть; подпись HMAC-SHA256 по токену бота, auth_date не старше часа.
+      operationId: loginTelegram
+      tags: [auth]
+      parameters: [{ $ref: "#/components/parameters/CSRF" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/TelegramLogin" }
+      responses:
+        "200": { $ref: "#/components/responses/LoggedIn" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "429": { $ref: "#/components/responses/TooMany" }
+        "503": { $ref: "#/components/responses/Unavailable" }
+  /api/auth/google/start:
+    get:
+      summary: Переход ко входу через Google
+      description: |
+        OAuth 2.0 Authorization Code + PKCE (S256) + state. state, verifier и роль — в httpOnly cookie `ohvat_oauth`
+        на 10 минут. Ошибки — переход на `/login?error=google_off|consent|google`.
+      operationId: startGoogle
+      tags: [auth]
+      parameters:
+        - { name: role, in: query, schema: { $ref: "#/components/schemas/Role" } }
+        - { name: consent, in: query, required: true, schema: { type: string, enum: ["1"] }, description: Согласие на обработку данных }
+      responses:
+        "302": { description: Переход в Google }
+        "303": { description: Ошибка — переход на страницу входа с кодом ошибки }
+        "429": { $ref: "#/components/responses/TooMany" }
+  /api/auth/google/callback:
+    get:
+      summary: Возврат из Google
+      description: |
+        Сверка state, обмен кода (с verifier), вход. Успех — переход на `/account` или `/login?step=profile`;
+        ошибка — `/login?error=google|google_state|google_cancel`.
+      operationId: googleCallback
+      tags: [auth]
+      parameters:
+        - { name: code, in: query, schema: { type: string } }
+        - { name: state, in: query, schema: { type: string } }
+        - { name: error, in: query, schema: { type: string } }
+      responses:
+        "303": { description: Переход в кабинет, анкету или на страницу входа }
+        "429": { $ref: "#/components/responses/TooMany" }
+  /api/auth/logout:
+    post:
+      summary: Выйти
+      description: Сессия удаляется в базе, cookie стирается.
+      operationId: logout
+      tags: [auth]
+      parameters: [{ $ref: "#/components/parameters/CSRF" }]
+      responses:
+        "204": { description: Вышли }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /api/me:
+    get:
+      summary: Кто вошёл
+      operationId: getMe
+      tags: [account]
+      security: [{ session: [] }]
+      responses:
+        "200":
+          description: Пользователь и способы входа
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Me" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+  /api/me/profile:
+    put:
+      summary: Анкета первого входа
+      description: |
+        Бизнес — 1–5 тем (`categories.slug`); автор — 1–5 ссылок на каналы (https://… или @имя).
+        Имя и город — 2–80 символов. Роль после заполнения анкеты не меняется (409).
+      operationId: saveProfile
+      tags: [account]
+      security: [{ session: [] }]
+      parameters: [{ $ref: "#/components/parameters/CSRF" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ProfileInput" }
+      responses:
+        "200": { $ref: "#/components/responses/LoggedIn" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409":
+          description: role_locked
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
 components:
+  securitySchemes:
+    session: { type: apiKey, in: cookie, name: ohvat_session }
+  parameters:
+    CSRF:
+      name: X-CSRF-Token
+      in: header
+      required: true
+      schema: { type: string }
+      description: Значение из `GET /api/auth/config` (равно cookie `ohvat_csrf`)
+  responses:
+    LoggedIn:
+      description: Вошли — cookie сессии установлена
+      headers:
+        Set-Cookie: { schema: { type: string }, description: "ohvat_session=…; HttpOnly; Secure; SameSite=Lax; Path=/" }
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/LoginResult" }
+    BadRequest:
+      description: "bad_request | validation (fields) | telegram_invalid"
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    Forbidden:
+      description: csrf — нет или неверный CSRF-токен, чужой Origin
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    Unauthorized:
+      description: unauthorized — нет сессии
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    TooMany:
+      description: "rate_limited (retryAfter) | too_many_attempts"
+      headers:
+        Retry-After: { schema: { type: integer }, description: Секунд до следующей попытки }
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    Unavailable:
+      description: "provider_disabled | mail_unavailable"
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
   schemas:
     Health:
       type: object
@@ -59,6 +260,12 @@ components:
           properties:
             code: { type: string, example: internal, description: Машинный код ошибки }
             message: { type: string, example: Что-то пошло не так. Попробуйте позже., description: Понятный текст для человека }
+            fields:
+              type: object
+              additionalProperties: { type: string }
+              description: Ошибки полей формы (code=validation)
+            retryAfter: { type: integer, description: Секунд до повтора (code=rate_limited) }
+            attemptsLeft: { type: integer, description: Осталось попыток ввода кода (code_invalid, too_many_attempts) }
     Home:
       type: object
       required: [categories, businessPlans, creatorPlans, faq]
@@ -107,3 +314,92 @@ components:
         id: { type: integer, format: int64 }
         question: { type: string }
         answer: { type: string }
+    Role:
+      type: string
+      enum: [business, creator]
+    AuthConfig:
+      type: object
+      required: [email, google, telegram, csrfToken]
+      properties:
+        email: { type: boolean, description: Вход по почте доступен }
+        google: { type: boolean, description: Ключи Google заданы — показывать кнопку }
+        telegram:
+          nullable: true
+          description: null — бот не подключён, кнопка скрыта
+          type: object
+          required: [botId, botName]
+          properties:
+            botId: { type: string, description: Числовой id бота для Telegram Login }
+            botName: { type: string, description: Имя бота без @ }
+        csrfToken: { type: string }
+    EmailStart:
+      type: object
+      required: [email, consent]
+      additionalProperties: false
+      properties:
+        email: { type: string, maxLength: 254, example: anna@mail.ru }
+        role: { type: string, enum: [business, creator, ""], description: Роль при регистрации }
+        consent: { type: boolean, description: Согласие на обработку персональных данных — должно быть true }
+    CodeSent:
+      type: object
+      required: [email, resendAfter, expiresIn]
+      properties:
+        email: { type: string }
+        resendAfter: { type: integer, example: 60, description: Секунд до «Отправить ещё раз» }
+        expiresIn: { type: integer, example: 600, description: Срок кода, секунд }
+    EmailVerify:
+      type: object
+      required: [email, code]
+      additionalProperties: false
+      properties:
+        email: { type: string }
+        code: { type: string, pattern: "^[0-9]{6}$" }
+    TelegramLogin:
+      type: object
+      required: [user, consent]
+      additionalProperties: false
+      properties:
+        role: { type: string, enum: [business, creator, ""] }
+        consent: { type: boolean }
+        user:
+          type: object
+          description: Объект из Telegram Login как есть (id, first_name, last_name, username, photo_url, auth_date, hash)
+          additionalProperties: true
+    ProfileInput:
+      type: object
+      required: [name, city]
+      additionalProperties: false
+      properties:
+        role: { type: string, enum: [business, creator, ""], description: Обязательна, если ещё не выбрана }
+        name: { type: string, minLength: 2, maxLength: 80, description: Имя или название }
+        city: { type: string, minLength: 2, maxLength: 80 }
+        spheres: { type: array, maxItems: 5, items: { type: string }, description: Бизнес — slug тем }
+        channels: { type: array, maxItems: 5, items: { type: string }, description: Автор — ссылки на каналы }
+    User:
+      type: object
+      required: [id, role, name, email, avatarUrl, city, spheres, channels, onboarded]
+      properties:
+        id: { type: integer, format: int64 }
+        role: { type: string, enum: [business, creator], nullable: true }
+        name: { type: string }
+        email: { type: string, nullable: true }
+        avatarUrl: { type: string }
+        city: { type: string }
+        spheres: { type: array, items: { type: string } }
+        channels: { type: array, items: { type: string } }
+        onboarded: { type: boolean, description: Анкета первого входа заполнена }
+    LoginResult:
+      type: object
+      required: [user, next, created]
+      properties:
+        user: { $ref: "#/components/schemas/User" }
+        next: { type: string, enum: [/account, /login?step=profile], description: Куда перейти }
+        created: { type: boolean, description: Аккаунт создан этим входом }
+    Me:
+      type: object
+      required: [user, providers]
+      properties:
+        user: { $ref: "#/components/schemas/User" }
+        providers:
+          type: array
+          items: { type: string, enum: [email, telegram, google] }

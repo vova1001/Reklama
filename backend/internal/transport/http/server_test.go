@@ -22,7 +22,7 @@ func (f fakeHome) Get(context.Context) (service.HomeView, error) { return f.v, f
 
 type fakeDB struct{ err error }
 
-func (f fakeDB) Ping(context.Context) error { return f.err }
+func (f fakeDB) Check(context.Context) error { return f.err }
 
 func do(t *testing.T, s *Server, method, path string) *httptest.ResponseRecorder {
 	t.Helper()
@@ -41,7 +41,7 @@ func TestGetHome(t *testing.T) {
 		CreatorPlans: []service.PlanView{},
 		FAQ:          []domain.Question{{ID: 1, Question: "В?", Answer: "О."}},
 	}
-	rec := do(t, New(fakeHome{v: v}, fakeDB{}), http.MethodGet, "/api/home")
+	rec := do(t, newSrv(fakeHome{v: v}, fakeDB{}), http.MethodGet, "/api/home")
 	if rec.Code != http.StatusOK {
 		t.Fatalf("код %d", rec.Code)
 	}
@@ -74,7 +74,7 @@ func TestGetHome(t *testing.T) {
 }
 
 func TestGetHomeError(t *testing.T) {
-	rec := do(t, New(fakeHome{err: errors.New("db down: secret details")}, fakeDB{}), http.MethodGet, "/api/home")
+	rec := do(t, newSrv(fakeHome{err: errors.New("db down: secret details")}, fakeDB{}), http.MethodGet, "/api/home")
 	if rec.Code != http.StatusInternalServerError {
 		t.Fatalf("код %d", rec.Code)
 	}
@@ -88,21 +88,23 @@ func TestGetHomeError(t *testing.T) {
 }
 
 func TestHealth(t *testing.T) {
-	if rec := do(t, New(fakeHome{}, fakeDB{}), http.MethodGet, "/healthz"); rec.Code != http.StatusOK {
+	if rec := do(t, newSrv(fakeHome{}, fakeDB{}), http.MethodGet, "/healthz"); rec.Code != http.StatusOK {
 		t.Errorf("живой: код %d", rec.Code)
 	}
-	rec := do(t, New(fakeHome{}, fakeDB{err: errors.New("down")}), http.MethodGet, "/healthz")
+	rec := do(t, newSrv(fakeHome{}, fakeDB{err: errors.New("down")}), http.MethodGet, "/healthz")
 	if rec.Code != http.StatusServiceUnavailable || !strings.Contains(rec.Body.String(), "db_unavailable") {
 		t.Errorf("база недоступна: %d %s", rec.Code, rec.Body.String())
 	}
 }
 
 func TestNotFoundAndMethod(t *testing.T) {
-	s := New(fakeHome{}, fakeDB{})
+	s := newSrv(fakeHome{}, fakeDB{})
 	if rec := do(t, s, http.MethodGet, "/api/nope"); rec.Code != http.StatusNotFound || !strings.Contains(rec.Body.String(), "not_found") {
 		t.Errorf("404: %d %s", rec.Code, rec.Body.String())
 	}
-	if rec := do(t, s, http.MethodPost, "/api/home"); rec.Code != http.StatusMethodNotAllowed {
+	req := httptest.NewRequest(http.MethodPost, "/api/home", nil)
+	withCSRF(req)
+	if rec := serve(s, req); rec.Code != http.StatusMethodNotAllowed {
 		t.Errorf("405: %d", rec.Code)
 	}
 }
@@ -112,7 +114,7 @@ type panicHome struct{}
 func (panicHome) Get(context.Context) (service.HomeView, error) { panic("boom") }
 
 func TestRecover(t *testing.T) {
-	rec := do(t, New(panicHome{}, fakeDB{}), http.MethodGet, "/api/home")
+	rec := do(t, newSrv(panicHome{}, fakeDB{}), http.MethodGet, "/api/home")
 	if rec.Code != http.StatusInternalServerError {
 		t.Errorf("паника → 500, получили %d", rec.Code)
 	}

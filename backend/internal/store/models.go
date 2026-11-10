@@ -27,6 +27,28 @@ type Faq struct {
 	CreatedAt   pgtype.Timestamptz
 }
 
+type Identity struct {
+	ID         int64
+	UserID     int64
+	Provider   string
+	Subject    string
+	Email      pgtype.Text
+	CreatedAt  pgtype.Timestamptz
+	LastUsedAt pgtype.Timestamptz
+}
+
+type LoginCode struct {
+	ID         int64
+	Email      string
+	CodeHash   []byte
+	Role       pgtype.Text
+	Ip         string
+	Attempts   int16
+	CreatedAt  pgtype.Timestamptz
+	ExpiresAt  pgtype.Timestamptz
+	ConsumedAt pgtype.Timestamptz
+}
+
 type Plan struct {
 	ID           int64
 	Audience     string
@@ -45,4 +67,28 @@ type PlanFeature struct {
 	PlanID   int64
 	Position int32
 	Text     string
+}
+
+type Session struct {
+	ID         int64
+	UserID     int64
+	TokenHash  []byte
+	CreatedAt  pgtype.Timestamptz
+	ExpiresAt  pgtype.Timestamptz
+	LastSeenAt pgtype.Timestamptz
+}
+
+type User struct {
+	ID          int64
+	Role        pgtype.Text
+	Name        string
+	Email       pgtype.Text
+	AvatarUrl   string
+	City        string
+	Spheres     []string
+	Channels    []string
+	OnboardedAt pgtype.Timestamptz
+	CreatedAt   pgtype.Timestamptz
+	UpdatedAt   pgtype.Timestamptz
+	LastLoginAt pgtype.Timestamptz
 }

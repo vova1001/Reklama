@@ -1,17 +1,70 @@
-# Render Blueprint: один бесплатный веб-сервис (nginx + Astro + Go в одном контейнере).
-# База — Neon (бесплатная PostgreSQL). Строку подключения вводит владелец в настройках Render (sync: false), в файлах её нет.
+# Render Blueprint: один веб-сервис (nginx + Astro + Go в одном контейнере), база — внешняя PostgreSQL (Neon).
+# Все настройки — переменные окружения (тот же список — .env.example). Секреты — sync: false: значения вводятся
+# в Render → сервис → Environment и в файлах не хранятся.
+# [ПЕРЕЕЗД] — строки, которые меняются при переезде (deploy/README.md).
 services:
   - type: web
     name: ohvat
     runtime: docker
     dockerfilePath: ./deploy/render/Dockerfile
     dockerContext: .
-    plan: free
+    plan: free # [ПЕРЕЕЗД] free засыпает через 15 мин; для переезда — поменять на starter или standard
     region: frankfurt
     healthCheckPath: /healthz
-    autoDeploy: true
+    autoDeploy: true # выкладка при каждом пуше в ветку сервиса
+    # [ПЕРЕЕЗД] свой домен: Render → Settings → Custom Domains (или здесь: domains: [ohvat.ru])
     envVars:
-      - key: DATABASE_URL # Neon → Connect → строка подключения (без -pooler), с ?sslmode=require
+      # ----- режим -----
+      - key: APP_ENV
+        value: production # коды из писем не пишутся в журнал; нужен https PUBLIC_URL
+      # ----- база -----
+      - key: DATABASE_URL # Neon → Connect → строка без -pooler, с ?sslmode=require
         sync: false
-      - key: PUBLIC_URL
+      # ----- адрес -----
+      - key: PUBLIC_URL # [ПЕРЕЕЗД] адрес сайта: redirect Google, cookie, ссылки
         value: https://ohvat-jif6.onrender.com
+      # ----- вход -----
+      - key: AUTH_SECRET # ключ HMAC для кодов из писем; Render создаёт сам один раз
+        generateValue: true
+      # ----- почта -----
+      - key: MAIL_PROVIDER # resend | smtp (log в production запрещён)
+        value: resend
+      - key: MAIL_FROM # [ПЕРЕЕЗД] после подтверждения домена в Resend — «Охват <hello@домен>»
+        value: Охват <onboarding@resend.dev>
+      - key: RESEND_API_KEY # Resend → API Keys; без ключа вход по почте выключен
+        sync: false
+      - key: SMTP_HOST # только если MAIL_PROVIDER=smtp: smtp.yandex.ru / smtp.mail.ru
+        sync: false
+      - key: SMTP_PORT
+        value: "465"
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASSWORD # пароль приложения ящика, не пароль от почты
+        sync: false
+      # ----- Telegram -----
+      - key: TELEGRAM_BOT_TOKEN # @BotFather; [ПЕРЕЕЗД] новый домен — /setdomain
+        sync: false
+      - key: TELEGRAM_BOT_NAME
+        value: reklama_auth_bot
+      # ----- Google -----
+      - key: GOOGLE_CLIENT_ID # [ПЕРЕЕЗД] новый домен — добавить redirect URI в Google Cloud
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      # ----- лимиты (по умолчанию — как в .env.example) -----
+      - key: AUTH_CODE_TTL_MIN
+        value: "10"
+      - key: AUTH_CODE_MAX_ATTEMPTS
+        value: "5"
+      - key: AUTH_CODE_RESEND_SEC
+        value: "60"
+      - key: AUTH_CODE_PER_EMAIL_HOUR
+        value: "5"
+      - key: AUTH_CODE_PER_IP_HOUR
+        value: "20"
+      - key: AUTH_SESSION_DAYS
+        value: "30"
+      - key: RATE_LIMIT_RPS
+        value: "1"
+      - key: RATE_LIMIT_BURST
+        value: "10"

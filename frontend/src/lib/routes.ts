@@ -5,7 +5,6 @@ export const SOON: Record<string, string> = {
   creators: 'Каталог авторов',
   'creators/new': 'Анкета автора',
   pricing: 'Тарифы',
-  login: 'Вход',
   categories: 'Все категории',
   faq: 'Вопросы и ответы',
   'docs/terms': 'Пользовательское соглашение',

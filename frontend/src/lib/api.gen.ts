@@ -41,6 +41,184 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/auth/config": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Способы входа и CSRF-токен
+         * @description Ставит cookie `ohvat_csrf` (если её нет) и возвращает тот же токен для заголовка `X-CSRF-Token`.
+         */
+        get: operations["getAuthConfig"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/auth/email/start": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Отправить код на почту
+         * @description Код — 6 цифр, действует 10 минут, 5 попыток; в базе только HMAC. Новый код гасит прежние.
+         *     Лимиты: одно письмо на почту в 60 с, 5 писем на почту в час, 20 писем с адреса в час.
+         */
+        post: operations["startEmail"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/auth/email/verify": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Проверить код и войти */
+        post: operations["verifyEmail"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/auth/telegram": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Вход через Telegram
+         * @description Данные Telegram Login как есть; подпись HMAC-SHA256 по токену бота, auth_date не старше часа.
+         */
+        post: operations["loginTelegram"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/auth/google/start": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Переход ко входу через Google
+         * @description OAuth 2.0 Authorization Code + PKCE (S256) + state. state, verifier и роль — в httpOnly cookie `ohvat_oauth`
+         *     на 10 минут. Ошибки — переход на `/login?error=google_off|consent|google`.
+         */
+        get: operations["startGoogle"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/auth/google/callback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Возврат из Google
+         * @description Сверка state, обмен кода (с verifier), вход. Успех — переход на `/account` или `/login?step=profile`;
+         *     ошибка — `/login?error=google|google_state|google_cancel`.
+         */
+        get: operations["googleCallback"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/auth/logout": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Выйти
+         * @description Сессия удаляется в базе, cookie стирается.
+         */
+        post: operations["logout"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Кто вошёл */
+        get: operations["getMe"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/profile": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Анкета первого входа
+         * @description Бизнес — 1–5 тем (`categories.slug`); автор — 1–5 ссылок на каналы (https://… или @имя).
+         *     Имя и город — 2–80 символов. Роль после заполнения анкеты не меняется (409).
+         */
+        put: operations["saveProfile"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -61,6 +239,14 @@ export interface components {
                  * @example Что-то пошло не так. Попробуйте позже.
                  */
                 message: string;
+                /** @description Ошибки полей формы (code=validation) */
+                fields?: {
+                    [key: string]: string;
+                };
+                /** @description Секунд до повтора (code=rate_limited) */
+                retryAfter?: number;
+                /** @description Осталось попыток ввода кода (code_invalid */
+                attemptsLeft?: number;
             };
         };
         Home: {
@@ -120,9 +306,166 @@ export interface components {
             question: string;
             answer: string;
         };
+        /** @enum {string} */
+        Role: "business" | "creator";
+        AuthConfig: {
+            /** @description Вход по почте доступен */
+            email: boolean;
+            /** @description Ключи Google заданы — показывать кнопку */
+            google: boolean;
+            /** @description null — бот не подключён, кнопка скрыта */
+            telegram: {
+                /** @description Числовой id бота для Telegram Login */
+                botId: string;
+                /** @description Имя бота без @ */
+                botName: string;
+            } | null;
+            csrfToken: string;
+        };
+        EmailStart: {
+            /** @example anna@mail.ru */
+            email: string;
+            /**
+             * @description Роль при регистрации
+             * @enum {string}
+             */
+            role?: "business" | "creator" | "";
+            /** @description Согласие на обработку персональных данных — должно быть true */
+            consent: boolean;
+        };
+        CodeSent: {
+            email: string;
+            /**
+             * @description Секунд до «Отправить ещё раз»
+             * @example 60
+             */
+            resendAfter: number;
+            /**
+             * @description Срок кода
+             * @example 600
+             */
+            expiresIn: number;
+        };
+        EmailVerify: {
+            email: string;
+            code: string;
+        };
+        TelegramLogin: {
+            /** @enum {string} */
+            role?: "business" | "creator" | "";
+            consent: boolean;
+            /** @description Объект из Telegram Login как есть (id, first_name, last_name, username, photo_url, auth_date, hash) */
+            user: {
+                [key: string]: unknown;
+            };
+        };
+        ProfileInput: {
+            /**
+             * @description Обязательна
+             * @enum {string}
+             */
+            role?: "business" | "creator" | "";
+            /** @description Имя или название */
+            name: string;
+            city: string;
+            /** @description Бизнес — slug тем */
+            spheres?: string[];
+            /** @description Автор — ссылки на каналы */
+            channels?: string[];
+        };
+        User: {
+            /** Format: int64 */
+            id: number;
+            /** @enum {string|null} */
+            role: "business" | "creator" | null;
+            name: string;
+            email: string | null;
+            avatarUrl: string;
+            city: string;
+            spheres: string[];
+            channels: string[];
+            /** @description Анкета первого входа заполнена */
+            onboarded: boolean;
+        };
+        LoginResult: {
+            user: components["schemas"]["User"];
+            /**
+             * @description Куда перейти
+             * @enum {string}
+             */
+            next: "/account" | "/login?step=profile";
+            /** @description Аккаунт создан этим входом */
+            created: boolean;
+        };
+        Me: {
+            user: components["schemas"]["User"];
+            providers: ("email" | "telegram" | "google")[];
+        };
     };
-    responses: never;
-    parameters: never;
+    responses: {
+        /** @description Вошли — cookie сессии установлена */
+        LoggedIn: {
+            headers: {
+                /** @description ohvat_session=…; HttpOnly; Secure; SameSite=Lax; Path=/ */
+                "Set-Cookie"?: string;
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["LoginResult"];
+            };
+        };
+        /** @description bad_request | validation (fields) | telegram_invalid */
+        BadRequest: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description csrf — нет или неверный CSRF-токен, чужой Origin */
+        Forbidden: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description unauthorized — нет сессии */
+        Unauthorized: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description rate_limited (retryAfter) | too_many_attempts */
+        TooMany: {
+            headers: {
+                /** @description Секунд до следующей попытки */
+                "Retry-After"?: number;
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description provider_disabled | mail_unavailable */
+        Unavailable: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+    };
+    parameters: {
+        /** @description Значение из `GET /api/auth/config` (равно cookie `ohvat_csrf`) */
+        CSRF: string;
+    };
     requestBodies: never;
     headers: never;
     pathItems: never;
@@ -179,6 +522,237 @@ export interface operations {
             };
             /** @description Внутренняя ошибка */
             500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getAuthConfig: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Включённые способы входа */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuthConfig"];
+                };
+            };
+        };
+    };
+    startEmail: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Значение из `GET /api/auth/config` (равно cookie `ohvat_csrf`) */
+                "X-CSRF-Token": components["parameters"]["CSRF"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EmailStart"];
+            };
+        };
+        responses: {
+            /** @description Письмо поставлено в отправку */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CodeSent"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            403: components["responses"]["Forbidden"];
+            429: components["responses"]["TooMany"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    verifyEmail: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Значение из `GET /api/auth/config` (равно cookie `ohvat_csrf`) */
+                "X-CSRF-Token": components["parameters"]["CSRF"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EmailVerify"];
+            };
+        };
+        responses: {
+            200: components["responses"]["LoggedIn"];
+            /** @description validation | code_invalid (attemptsLeft) | code_expired */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            403: components["responses"]["Forbidden"];
+            429: components["responses"]["TooMany"];
+        };
+    };
+    loginTelegram: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Значение из `GET /api/auth/config` (равно cookie `ohvat_csrf`) */
+                "X-CSRF-Token": components["parameters"]["CSRF"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TelegramLogin"];
+            };
+        };
+        responses: {
+            200: components["responses"]["LoggedIn"];
+            400: components["responses"]["BadRequest"];
+            403: components["responses"]["Forbidden"];
+            429: components["responses"]["TooMany"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    startGoogle: {
+        parameters: {
+            query: {
+                role?: components["schemas"]["Role"];
+                /** @description Согласие на обработку данных */
+                consent: "1";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Переход в Google */
+            302: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Ошибка — переход на страницу входа с кодом ошибки */
+            303: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            429: components["responses"]["TooMany"];
+        };
+    };
+    googleCallback: {
+        parameters: {
+            query?: {
+                code?: string;
+                state?: string;
+                error?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Переход в кабинет */
+            303: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            429: components["responses"]["TooMany"];
+        };
+    };
+    logout: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Значение из `GET /api/auth/config` (равно cookie `ohvat_csrf`) */
+                "X-CSRF-Token": components["parameters"]["CSRF"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Вышли */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    getMe: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Пользователь и способы входа */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Me"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    saveProfile: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Значение из `GET /api/auth/config` (равно cookie `ohvat_csrf`) */
+                "X-CSRF-Token": components["parameters"]["CSRF"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProfileInput"];
+            };
+        };
+        responses: {
+            200: components["responses"]["LoggedIn"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            /** @description role_locked */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };

@@ -33,7 +33,7 @@ docker compose up --build        # или: make dev (создаст .env со с
 ## Устройство
 
 ```
-backend/    Go 1.24: api/openapi.yaml (контракт), cmd/server, internal/{httpapi,service,repository,store,domain}, migrations/, queries/
+backend/    Go 1.25: api/openapi.yaml (контракт), cmd/server, internal/{transport/http,service,repository,gateway,store,domain,config,logx}, migrations/, queries/
 frontend/   Astro + Tailwind 4: src/{components,content,lib,pages,scripts,styles}, public/{fonts,img}, tests/e2e
 deploy/     nginx.conf — единый вход: / → сайт, /api и /healthz → API
 project/    бриф, ТЗ, макет, задачи (handoff/), architecture.md, screens/

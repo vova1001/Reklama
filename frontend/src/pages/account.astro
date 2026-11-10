@@ -1,0 +1,62 @@
+---
+// Кабинет (пока — профиль): имя, роль, город, сферы или каналы, почта, способы входа и «Выйти».
+import Base from '../layouts/Base.astro';
+import Header from '../components/Header.astro';
+import Icon from '../components/Icon.astro';
+import Avatar from '../components/Avatar.astro';
+import { ROLE_TITLE } from '../lib/auth';
+import { getHome } from '../lib/api';
+import '../styles/auth.css';
+
+const me = Astro.locals.me;
+if (!me) return Astro.redirect('/login', 303);
+if (!me.user.onboarded) return Astro.redirect('/login?step=profile', 303);
+Astro.response.headers.set('Cache-Control', 'private, no-store');
+
+const u = me.user;
+let titles: Record<string, string> = {};
+if (u.spheres.length) {
+  try {
+    titles = Object.fromEntries((await getHome()).categories.map((c) => [c.slug, c.title]));
+  } catch {
+    /* без справочника покажем slug */
+  }
+}
+const PROVIDERS: Record<string, string> = { email: 'Почта', telegram: 'Telegram', google: 'Google' };
+const href = (c: string) => (c.startsWith('@') ? `https://t.me/${c.slice(1)}` : c);
+const label = (c: string) => c.replace(/^https?:\/\//, '').replace(/\/$/, '');
+---
+<Base title="Кабинет — Охват" description="Ваш кабинет в Охвате." noindex>
+  <Header />
+  <main class="auth light acc" data-auth>
+    <div class="w">
+      <div class="acc-head">
+        <Avatar user={u} size={88} />
+        <div>
+          <p class="eyebrow"><Icon name={u.role === 'creator' ? 'video' : 'store'} size={20} />{u.role ? ROLE_TITLE[u.role] : 'Кабинет'}</p>
+          <h1>{u.name}</h1>
+          {u.city && <p class="lead"><Icon name="map-pin" size={20} />{u.city}</p>}
+        </div>
+      </div>
+
+      <div class="auth-card cd acc-card">
+        <dl class="rows">
+          <div><dt>Роль</dt><dd><span class="role-b"><Icon name={u.role === 'creator' ? 'video' : 'store'} size={20} />{u.role ? ROLE_TITLE[u.role] : '—'}</span></dd></div>
+          {u.role === 'business' && (
+            <div><dt>Сфера</dt><dd class="tags">{u.spheres.map((s) => <span class="chip is-static">{titles[s] ?? s}</span>)}</dd></div>
+          )}
+          {u.role === 'creator' && (
+            <div><dt>Каналы</dt><dd class="links">{u.channels.map((c) => <a href={href(c)} rel="noopener nofollow ugc" target="_blank">{label(c)}</a>)}</dd></div>
+          )}
+          <div><dt>Почта</dt><dd>{u.email ?? 'не указана'}</dd></div>
+          <div><dt>Способы входа</dt><dd>{me.providers.map((p) => PROVIDERS[p] ?? p).join(', ')}</dd></div>
+        </dl>
+        <div class="acc-foot">
+          <p class="ferr" data-err="form" role="alert"></p>
+          <button class="btn b-od" type="button" data-logout><Icon name="log-out" size={20} /><span>Выйти</span></button>
+        </div>
+      </div>
+    </div>
+  </main>
+</Base>
+<script src="../scripts/auth.ts"></script>

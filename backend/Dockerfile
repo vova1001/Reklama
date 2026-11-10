@@ -1,6 +1,6 @@
 # API «Охват». REGISTRY — откуда брать базовые образы (по умолчанию Docker Hub).
 ARG REGISTRY=docker.io/library
-FROM ${REGISTRY}/golang:1.24-alpine AS build
+FROM ${REGISTRY}/golang:1.25-alpine AS build
 ENV CGO_ENABLED=0
 WORKDIR /src
 # Необязательные доп. сертификаты (корпоративный прокси): положите *.crt в backend/certs/.

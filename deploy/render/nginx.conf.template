@@ -5,6 +5,16 @@ events { worker_connections 512; }
 http {
   include /etc/nginx/mime.types;
   access_log off;
+  # адрес посетителя: Render стоит за Cloudflare, который ставит True-Client-IP; X-Forwarded-For подделывается клиентом
+  # (если True-Client-IP нет — первый адрес X-Forwarded-For, иначе адрес соединения)
+  map $http_x_forwarded_for $xff_first {
+    "~^\s*([^,\s]+)" $1;
+    default            $remote_addr;
+  }
+  map $http_true_client_ip $client_ip {
+    ""      $xff_first;
+    default $http_true_client_ip;
+  }
   client_body_temp_path /tmp/nginx_body;
   proxy_temp_path /tmp/nginx_proxy;
   fastcgi_temp_path /tmp/nginx_fastcgi;
@@ -17,7 +27,7 @@ http {
     gzip_types text/css application/javascript application/json image/svg+xml application/xml text/plain;
     gzip_min_length 512;
     proxy_set_header Host $host;
-    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Real-IP $client_ip;
     proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
     proxy_set_header X-Forwarded-Proto $scheme;
     add_header X-Content-Type-Options nosniff always;

@@ -1,0 +1,25 @@
+# Свой сервер: https с автоматическим сертификатом Let's Encrypt для {$DOMAIN}. / → сайт, /api и /healthz → API.
+{$DOMAIN} {
+	encode zstd gzip
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options nosniff
+		Referrer-Policy strict-origin-when-cross-origin
+		-Server
+	}
+	respond /ping "ok" 200
+	@api path /api/* /healthz
+	handle @api {
+		# адрес посетителя ставит только Caddy (присланный клиентом X-Real-IP перезаписывается)
+		reverse_proxy backend:8080 {
+			header_up X-Real-IP {remote_host}
+		}
+	}
+	@immutable path /_astro/*
+	header @immutable Cache-Control "public, max-age=31536000, immutable"
+	@static path /img/* /fonts/*
+	header @static Cache-Control "public, max-age=2592000"
+	handle {
+		reverse_proxy frontend:4321
+	}
+}

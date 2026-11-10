@@ -26,7 +26,8 @@ try {
     status: 503, headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Retry-After': '30' },
   });
 }
-Astro.response.headers.set('Cache-Control', 'public, max-age=60');
+// шапка зависит от входа — страница не кэшируется общим кэшем и всегда сверяется
+Astro.response.headers.set('Cache-Control', 'private, no-cache');
 ---
 <Base
   title="Охват — реклама у авторов видео с оплатой за результат"
