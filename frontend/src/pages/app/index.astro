@@ -1,31 +1,49 @@
 ---
-// Лента. Автор — опубликованные задания (новые сверху, «Показать ещё»). Бизнес — свои задания на проверке и
-// опубликованные, черновики — строкой со ссылкой, «Создать». Без выдуманных данных: пусто — так и говорим.
+// Лента — у всех. Автор — опубликованные задания, бизнес — опубликованные анкеты авторов. Сетка небольших карточек
+// (фото и название; при наведении — главное), по нажатию — страница целиком. Отбор сверху, новые — первыми,
+// следующие страницы — по курсору без перезагрузки. Без выдуманных данных: пусто — так и говорим.
 import App from '../../layouts/App.astro';
 import Icon from '../../components/Icon.astro';
 import Nudge from '../../components/app/Nudge.astro';
-import TaskItem from '../../components/app/TaskItem.astro';
-import { fetchFeed, fetchMyTasks } from '../../lib/auth';
+import FeedFilters from '../../components/app/FeedFilters.astro';
+import TaskTile from '../../components/app/TaskTile.astro';
+import CreatorTile from '../../components/app/CreatorTile.astro';
+import { fetchCardFeed, fetchCategories, fetchFeed } from '../../lib/auth';
 
 const me = Astro.locals.me;
 if (!me) return Astro.redirect('/login', 303);
-const mode = me.user.mode;
-const cursor = Astro.url.searchParams.get('cursor') ?? '';
-const feed = mode === 'creator' ? await fetchFeed(Astro.request, cursor) : null;
-const mine = mode === 'business' ? await fetchMyTasks(Astro.request) : null;
-const active = (mine ?? []).filter((t) => t.status === 'pending_review' || t.status === 'published');
-const drafts = (mine ?? []).filter((t) => t.status === 'draft' || t.status === 'rejected').length;
-const failed = (mode === 'creator' && !feed) || (mode === 'business' && !mine);
+const isCreator = me.user.mode === 'creator';
+const sp = Astro.url.searchParams;
+const q = { category: sp.get('category') ?? '', city: (sp.get('city') ?? '').trim().slice(0, 80), format: isCreator ? sp.get('format') ?? '' : '' };
+const [feed, cards, categories] = await Promise.all([
+  isCreator ? fetchFeed(Astro.request, q) : Promise.resolve(null),
+  isCreator ? Promise.resolve(null) : fetchCardFeed(Astro.request, q),
+  fetchCategories(Astro.request),
+]);
+const page = isCreator ? feed : cards;
+const count = isCreator ? feed?.tasks.length ?? 0 : cards?.cards.length ?? 0;
+const filtered = !!(q.category || q.city || q.format);
 ---
-<App title="Лента" page="feed">
+<App title="Лента" page="feed" wide="grid">
   <Nudge me={me} />
+  <section aria-labelledby="feed-t" class="feed">
+    <div class="head">
+      <h1 id="feed-t">{isCreator ? 'Задания' : 'Авторы'}</h1>
+      {!isCreator && <a class="btn pill-emerald" href="/app/tasks/new" data-create-task><Icon name="plus" size={20} />Создать задание</a>}
+    </div>
+    <FeedFilters kind={isCreator ? 'tasks' : 'cards'} categories={categories.common} category={q.category} city={q.city} format={q.format} />
 
-  {mode === 'creator' ? (
-    <section aria-labelledby="feed-t">
-      <div class="head"><h1 id="feed-t">Задания</h1></div>
-      {failed ? (
-        <div class="empty"><Icon name="circle-alert" size={32} /><h2>Лента не загрузилась</h2><p>Обновите страницу через минуту.</p></div>
-      ) : feed!.tasks.length === 0 ? (
+    {!page ? (
+      <div class="empty"><Icon name="circle-alert" size={32} /><h2>Лента не загрузилась</h2><p>Обновите страницу через минуту.</p></div>
+    ) : count === 0 ? (
+      filtered ? (
+        <div class="empty" data-empty>
+          <Icon name="search" size={32} />
+          <h2>Ничего не нашлось</h2>
+          <p>Попробуйте другой город или сферу.</p>
+          <a class="btn pill-ghost" href="/app">Сбросить отбор</a>
+        </div>
+      ) : isCreator ? (
         <div class="empty" data-empty>
           <Icon name="inbox" size={32} />
           <h2>Заданий пока нет</h2>
@@ -33,45 +51,20 @@ const failed = (mode === 'creator' && !feed) || (mode === 'business' && !mine);
           <a class="btn pill-dark" href="/app/card"><Icon name="id-card" size={20} />Заполнить анкету</a>
         </div>
       ) : (
-        <>
-          <div class="list" data-feed>{feed!.tasks.map((t) => <TaskItem task={t} />)}</div>
-          {feed!.next && <div class="more"><a class="btn pill-ghost" href={`/app?cursor=${encodeURIComponent(feed!.next)}`}>Показать ещё</a></div>}
-        </>
-      )}
-    </section>
-  ) : (
-    <section aria-labelledby="feed-t">
-      <div class="head">
-        <h1 id="feed-t">Ваши задания</h1>
-        {active.length > 0 && <a class="btn pill-emerald" href="/app/tasks/new"><Icon name="plus" size={20} />Создать</a>}
-      </div>
-      {drafts > 0 && (
-        <div class="nudge line-gap"><a href="/app/tasks?status=draft"><span>Черновики: {drafts}</span><b>Открыть<Icon name="arrow-right" size={16} /></b></a></div>
-      )}
-      {failed ? (
-        <div class="empty"><Icon name="circle-alert" size={32} /><h2>Не загрузилось</h2><p>Обновите страницу через минуту.</p></div>
-      ) : active.length === 0 ? (
         <div class="empty" data-empty>
-          <Icon name="square-plus" size={32} />
-          <h2>Создайте первое задание</h2>
-          <p>Что снять, где и за сколько — оплата за результат.</p>
-          <a class="btn pill-emerald" href="/app/tasks/new" data-create-task><Icon name="plus" size={20} />Создать задание</a>
+          <Icon name="users" size={32} />
+          <h2>Анкет пока нет</h2>
+          <p>Авторы появятся здесь, как только опубликуют анкеты.</p>
         </div>
-      ) : (
-        <div class="list">{active.map((t) => <TaskItem task={t} own />)}</div>
-      )}
-    </section>
-  )}
+      )
+    ) : (
+      <>
+        <ul class="tiles" data-tiles={isCreator ? 'tasks' : 'cards'}>
+          {isCreator ? feed!.tasks.map((t) => <TaskTile task={t} />) : cards!.cards.map((c) => <CreatorTile card={c} />)}
+        </ul>
+        <div class="more" hidden={!page.next}><button class="btn pill-ghost" type="button" data-more={page.next ?? ''}>Показать ещё</button></div>
+      </>
+    )}
+  </section>
 </App>
-<script>
-  // «Подробнее» в ленте — раскрыть блоки и фото задания
-  document.querySelectorAll<HTMLButtonElement>('[data-expand]').forEach((b) =>
-    b.addEventListener('click', () => {
-      const box = document.getElementById(b.getAttribute('aria-controls')!)!;
-      const open = b.getAttribute('aria-expanded') !== 'true';
-      b.setAttribute('aria-expanded', String(open));
-      box.hidden = !open;
-      b.firstChild!.textContent = open ? 'Свернуть' : 'Подробнее';
-    }),
-  );
-</script>
+<script src="../../scripts/feed.ts"></script>

@@ -1,0 +1,30 @@
+---
+// Задание в ленте — небольшая карточка: фото и название (+ город · формат). При наведении фото плавно сменяется
+// «полотном» из главного: оплата, условия, формат, срок. На телефоне главное — строкой под фото.
+import Icon from '../Icon.astro';
+import { formatsTitle, goal, rub, until } from '../../lib/format';
+import type { Task } from '../../lib/auth';
+interface Props { task: Task }
+const { task: t } = Astro.props;
+const where = t.nationwide ? 'Вся Россия' : t.city;
+const g = goal(t.minViews, t.minLikes);
+const brief = [t.rewardKopecks ? rub(t.rewardKopecks) : '', g].filter(Boolean).join(' · ');
+---
+<li class="tile" data-tile={t.id}>
+  <a class="tile-a" href={`/app/task/${t.id}`}>
+    <div class="tile-ph">
+      {t.cover ? (
+        <img src={t.cover.thumb} srcset={`${t.cover.thumb} 320w, ${t.cover.src} 800w`} sizes="(min-width: 1200px) 320px, (min-width: 768px) 30vw, 50vw" alt="" loading="lazy" decoding="async" width="320" height="240" />
+      ) : <span class="tile-none"><Icon name="video" size={28} /></span>}
+      <ul class="tile-sheet" data-sheet>
+        {t.rewardKopecks > 0 && <li><Icon name="wallet" size={16} /><b>{rub(t.rewardKopecks)}</b></li>}
+        {g && <li><Icon name="eye" size={16} />{g}</li>}
+        {t.formats.length > 0 && <li><Icon name="video" size={16} />{formatsTitle(t.formats)}</li>}
+        {t.publishBy && <li><Icon name="calendar" size={16} />{until(t.publishBy)}</li>}
+      </ul>
+    </div>
+    <p class="tile-t">{t.title}</p>
+    <p class="tile-m">{[where, formatsTitle(t.formats.slice(0, 2))].filter(Boolean).join(' · ')}</p>
+    {brief && <p class="tile-brief">{brief}</p>}
+  </a>
+</li>

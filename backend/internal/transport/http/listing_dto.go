@@ -97,21 +97,29 @@ type platformDTO struct {
 }
 
 type cardDTO struct {
+	ID           int64         `json:"id"` // id автора — адрес страницы анкеты
 	Status       string        `json:"status"`
 	RejectReason string        `json:"rejectReason"`
 	Name         string        `json:"name"`
 	City         string        `json:"city"`
 	Topics       []string      `json:"topics"`
+	TopicTitles  []string      `json:"topicTitles,omitempty"`
 	Platforms    []platformDTO `json:"platforms"`
 	Blocks       []blockDTO    `json:"blocks"`
 	Avatar       *photoDTO     `json:"avatar"`
 	Works        []photoDTO    `json:"works"`
 	UpdatedAt    time.Time     `json:"updatedAt"`
 	SubmittedAt  *time.Time    `json:"submittedAt"`
+	PublishedAt  *time.Time    `json:"publishedAt"`
 }
 
 type cardOut struct {
 	Card *cardDTO `json:"card"`
+}
+
+type cardFeedOut struct {
+	Cards []cardDTO `json:"cards"`
+	Next  *string   `json:"next"`
 }
 
 type categoryItemDTO struct {
@@ -234,6 +242,7 @@ func toCardDTO(c *domain.CreatorCard) *cardDTO {
 		ps = append(ps, platformDTO{Kind: p.Kind, URL: p.URL, Followers: p.Followers})
 	}
 	return &cardDTO{
+		ID: c.UserID, TopicTitles: c.TopicTitles, PublishedAt: utcPtr(c.PublishedAt),
 		Status: string(c.Status), RejectReason: c.RejectReason, Name: c.Name, City: c.City, Topics: nonNilStr(c.Topics),
 		Platforms: ps, Blocks: toBlocksDTO(c.Blocks), Avatar: photo(c.Avatar), Works: photos(c.Works),
 		UpdatedAt: c.UpdatedAt.UTC(), SubmittedAt: utcPtr(c.SubmittedAt),

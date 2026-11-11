@@ -94,20 +94,14 @@ func checkBlocks(ve *ValidationError, in []domain.Block) []domain.Block {
 	return out
 }
 
-// blocksComplete — к отправке: есть хоть один блок с пунктами, у каждого непустого блока есть заголовок.
-func blocksComplete(ve *ValidationError, bs []domain.Block, emptyMsg string) {
-	filled := 0
+// blocksFilled — есть хоть один блок с пунктами (заголовок не обязателен: без него блок показывается без заголовка).
+func blocksFilled(bs []domain.Block) bool {
 	for _, b := range bs {
 		if len(b.Items) > 0 {
-			filled++
-		}
-		if b.Title == "" {
-			ve.add("blocks", "Назовите каждый блок")
+			return true
 		}
 	}
-	if filled == 0 {
-		ve.add("blocks", emptyMsg)
-	}
+	return false
 }
 
 // checkFormats — форматы из списка, без повторов.

@@ -153,18 +153,27 @@ func (r *Listings) DeleteTask(ctx context.Context, ownerID, id int64) error {
 	return dbErr("удаление задания", err)
 }
 
-// SetTaskStatus — смена статуса из ch.From в ch.To и запись в журнал; статус уже другой — ErrConflict.
-func (r *Listings) SetTaskStatus(ctx context.Context, ch domain.StatusChange) (domain.Task, error) {
+// SetTaskStatus — смены статуса по цепочке (каждая — из ch.From в ch.To) и записи в журнал — одной транзакцией;
+// статус уже другой — ErrConflict, ничего не меняется. Возвращает задание после последней смены.
+func (r *Listings) SetTaskStatus(ctx context.Context, chain ...domain.StatusChange) (domain.Task, error) {
+	if len(chain) == 0 {
+		return domain.Task{}, errors.New("статус задания: пустая цепочка")
+	}
 	var row store.Task
 	err := r.inTx(ctx, func(q *store.Queries) error {
-		var err error
-		row, err = q.SetTaskStatus(ctx, store.SetTaskStatusParams{
-			ID: ch.SubjectID, FromStatus: string(ch.From), ToStatus: string(ch.To), Reason: ch.Reason,
-		})
-		if err != nil {
-			return err
+		for _, ch := range chain {
+			var err error
+			row, err = q.SetTaskStatus(ctx, store.SetTaskStatusParams{
+				ID: ch.SubjectID, FromStatus: string(ch.From), ToStatus: string(ch.To), Reason: ch.Reason,
+			})
+			if err != nil {
+				return err
+			}
+			if err := q.LogStatusChange(ctx, logParams(domain.SubjectTask, ch)); err != nil {
+				return err
+			}
 		}
-		return q.LogStatusChange(ctx, logParams(domain.SubjectTask, ch))
+		return nil
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return domain.Task{}, domain.ErrConflict
@@ -175,9 +184,9 @@ func (r *Listings) SetTaskStatus(ctx context.Context, ch domain.StatusChange) (d
 	return taskOf(row)
 }
 
-// PublishedTasks — опубликованные задания (новые сверху) с названием бизнеса; after — курсор или nil.
-func (r *Listings) PublishedTasks(ctx context.Context, after *domain.FeedCursor, limit int) ([]domain.Task, error) {
-	p := store.ListPublishedTasksParams{Lim: int32(limit)}
+// PublishedTasks — опубликованные задания (новые сверху) с названием бизнеса и сферы; after — курсор или nil.
+func (r *Listings) PublishedTasks(ctx context.Context, f domain.FeedFilter, after *domain.FeedCursor, limit int) ([]domain.Task, error) {
+	p := store.ListPublishedTasksParams{Lim: int32(limit), Category: f.Category, City: f.City, Format: f.Format}
 	if after != nil {
 		p.BeforeAt, p.BeforeID = ts(after.PublishedAt), after.ID
 	}
@@ -187,20 +196,37 @@ func (r *Listings) PublishedTasks(ctx context.Context, after *domain.FeedCursor,
 	}
 	out := make([]domain.Task, 0, len(rows))
 	for _, row := range rows {
-		t, err := taskOf(store.Task{
-			ID: row.ID, OwnerID: row.OwnerID, Status: row.Status, RejectReason: row.RejectReason, Title: row.Title,
-			City: row.City, Nationwide: row.Nationwide, Category: row.Category, Formats: row.Formats, Access: row.Access,
-			MinViews: row.MinViews, MinLikes: row.MinLikes, RewardKopecks: row.RewardKopecks, PublishBy: row.PublishBy,
-			Blocks: row.Blocks, Cover: row.Cover, Photos: row.Photos, CreatedAt: row.CreatedAt, UpdatedAt: row.UpdatedAt,
-			SubmittedAt: row.SubmittedAt, PublishedAt: row.PublishedAt,
-		})
+		t, err := publishedTaskOf(store.GetPublishedTaskRow(row))
 		if err != nil {
 			return nil, err
 		}
-		t.Brand, t.CategoryTitle = row.Brand, row.CategoryTitle
 		out = append(out, t)
 	}
 	return out, nil
+}
+
+// PublishedTask — опубликованное задание по id; нет или не опубликовано — ErrNotFound.
+func (r *Listings) PublishedTask(ctx context.Context, id int64) (domain.Task, error) {
+	row, err := r.q.GetPublishedTask(ctx, id)
+	if err != nil {
+		return domain.Task{}, dbErr("опубликованное задание", err)
+	}
+	return publishedTaskOf(row)
+}
+
+func publishedTaskOf(row store.GetPublishedTaskRow) (domain.Task, error) {
+	t, err := taskOf(store.Task{
+		ID: row.ID, OwnerID: row.OwnerID, Status: row.Status, RejectReason: row.RejectReason, Title: row.Title,
+		City: row.City, Nationwide: row.Nationwide, Category: row.Category, Formats: row.Formats, Access: row.Access,
+		MinViews: row.MinViews, MinLikes: row.MinLikes, RewardKopecks: row.RewardKopecks, PublishBy: row.PublishBy,
+		Blocks: row.Blocks, Cover: row.Cover, Photos: row.Photos, CreatedAt: row.CreatedAt, UpdatedAt: row.UpdatedAt,
+		SubmittedAt: row.SubmittedAt, PublishedAt: row.PublishedAt,
+	})
+	if err != nil {
+		return domain.Task{}, err
+	}
+	t.Brand, t.CategoryTitle = row.Brand, row.CategoryTitle
+	return t, nil
 }
 
 // ===== анкеты =====
@@ -249,18 +275,27 @@ func (r *Listings) SaveCard(ctx context.Context, c domain.CreatorCard) (domain.C
 	return cardOf(row)
 }
 
-// SetCardStatus — смена статуса анкеты и запись в журнал; статус уже другой — ErrConflict.
-func (r *Listings) SetCardStatus(ctx context.Context, ch domain.StatusChange) (domain.CreatorCard, error) {
+// SetCardStatus — смены статуса анкеты по цепочке и записи в журнал — одной транзакцией; статус уже другой —
+// ErrConflict, ничего не меняется.
+func (r *Listings) SetCardStatus(ctx context.Context, chain ...domain.StatusChange) (domain.CreatorCard, error) {
+	if len(chain) == 0 {
+		return domain.CreatorCard{}, errors.New("статус анкеты: пустая цепочка")
+	}
 	var row store.CreatorCard
 	err := r.inTx(ctx, func(q *store.Queries) error {
-		var err error
-		row, err = q.SetCardStatus(ctx, store.SetCardStatusParams{
-			UserID: ch.SubjectID, FromStatus: string(ch.From), ToStatus: string(ch.To), Reason: ch.Reason,
-		})
-		if err != nil {
-			return err
+		for _, ch := range chain {
+			var err error
+			row, err = q.SetCardStatus(ctx, store.SetCardStatusParams{
+				UserID: ch.SubjectID, FromStatus: string(ch.From), ToStatus: string(ch.To), Reason: ch.Reason,
+			})
+			if err != nil {
+				return err
+			}
+			if err := q.LogStatusChange(ctx, logParams(domain.SubjectCard, ch)); err != nil {
+				return err
+			}
 		}
-		return q.LogStatusChange(ctx, logParams(domain.SubjectCard, ch))
+		return nil
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return domain.CreatorCard{}, domain.ErrConflict
@@ -269,6 +304,49 @@ func (r *Listings) SetCardStatus(ctx context.Context, ch domain.StatusChange) (d
 		return domain.CreatorCard{}, dbErr("статус анкеты", err)
 	}
 	return cardOf(row)
+}
+
+// PublishedCards — опубликованные анкеты (новые сверху) с названиями тем; after — курсор (ID — user_id) или nil.
+func (r *Listings) PublishedCards(ctx context.Context, f domain.FeedFilter, after *domain.FeedCursor, limit int) ([]domain.CreatorCard, error) {
+	p := store.ListPublishedCardsParams{Lim: int32(limit), Topic: f.Category, City: f.City}
+	if after != nil {
+		p.BeforeAt, p.BeforeID = ts(after.PublishedAt), after.ID
+	}
+	rows, err := r.q.ListPublishedCards(ctx, p)
+	if err != nil {
+		return nil, dbErr("лента анкет", err)
+	}
+	out := make([]domain.CreatorCard, 0, len(rows))
+	for _, row := range rows {
+		c, err := publishedCardOf(store.GetPublishedCardRow(row))
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, c)
+	}
+	return out, nil
+}
+
+// PublishedCard — опубликованная анкета автора; нет или не опубликована — ErrNotFound.
+func (r *Listings) PublishedCard(ctx context.Context, userID int64) (domain.CreatorCard, error) {
+	row, err := r.q.GetPublishedCard(ctx, userID)
+	if err != nil {
+		return domain.CreatorCard{}, dbErr("опубликованная анкета", err)
+	}
+	return publishedCardOf(row)
+}
+
+func publishedCardOf(row store.GetPublishedCardRow) (domain.CreatorCard, error) {
+	c, err := cardOf(store.CreatorCard{
+		UserID: row.UserID, Status: row.Status, RejectReason: row.RejectReason, Name: row.Name, City: row.City,
+		Topics: row.Topics, Platforms: row.Platforms, Blocks: row.Blocks, Avatar: row.Avatar, Works: row.Works,
+		CreatedAt: row.CreatedAt, UpdatedAt: row.UpdatedAt, SubmittedAt: row.SubmittedAt, PublishedAt: row.PublishedAt,
+	})
+	if err != nil {
+		return domain.CreatorCard{}, err
+	}
+	c.TopicTitles = nonNil(row.TopicTitles)
+	return c, nil
 }
 
 // ===== журнал =====
@@ -289,7 +367,7 @@ func (r *Listings) History(ctx context.Context, subject domain.Subject, id int64
 	for _, l := range rows {
 		out = append(out, domain.StatusChange{
 			Subject: domain.Subject(l.Subject), SubjectID: l.SubjectID, From: domain.Status(l.FromStatus),
-			To: domain.Status(l.ToStatus), Reason: l.Reason, ActorID: l.ActorID.Int64, At: l.CreatedAt.Time,
+			To: domain.Status(l.ToStatus), Reason: l.Reason, ActorID: l.ActorID.Int64, Auto: l.Auto, At: l.CreatedAt.Time,
 		})
 	}
 	return out, nil
@@ -415,7 +493,7 @@ func pgInt8(n int64) pgtype.Int8 { return pgtype.Int8{Int64: n, Valid: true} }
 func logParams(s domain.Subject, ch domain.StatusChange) store.LogStatusChangeParams {
 	return store.LogStatusChangeParams{
 		Subject: string(s), SubjectID: ch.SubjectID, FromStatus: string(ch.From), ToStatus: string(ch.To),
-		Reason: ch.Reason, ActorID: pgtype.Int8{Int64: ch.ActorID, Valid: ch.ActorID != 0},
+		Reason: ch.Reason, ActorID: pgtype.Int8{Int64: ch.ActorID, Valid: ch.ActorID != 0}, Auto: ch.Auto,
 	}
 }
 

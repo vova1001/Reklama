@@ -1,0 +1,21 @@
+---
+// Следующая страница ленты — только разметка карточек (без оболочки) для догрузки в scripts/feed.ts.
+// kind=tasks | cards, курсор и отбор — как у ленты.
+import TaskTile from '../../components/app/TaskTile.astro';
+import CreatorTile from '../../components/app/CreatorTile.astro';
+import { fetchCardFeed, fetchFeed } from '../../lib/auth';
+
+const me = Astro.locals.me;
+if (!me) return new Response(null, { status: 401 });
+const sp = Astro.url.searchParams;
+const kind = sp.get('kind') === 'cards' ? 'cards' : 'tasks';
+const q = { category: sp.get('category') ?? '', city: (sp.get('city') ?? '').slice(0, 80), format: sp.get('format') ?? '', cursor: sp.get('cursor') ?? '' };
+const feed = kind === 'tasks' ? await fetchFeed(Astro.request, q) : null;
+const cards = kind === 'cards' ? await fetchCardFeed(Astro.request, { ...q, format: '' }) : null;
+if (!feed && !cards) return new Response(null, { status: 502 });
+Astro.response.headers.set('Cache-Control', 'private, no-store');
+const next = (feed ?? cards)!.next ?? '';
+---
+<ul data-page data-next={next}>
+  {feed ? feed.tasks.map((t) => <TaskTile task={t} />) : cards!.cards.map((c) => <CreatorTile card={c} />)}
+</ul>

@@ -45,17 +45,47 @@ export const PLATFORM_TITLE: Record<string, string> = {
   dzen: 'Дзен', rutube: 'Rutube', other: 'Сайт',
 };
 
-/** Блоки по умолчанию (заголовки можно менять, блоки — убирать и добавлять). */
+/** Шаблоны блоков: одним нажатием (заголовок можно поменять). */
+export type BlockKind = 'text' | 'list' | 'links';
+export const TASK_TEMPLATES: { title: string; kind: BlockKind }[] = [
+  { title: 'Описание', kind: 'text' },
+  { title: 'Что показать', kind: 'list' },
+  { title: 'Требования', kind: 'list' },
+  { title: 'Формат', kind: 'list' },
+  { title: 'Сроки', kind: 'list' },
+];
+export const CARD_TEMPLATES: { title: string; kind: BlockKind }[] = [
+  { title: 'О себе', kind: 'text' },
+  { title: 'Форматы и цены', kind: 'list' },
+  { title: 'Примеры работ', kind: 'links' },
+];
+/** Блоки нового задания и анкеты. */
 export const TASK_BLOCKS = [
-  { kind: 'text', title: 'Описание', items: [] as string[] },
-  { kind: 'list', title: 'Что показать', items: [] as string[] },
-  { kind: 'list', title: 'Требования', items: [] as string[] },
+  { kind: 'text' as const, title: 'Описание', items: [] as string[] },
+  { kind: 'list' as const, title: 'Что показать', items: [] as string[] },
 ];
-export const CARD_BLOCKS = [
-  { kind: 'text', title: 'О себе', items: [] as string[] },
-  { kind: 'list', title: 'Форматы и цены', items: [] as string[] },
-  { kind: 'links', title: 'Примеры работ', items: [] as string[] },
-];
+export const CARD_BLOCKS = [{ kind: 'text' as const, title: 'О себе', items: [] as string[] }];
+
+/** Ошибки полноты — те же тексты, что у сервера (service/tasks.go complete, service/cards.go cardComplete). */
+export const TASK_RULES: Record<string, { short: string; msg: string }> = {
+  title: { short: 'название', msg: 'Название — от 5 до 100 символов' },
+  category: { short: 'сфера', msg: 'Выберите сферу' },
+  city: { short: 'город', msg: 'Укажите город или «Вся Россия»' },
+  formats: { short: 'формат', msg: 'Выберите хотя бы один формат' },
+  minViews: { short: 'просмотры или лайки', msg: 'Укажите просмотры или лайки' },
+  reward: { short: 'оплата', msg: 'Оплата — от 100 ₽' },
+  publishBy: { short: 'срок', msg: 'Укажите срок публикации' },
+  blocks: { short: 'описание', msg: 'Опишите задание: добавьте описание или требования' },
+};
+export const DUE_RANGE = 'Срок — от завтра до полугода';
+export const CARD_RULES: Record<string, { short: string; msg: string }> = {
+  name: { short: 'имя', msg: 'Имя — от 2 символов' },
+  city: { short: 'город', msg: 'Укажите город' },
+  topics: { short: 'темы', msg: 'Выберите хотя бы одну тему' },
+  platforms: { short: 'площадки', msg: 'Добавьте хотя бы одну площадку' },
+};
+export const FOLLOWERS_MSG = 'Укажите число подписчиков';
+export const PLATFORM_URL_MSG = 'Ссылка на площадку — https://…';
 
 /** Способы входа. how — как подключить (только то, что уже работает). */
 export const PROVIDERS = [

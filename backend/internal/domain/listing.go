@@ -13,27 +13,42 @@ const (
 	StatusRejected  Status = "rejected"
 )
 
-// Actor — кто меняет статус.
-type Actor int
+// Actor — кто меняет статус (битовая маска: переход может быть разрешён нескольким).
+type Actor uint8
 
-// Владелец (бизнес или автор) и модератор (будущая админка).
+// Владелец (бизнес или автор), модератор (будущая админка) и система (автоматическая проверка).
 const (
-	ActorOwner Actor = iota + 1
+	ActorOwner Actor = 1 << iota
 	ActorModerator
+	ActorSystem
 )
 
 // transitions — разрешённые переходы и кто их делает. Всё, чего здесь нет, — запрещено.
+// Опубликованное владелец может снять в черновик (чтобы изменить) — затем снова на проверку.
 var transitions = map[Status]map[Status]Actor{
-	StatusDraft:    {StatusPending: ActorOwner},
-	StatusPending:  {StatusPublished: ActorModerator, StatusRejected: ActorModerator, StatusDraft: ActorOwner},
-	StatusRejected: {StatusPending: ActorOwner},
+	StatusDraft:     {StatusPending: ActorOwner},
+	StatusPending:   {StatusPublished: ActorModerator | ActorSystem, StatusRejected: ActorModerator, StatusDraft: ActorOwner},
+	StatusRejected:  {StatusPending: ActorOwner},
+	StatusPublished: {StatusDraft: ActorOwner},
 }
 
 // CanTransition — можно ли перевести из from в to.
 func CanTransition(from, to Status, by Actor) bool {
 	who, ok := transitions[from][to]
-	return ok && who == by
+	return ok && by != 0 && who&by == by
 }
+
+// ModerationMode — как проверяется отправленное: вручную (ждёт модератора) или автоматически (сразу публикуется).
+type ModerationMode string
+
+// Режимы проверки (MODERATION_MODE).
+const (
+	ModerationAuto   ModerationMode = "auto"
+	ModerationManual ModerationMode = "manual"
+)
+
+// AutoApproveNote — пометка в журнале при автоматическом одобрении.
+const AutoApproveNote = "одобрено автоматически"
 
 // Editable — владелец может менять содержимое: черновик или отклонённое (после правки — снова на проверку).
 func (s Status) Editable() bool { return s == StatusDraft || s == StatusRejected }
@@ -114,6 +129,7 @@ type CreatorCard struct {
 	Blocks       []Block
 	Avatar       string   // media.id аватара (1:1); "" — нет
 	Works        []string // media.id примеров работ, по порядку
+	TopicTitles  []string // названия тем по порядку (только в ленте и на странице анкеты)
 	CreatedAt    time.Time
 	UpdatedAt    time.Time
 	SubmittedAt  *time.Time
@@ -126,13 +142,31 @@ type StatusChange struct {
 	SubjectID int64
 	From      Status
 	To        Status
-	Reason    string // причина отказа
-	ActorID   int64  // кто сменил
+	Reason    string // причина отказа (или AutoApproveNote в журнале)
+	ActorID   int64  // кто сменил; 0 — система
+	Auto      bool   // автоматическое решение (MODERATION_MODE=auto)
 	At        time.Time
 }
 
-// FeedCursor — место в ленте: последнее задание прошлой страницы.
+// SubmitChain — смены статуса при отправке на проверку: «→ на проверке», а в автоматическом режиме сразу за ней
+// «→ опубликовано» от системы. Применяются атомарно одной транзакцией.
+func SubmitChain(mode ModerationMode, subject Subject, id int64, from Status, ownerID int64) []StatusChange {
+	chain := []StatusChange{{Subject: subject, SubjectID: id, From: from, To: StatusPending, ActorID: ownerID}}
+	if mode == ModerationAuto {
+		chain = append(chain, StatusChange{Subject: subject, SubjectID: id, From: StatusPending, To: StatusPublished, Reason: AutoApproveNote, Auto: true})
+	}
+	return chain
+}
+
+// FeedCursor — место в ленте: последнее задание (анкета — user_id) прошлой страницы.
 type FeedCursor struct {
 	PublishedAt time.Time
 	ID          int64
+}
+
+// FeedFilter — отбор в ленте; пустое поле — без отбора. Format — только для заданий.
+type FeedFilter struct {
+	Category string // сфера задания или тема анкеты (slug)
+	City     string // город; задания «Вся Россия» подходят любому
+	Format   string // формат публикации задания
 }

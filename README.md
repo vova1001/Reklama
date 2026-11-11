@@ -58,3 +58,4 @@ project/    бриф, ТЗ, макет, задачи (handoff/), architecture.md
 `MEDIA_STORE=s3` и `STORAGE_ENDPOINT`, `STORAGE_BUCKET`, `STORAGE_REGION`, `STORAGE_ACCESS_KEY`, `STORAGE_SECRET_KEY`,
 без правки кода; уже загруженные файлы — перенести копией ключей `media/…` из таблицы `media_blobs` в корзину.
 Лимиты фото и заданий — `MEDIA_*`, `RATE_LIMIT_UPLOAD_*`, `TASKS_MAX_PER_USER`, `MODERATION_SUBMITS_PER_DAY`.
+Проверка заданий и анкет — `MODERATION_MODE`: `auto` (по умолчанию, сразу публикуются) или `manual` (ждут модератора).

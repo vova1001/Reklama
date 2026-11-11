@@ -1,0 +1,15 @@
+---
+// Всплывающее приложения: свой диалог подтверждения (вместо confirm) и сообщение внизу с «Вернуть».
+import Icon from '../Icon.astro';
+---
+<dialog class="dlg" data-confirm aria-labelledby="dlg-t" aria-describedby="dlg-s">
+  <form method="dialog" class="dlg-card">
+    <h2 id="dlg-t" data-confirm-title>Подтвердите</h2>
+    <p id="dlg-s" data-confirm-text></p>
+    <div class="dlg-act">
+      <button class="btn pill-ghost" value="cancel" type="submit">Отмена</button>
+      <button class="btn pill-danger" value="ok" type="submit" data-confirm-ok>Да</button>
+    </div>
+  </form>
+</dialog>
+<div class="toast" role="status" aria-live="polite" data-toast><span data-toast-text></span><button type="button" class="toast-act" hidden data-toast-act><Icon name="undo-2" size={16} /><span>Вернуть</span></button></div>

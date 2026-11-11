@@ -40,9 +40,11 @@ const current = filters.includes(q) ? q : '';
       <div class="list" data-my>
         {tasks.map((t) => (
           <TaskItem task={t} own>
-            {t.status !== 'published' && (
+            {(
               <div class="it-act">
-                {t.status === 'pending_review' ? (
+                {t.status === 'published' ? (
+                  <a class="btn pill-text" href={`/app/task/${t.id}`}><Icon name="eye" size={18} />В ленте</a>
+                ) : t.status === 'pending_review' ? (
                   <button class="btn pill-text" type="button" data-withdraw={t.id}><Icon name="undo-2" size={18} />В черновик</button>
                 ) : (
                   <>

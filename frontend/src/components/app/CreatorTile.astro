@@ -1,0 +1,34 @@
+---
+// Анкета автора в ленте бизнеса — карточка: фото и имя (+ город · тема). При наведении — «полотно»: подписчики,
+// площадки, темы, цена из анкеты. На телефоне главное — строкой под фото.
+import Icon from '../Icon.astro';
+import { PLATFORM_TITLE } from '../../content/app';
+import { num } from '../../lib/format';
+import type { Card } from '../../lib/auth';
+interface Props { card: Card }
+const { card: c } = Astro.props;
+const photo = c.avatar ?? c.works[0] ?? null;
+const followers = c.platforms.reduce((s, p) => s + p.followers, 0);
+const where = [...new Set(c.platforms.map((p) => PLATFORM_TITLE[p.kind] ?? 'Сайт'))].slice(0, 3).join(', ');
+const topics = (c.topicTitles ?? []).slice(0, 3).join(', ');
+const price = c.blocks.find((b) => b.kind === 'list' && b.items.length)?.items[0] ?? '';
+const brief = [followers ? `${num(followers)} подписч.` : '', where].filter(Boolean).join(' · ');
+---
+<li class="tile" data-tile={c.id}>
+  <a class="tile-a" href={`/app/creator/${c.id}`}>
+    <div class="tile-ph">
+      {photo ? (
+        <img src={photo.thumb} srcset={`${photo.thumb} 320w, ${photo.src} 800w`} sizes="(min-width: 1200px) 320px, (min-width: 768px) 30vw, 50vw" alt="" loading="lazy" decoding="async" width="320" height="240" />
+      ) : <span class="tile-none tile-init">{c.name.slice(0, 1).toUpperCase()}</span>}
+      <ul class="tile-sheet" data-sheet>
+        {followers > 0 && <li><Icon name="users" size={16} /><b>{num(followers)}</b>&nbsp;подписч.</li>}
+        {where && <li><Icon name="link" size={16} />{where}</li>}
+        {topics && <li><Icon name="tag" size={16} />{topics}</li>}
+        {price && <li><Icon name="wallet" size={16} />{price}</li>}
+      </ul>
+    </div>
+    <p class="tile-t">{c.name}</p>
+    <p class="tile-m">{[c.city, c.topicTitles?.[0]].filter(Boolean).join(' · ')}</p>
+    {brief && <p class="tile-brief">{brief}</p>}
+  </a>
+</li>

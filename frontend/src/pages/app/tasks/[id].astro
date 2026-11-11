@@ -1,9 +1,11 @@
 ---
-// Задание: черновик и отклонённое — правка; на проверке и опубликованное — как увидят авторы и статус.
+// Своё задание: черновик и отклонённое — редактор на весь экран; на проверке и опубликованное — как увидят
+// авторы, статус и «В черновик» (с проверки) или «Снять и изменить» (опубликованное).
 import App from '../../../layouts/App.astro';
+import Editor from '../../../layouts/Editor.astro';
 import Icon from '../../../components/Icon.astro';
 import TaskForm from '../../../components/app/TaskForm.astro';
-import TaskItem from '../../../components/app/TaskItem.astro';
+import TaskPage from '../../../components/app/TaskPage.astro';
 import { STATUS } from '../../../content/app';
 import { fetchCategories, fetchProfiles, fetchTask } from '../../../lib/auth';
 
@@ -20,35 +22,39 @@ const brand = business?.name ?? me.user.name;
 const t = task!;
 const sent = Astro.url.searchParams.get('sent') === '1';
 ---
-<App title={task?.title || 'Задание'} page="my" only="business">
-  {!task ? (
-    <div class="empty"><Icon name="inbox" size={32} /><h2>Задание не найдено</h2><p>Возможно, его удалили.</p><a class="btn pill-ghost" href="/app/tasks">Мои задания</a></div>
-  ) : editable ? (
-    <TaskForm task={task} categories={categories} brand={brand} />
-  ) : (
-    <div data-view-task>
-      <div class="head">
-        <a class="btn pill-text back-lnk" href="/app/tasks"><Icon name="arrow-left" size={18} />Мои задания</a>
-        <span class="st" data-s={t.status} data-status-label>{STATUS[t.status]}</span>
-      </div>
-      {t.status === 'pending_review' && (
-        <p class="banner" role="status">{sent ? 'Отправлено. ' : ''}Проверим и опубликуем — обычно в течение дня.</p>
-      )}
-      <div class="list"><TaskItem task={t} brand={brand} full /></div>
-      {t.status === 'pending_review' && (
-        <div class="ed-bar is-plain">
-          <p class="ed-state">Нужно поправить?</p>
-          <button class="btn pill-ghost" type="button" data-withdraw={t.id}><Icon name="undo-2" size={18} />В черновик</button>
+{editable ? (
+  <Editor title={t.title || 'Задание'} only="business">
+    <TaskForm task={t} categories={categories} brand={brand} />
+  </Editor>
+) : (
+  <App title={task?.title || 'Задание'} page="my" only="business">
+    {!task ? (
+      <div class="empty"><Icon name="inbox" size={32} /><h2>Задание не найдено</h2><p>Возможно, его удалили.</p><a class="btn pill-ghost" href="/app/tasks">Мои задания</a></div>
+    ) : (
+      <div data-view-task>
+        <div class="head">
+          <a class="btn pill-text back-lnk" href="/app/tasks"><Icon name="arrow-left" size={18} />Мои задания</a>
+          <span class="st" data-s={t.status} data-status-label>{STATUS[t.status]}</span>
         </div>
-      )}
-    </div>
-  )}
-</App>
+        {t.status === 'pending_review' && <p class="banner" role="status">{sent ? 'Отправлено. ' : ''}Проверим и опубликуем — обычно в течение дня.</p>}
+        {t.status === 'published' && sent && <p class="banner is-ok" role="status"><Icon name="check" size={20} />Опубликовано — авторы уже видят задание в ленте.</p>}
+        <TaskPage task={{ ...t, brand }} />
+        <div class="ed-bar is-plain">
+          <p class="ed-state">{t.status === 'published' ? 'Нужно изменить?' : 'Нужно поправить?'}</p>
+          <button class="btn pill-ghost" type="button" data-withdraw={t.id} data-published={t.status === 'published' ? '1' : undefined}>
+            <Icon name={t.status === 'published' ? 'pencil' : 'undo-2'} size={18} />{t.status === 'published' ? 'Снять и изменить' : 'В черновик'}
+          </button>
+        </div>
+      </div>
+    )}
+  </App>
+)}
 <script>
   import { api, busy } from '../../../lib/client';
-  import { guard, toast } from '../../../lib/ui';
+  import { confirmDialog, guard, toast } from '../../../lib/ui';
   document.querySelector<HTMLButtonElement>('[data-withdraw]')?.addEventListener('click', async (e) => {
     const b = e.currentTarget as HTMLButtonElement;
+    if (b.dataset.published && !(await confirmDialog('Снять с публикации?', 'Задание пропадёт из ленты, пока вы не опубликуете его снова.', 'Снять'))) return b.focus();
     busy(b, true);
     const r = await api('POST', `/api/me/tasks/${b.dataset.withdraw}/withdraw`);
     if (r.ok) return location.reload();

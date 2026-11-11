@@ -1,0 +1,36 @@
+---
+// Отбор ленты — компактно одной строкой: сфера (тема), формат (только задания), город; сортировка — «Новые».
+// Выбор сразу открывает ленту с отбором (адрес запоминает). Списки — свои (scripts/feed.ts).
+import Icon from '../Icon.astro';
+import { FORMATS } from '../../content/app';
+import type { CategoryItem } from '../../lib/auth';
+interface Props { kind: 'tasks' | 'cards'; categories: CategoryItem[]; category: string; city: string; format: string }
+const { kind, categories, category, city, format } = Astro.props;
+const picks = [
+  { name: 'category', label: kind === 'tasks' ? 'Сфера' : 'Тема', all: kind === 'tasks' ? 'Все сферы' : 'Все темы', value: category, options: categories.map((c) => ({ v: c.slug, t: c.title })) },
+  ...(kind === 'tasks' ? [{ name: 'format', label: 'Формат', all: 'Все форматы', value: format, options: FORMATS.map((f) => ({ v: f.id, t: f.title })) }] : []),
+];
+---
+<form class="ff" method="get" action="/app" role="search" aria-label="Отбор" data-filters>
+  {picks.map((p) => {
+    const cur = p.options.find((o) => o.v === p.value);
+    return (
+      <div class="pk" data-pick>
+        <input type="hidden" name={p.name} value={cur ? p.value : ''} />
+        <button class="pk-btn" type="button" aria-haspopup="listbox" aria-expanded="false" aria-label={`${p.label}: ${cur?.t ?? 'все'}`} data-on={cur ? '1' : undefined}>
+          <span>{cur?.t ?? p.label}</span><Icon name="chevron-down" size={16} />
+        </button>
+        <ul class="pk-list" role="listbox" aria-label={p.label} tabindex="-1" hidden>
+          <li role="option" data-v="" aria-selected={!cur ? 'true' : 'false'}>{p.all}</li>
+          {p.options.map((o) => <li role="option" data-v={o.v} aria-selected={o.v === p.value ? 'true' : 'false'}>{o.t}</li>)}
+        </ul>
+      </div>
+    );
+  })}
+  <label class="ff-city" data-on={city ? '1' : undefined}>
+    <Icon name="map-pin" size={16} />
+    <input name="city" value={city} maxlength="80" placeholder="Город" aria-label="Город" autocomplete="address-level2" enterkeyhint="search" />
+    {city && <a class="ff-x" href="/app" aria-label="Сбросить город" data-clear-city><Icon name="x" size={14} /></a>}
+  </label>
+  <span class="ff-sort"><Icon name="clock" size={16} />Новые</span>
+</form>

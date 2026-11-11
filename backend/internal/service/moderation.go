@@ -18,9 +18,9 @@ type Moderator interface {
 // ModerationRepository — что модерации нужно от хранилища.
 type ModerationRepository interface {
 	Task(ctx context.Context, id int64) (domain.Task, error)
-	SetTaskStatus(ctx context.Context, ch domain.StatusChange) (domain.Task, error)
+	SetTaskStatus(ctx context.Context, chain ...domain.StatusChange) (domain.Task, error)
 	Card(ctx context.Context, userID int64) (domain.CreatorCard, error)
-	SetCardStatus(ctx context.Context, ch domain.StatusChange) (domain.CreatorCard, error)
+	SetCardStatus(ctx context.Context, chain ...domain.StatusChange) (domain.CreatorCard, error)
 	History(ctx context.Context, subject domain.Subject, id int64) ([]domain.StatusChange, error)
 	// Category / SetCategoryStatus — своя категория: «на проверке» → общая или отклонённая.
 	Category(ctx context.Context, id int64) (domain.CategoryInfo, error)

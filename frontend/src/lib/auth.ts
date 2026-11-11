@@ -50,9 +50,35 @@ export async function fetchProfiles(req: Request): Promise<{ business: BusinessP
   return { business: b?.profile ?? null, creator: c?.profile ?? null };
 }
 
-/** Лента опубликованных заданий (null — API недоступно). */
-export function fetchFeed(req: Request, cursor = ''): Promise<Feed | null> {
-  return getJSON<Feed>(`/api/tasks${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ''}`, visitorHeaders(req));
+export type CardFeed = components['schemas']['CardFeed'];
+/** Отбор ленты: сфера (тема), город, формат (только задания); курсор. */
+export interface FeedQuery { category?: string; city?: string; format?: string; cursor?: string }
+
+const qs = (o: Record<string, string | undefined>) => {
+  const p = new URLSearchParams();
+  for (const [k, v] of Object.entries(o)) if (v) p.set(k, v);
+  const s = p.toString();
+  return s ? `?${s}` : '';
+};
+
+/** Лента опубликованных заданий (null — API недоступно или неверный отбор). */
+export function fetchFeed(req: Request, q: FeedQuery = {}): Promise<Feed | null> {
+  return getJSON<Feed>(`/api/tasks${qs({ category: q.category, city: q.city, format: q.format, cursor: q.cursor })}`, visitorHeaders(req));
+}
+
+/** Лента опубликованных анкет авторов (null — API недоступно или неверный отбор). */
+export function fetchCardFeed(req: Request, q: FeedQuery = {}): Promise<CardFeed | null> {
+  return getJSON<CardFeed>(`/api/cards${qs({ topic: q.category, city: q.city, cursor: q.cursor })}`, visitorHeaders(req));
+}
+
+/** Опубликованное задание (null — нет или не опубликовано). */
+export function fetchPublicTask(req: Request, id: number): Promise<Task | null> {
+  return getJSON<Task>(`/api/tasks/${id}`, visitorHeaders(req));
+}
+
+/** Опубликованная анкета автора (null — нет или не опубликована). */
+export function fetchPublicCard(req: Request, id: number): Promise<Card | null> {
+  return getJSON<Card>(`/api/cards/${id}`, visitorHeaders(req));
 }
 
 /** Мои задания (null — API недоступно). */

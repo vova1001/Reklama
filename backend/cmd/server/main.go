@@ -17,6 +17,7 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"ohvat/backend/internal/config"
+	"ohvat/backend/internal/domain"
 	"ohvat/backend/internal/gateway/google"
 	"ohvat/backend/internal/gateway/imaging"
 	"ohvat/backend/internal/gateway/mail"
@@ -121,7 +122,9 @@ func run(log *slog.Logger) error {
 	deps := service.ListingDeps{
 		Categories: catRepo, Submits: listRepo, Media: mediaRepo,
 		Limits: service.ListingLimits{MaxTasks: cfg.TasksMax, SubmitsPerDay: cfg.SubmitsPerDay},
+		Mode:   domain.ModerationMode(cfg.Moderation),
 	}
+	log.Info("проверка заданий и анкет", "mode", cfg.Moderation)
 	tasks := service.NewTasks(listRepo, deps)
 	cards := service.NewCards(listRepo, deps)
 	// модерация — без админки: сервис готов, транспорт появится вместе с ней

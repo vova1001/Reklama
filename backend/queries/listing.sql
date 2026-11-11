@@ -33,7 +33,7 @@ DELETE FROM tasks WHERE id = @id AND owner_id = @owner_id AND status IN ('draft'
 -- Смена статуса — только из ожидаемого (from): параллельная смена даёт 0 строк.
 -- name: SetTaskStatus :one
 UPDATE tasks
-SET status = @to_status::text, reject_reason = @reason, updated_at = now(),
+SET status = @to_status::text, reject_reason = CASE WHEN @to_status::text = 'rejected' THEN @reason::text ELSE '' END, updated_at = now(),
     submitted_at = CASE WHEN @to_status::text = 'pending_review' THEN now() ELSE submitted_at END,
     published_at = CASE WHEN @to_status::text = 'published' THEN now() ELSE published_at END
 WHERE id = @id AND status = @from_status::text
@@ -43,6 +43,7 @@ RETURNING *;
 SELECT * FROM tasks WHERE id = @id;
 
 -- Лента: опубликованные, новые сверху; курсор — (published_at, id) последнего на прошлой странице.
+-- Отбор (пусто — без отбора): сфера, город (без регистра; «Вся Россия» подходит любому), формат.
 -- name: ListPublishedTasks :many
 SELECT t.*, COALESCE(NULLIF(b.name, ''), NULLIF(u.name, ''), '')::text AS brand, COALESCE(c.title, '')::text AS category_title
 FROM tasks t
@@ -51,8 +52,19 @@ LEFT JOIN business_profiles b ON b.user_id = t.owner_id
 LEFT JOIN categories c ON c.slug = t.category
 WHERE t.status = 'published'
   AND (sqlc.narg(before_at)::timestamptz IS NULL OR (t.published_at, t.id) < (sqlc.narg(before_at)::timestamptz, @before_id::bigint))
+  AND (@category::text = '' OR t.category = @category::text)
+  AND (@city::text = '' OR t.nationwide OR lower(t.city) = lower(@city::text))
+  AND (@format::text = '' OR @format::text = ANY(t.formats))
 ORDER BY t.published_at DESC, t.id DESC
 LIMIT @lim;
+
+-- name: GetPublishedTask :one
+SELECT t.*, COALESCE(NULLIF(b.name, ''), NULLIF(u.name, ''), '')::text AS brand, COALESCE(c.title, '')::text AS category_title
+FROM tasks t
+JOIN users u ON u.id = t.owner_id
+LEFT JOIN business_profiles b ON b.user_id = t.owner_id
+LEFT JOIN categories c ON c.slug = t.category
+WHERE t.id = @id AND t.status = 'published';
 
 -- ===== анкеты авторов =====
 
@@ -71,17 +83,35 @@ RETURNING *;
 
 -- name: SetCardStatus :one
 UPDATE creator_cards
-SET status = @to_status::text, reject_reason = @reason, updated_at = now(),
+SET status = @to_status::text, reject_reason = CASE WHEN @to_status::text = 'rejected' THEN @reason::text ELSE '' END, updated_at = now(),
     submitted_at = CASE WHEN @to_status::text = 'pending_review' THEN now() ELSE submitted_at END,
     published_at = CASE WHEN @to_status::text = 'published' THEN now() ELSE published_at END
 WHERE user_id = @user_id AND status = @from_status::text
 RETURNING *;
 
+-- Лента анкет: опубликованные, новые сверху; курсор — (published_at, user_id). Названия тем — по порядку.
+-- name: ListPublishedCards :many
+SELECT cc.*, ARRAY(SELECT c.title FROM unnest(cc.topics) WITH ORDINALITY AS x(slug, n)
+                   JOIN categories c ON c.slug = x.slug ORDER BY x.n)::text[] AS topic_titles
+FROM creator_cards cc
+WHERE cc.status = 'published'
+  AND (sqlc.narg(before_at)::timestamptz IS NULL OR (cc.published_at, cc.user_id) < (sqlc.narg(before_at)::timestamptz, @before_id::bigint))
+  AND (@topic::text = '' OR @topic::text = ANY(cc.topics))
+  AND (@city::text = '' OR lower(cc.city) = lower(@city::text))
+ORDER BY cc.published_at DESC, cc.user_id DESC
+LIMIT @lim;
+
+-- name: GetPublishedCard :one
+SELECT cc.*, ARRAY(SELECT c.title FROM unnest(cc.topics) WITH ORDINALITY AS x(slug, n)
+                   JOIN categories c ON c.slug = x.slug ORDER BY x.n)::text[] AS topic_titles
+FROM creator_cards cc
+WHERE cc.user_id = @user_id AND cc.status = 'published';
+
 -- ===== журнал модерации =====
 
 -- name: LogStatusChange :exec
-INSERT INTO moderation_log (subject, subject_id, from_status, to_status, reason, actor_id)
-VALUES (@subject, @subject_id, @from_status, @to_status, @reason, sqlc.narg(actor_id));
+INSERT INTO moderation_log (subject, subject_id, from_status, to_status, reason, actor_id, auto)
+VALUES (@subject, @subject_id, @from_status, @to_status, @reason, sqlc.narg(actor_id), @auto);
 
 -- name: SubmitStatsSince :one
 SELECT count(*)::int AS sent, COALESCE(min(created_at), now())::timestamptz AS first_at

@@ -77,6 +77,22 @@ norm (нижний регистр, ё → е, одиночные пробелы)
   выбор переменной `MEDIA_STORE`. Отдача — `GET /media/{id}/{size}.webp`: аватар и опубликованное — всем с долгим
   кэшем, остальное — только владельцу (чужое закрытое — 404); ETag. Неприкреплённые удаляются через сутки (фоново).
 
+### Автопроверка, лента у всех, редактор на весь экран (задача 09)
+
+- **Проверка:** `MODERATION_MODE=auto` (по умолчанию) — при отправке цепочка `→ pending_review` (владелец) `→ published`
+  (система, `moderation_log.auto = true`, «одобрено автоматически») одной транзакцией (`domain.SubmitChain`,
+  `SetTaskStatus/SetCardStatus(ctx, chain...)`); `manual` — ждёт модератора. Опубликованное владелец снимает в черновик,
+  чтобы изменить (`…/withdraw`).
+- **Полнота:** анкете — только имя, город, темы, площадки с подписчиками (блоки и фото — по желанию); заголовок блока не
+  обязателен. Тексты ошибок фронта — те же, что у сервера (`frontend/src/content/app.ts`).
+- **Лента:** авторам — опубликованные задания (`GET /api/tasks`, отбор `category`, `city` — «Вся Россия» подходит
+  любому, `format`), бизнесу — анкеты (`GET /api/cards`, после входа; `topic`, `city`); курсор `(published_at, id)`.
+  Страницы: `GET /api/tasks/{id}`, `GET /api/cards/{id}` (только опубликованное). Фронт: `/app` — сетка карточек
+  (`TaskTile`, `CreatorTile`; наведение — «полотно» с главным), догрузка `/app/more` (готовая разметка),
+  `/app/task/{id}`, `/app/creator/{id}` — страница целиком, «Откликнуться» / «Предложить задание» — заглушка.
+- **Редактор:** `layouts/Editor.astro` без навигации приложения: панель `EditorBar` (✕, «Правка / Как увидят»,
+  сохранение, «Опубликовать», «Осталось: …»), колонка до 720px; блоки — `scripts/editor/blocks.ts`.
+
 ### Контракт
 
 `backend/api/openapi.yaml`: `GET /api/home`, `GET /healthz`; вход — `GET /api/auth/config`, `POST /api/auth/email/start`,
@@ -85,7 +101,8 @@ norm (нижний регистр, ё → е, одиночные пробелы)
 `GET/PUT /api/me/profile/business`, `GET/PUT /api/me/profile/creator`, `POST /api/me/logout-all`; задачи 08 —
 `GET /api/tasks` (лента), `GET/POST /api/me/tasks`, `GET/PUT/DELETE /api/me/tasks/{id}`, `POST …/submit`, `POST …/withdraw`,
 `GET/PUT /api/me/card`, `POST /api/me/card/submit|withdraw`, `GET/POST /api/me/categories`, `GET /api/me/categories/similar`,
-`POST /api/me/media`, `DELETE /api/me/media/{id}`, `PUT /api/me/avatar`, `GET /media/{id}/{size}.webp`.
+`POST /api/me/media`, `DELETE /api/me/media/{id}`, `PUT /api/me/avatar`, `GET /media/{id}/{size}.webp`; задача 09 —
+`GET /api/tasks/{id}`, `GET /api/cards`, `GET /api/cards/{id}`, отбор ленты.
 Типы фронта генерируются из контракта (`npm run gen:api` → `frontend/src/lib/api.gen.ts`).
 
 ## Фронтенд (Astro 7 SSR + Tailwind 4 + TypeScript)

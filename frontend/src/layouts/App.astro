@@ -4,18 +4,18 @@
 // Режим переключается без перезагрузки: элементы с data-for-mode видны по data-mode корня (scripts/app.ts).
 import Base from './Base.astro';
 import Mark from '../components/Mark.astro';
-import Icon from '../components/Icon.astro';
 import Nav from '../components/app/Nav.astro';
 import ModeSwitch from '../components/app/ModeSwitch.astro';
 import AccountMenu from '../components/app/AccountMenu.astro';
 import BottomNav from '../components/app/BottomNav.astro';
+import Overlays from '../components/app/Overlays.astro';
 import type { Page } from '../content/app';
 import type { Mode } from '../lib/auth';
 import '../styles/auth.css';
 import '../styles/app.css';
 
 // only — страница одного режима (редактор задания — бизнес, анкета — автор): при смене режима — в ленту
-interface Props { title: string; page: Page; wide?: boolean; only?: Mode }
+interface Props { title: string; page: Page; wide?: boolean | 'grid'; only?: Mode }
 const { title, page, wide = false, only } = Astro.props;
 const me = Astro.locals.me!;
 Astro.response.headers.set('Cache-Control', 'private, no-store');
@@ -38,24 +38,13 @@ Astro.response.headers.set('Cache-Control', 'private, no-store');
       <AccountMenu me={me} id="menu-bar" />
     </header>
 
-    <main id="main" class={`col ${wide ? 'is-wide' : ''}`} tabindex="-1">
+    <main id="main" class={`col ${wide === 'grid' ? 'is-grid' : wide ? 'is-wide' : ''}`} tabindex="-1">
       <slot />
     </main>
 
     <BottomNav page={page} />
 
-    <!-- подтверждение (свой диалог вместо confirm) -->
-    <dialog class="dlg" data-confirm aria-labelledby="dlg-t" aria-describedby="dlg-s">
-      <form method="dialog" class="dlg-card">
-        <h2 id="dlg-t" data-confirm-title>Подтвердите</h2>
-        <p id="dlg-s" data-confirm-text></p>
-        <div class="dlg-act">
-          <button class="btn pill-ghost" value="cancel" type="submit">Отмена</button>
-          <button class="btn pill-danger" value="ok" type="submit" data-confirm-ok>Да</button>
-        </div>
-      </form>
-    </dialog>
-    <div class="toast" role="status" aria-live="polite" data-toast><span data-toast-text></span><button type="button" class="toast-act" hidden data-toast-act><Icon name="undo-2" size={16} /><span>Вернуть</span></button></div>
+    <Overlays />
   </div>
 </Base>
 <script src="../scripts/app.ts"></script>

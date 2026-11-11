@@ -1,13 +1,11 @@
 ---
-// Задание строкой: кто и где, название (ссылка), обложка, факты. own — своё: статус, причина отказа.
+// Своё задание строкой («Мои»): кто и где, название (ссылка), обложка, факты, статус, причина отказа.
 import Icon from '../Icon.astro';
-import TaskBody from './TaskBody.astro';
 import { STATUS } from '../../content/app';
 import { formatsTitle, goal, rub, until } from '../../lib/format';
 import type { Task } from '../../lib/auth';
-// full — всё содержимое сразу (страница задания), иначе — «Подробнее»
-interface Props { task: Task; own?: boolean; brand?: string; full?: boolean }
-const { task: t, own = false, brand, full = false } = Astro.props;
+interface Props { task: Task; own?: boolean; brand?: string }
+const { task: t, own = false, brand } = Astro.props;
 const href = own ? `/app/tasks/${t.id}` : '';
 const where = t.nationwide ? 'Вся Россия' : t.city;
 ---
@@ -25,14 +23,5 @@ const where = t.nationwide ? 'Вся Россия' : t.city;
     {t.publishBy && <span><Icon name="calendar" size={18} />{until(t.publishBy)}</span>}
   </div>
   {own && t.status === 'rejected' && t.rejectReason && <p class="it-reason">{t.rejectReason}</p>}
-  {full && <TaskBody blocks={t.blocks} photos={t.photos} />}
-  {!own && !full && (
-    <>
-      <div class="it-more" id={`task-${t.id}-more`} hidden><TaskBody blocks={t.blocks} photos={t.photos} /></div>
-      <div class="it-act">
-        <button class="btn pill-text" type="button" aria-expanded="false" aria-controls={`task-${t.id}-more`} data-expand>Подробнее<Icon name="chevron-down" size={18} /></button>
-      </div>
-    </>
-  )}
   <slot />
 </article>

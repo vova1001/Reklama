@@ -1,0 +1,19 @@
+---
+// Тонкая панель редактора: ✕ (закрыть, черновик сохранится), «Правка / Как увидят», сохранение, «Опубликовать».
+// Под кнопкой — «Осталось: …» (заполняет scripts/editor.ts; каждое слово ведёт к полю).
+import Icon from '../Icon.astro';
+interface Props { close: string; state: string }
+const { close, state } = Astro.props;
+---
+<header class="ebar">
+  <div class="ebar-in">
+    <a class="ibtn ebar-x" href={close} aria-label="Закрыть" data-close><Icon name="x" size={22} /></a>
+    <p class="ed-state" data-state aria-live="polite">{state}</p>
+    <div class="tabs ed-tabs" role="tablist" aria-label="Вид">
+      <button type="button" role="tab" aria-selected="true" data-view="edit" aria-label="Правка"><Icon name="pencil" size={16} /><span>Правка</span></button>
+      <button type="button" role="tab" aria-selected="false" tabindex="-1" data-view="preview" aria-label="Как увидят"><Icon name="eye" size={16} /><span>Как увидят</span></button>
+    </div>
+    <p class="ebar-left" data-left hidden></p>
+    <button class="btn pill-emerald ebar-go" type="button" data-submit>Опубликовать</button>
+  </div>
+</header>

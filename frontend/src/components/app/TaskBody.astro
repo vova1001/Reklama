@@ -9,7 +9,7 @@ const { blocks, photos = [] } = Astro.props;
 <div class="body">
   {blocks.filter((b) => b.items.length).map((b) => (
     <section class="body-b">
-      <h3>{b.title}</h3>
+      {b.title && <h3>{b.title}</h3>}
       {b.kind === 'text' ? b.items.map((p) => <p>{p}</p>) : (
         <ul class={`k-${b.kind}`}>
           {b.items.map((i) => <li>{b.kind === 'links' ? <a href={i} rel="nofollow noopener noreferrer ugc" target="_blank">{i.replace(/^https:\/\//, '')}</a> : i}</li>)}

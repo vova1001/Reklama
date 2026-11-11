@@ -7,6 +7,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"ohvat/backend/internal/domain"
+	"ohvat/backend/internal/service"
 )
 
 // Тела форм с блоками больше обычных: до 8 блоков × 15 пунктов.
@@ -111,21 +112,88 @@ func (s *Server) withdrawTask(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, toTaskDTO(t))
 }
 
-// GET /api/tasks — лента опубликованных (курсор cursor, limit 1–50).
+// GET /api/tasks — лента опубликованных (cursor, limit 1–50; отбор: category, city, format).
 func (s *Server) getFeed(w http.ResponseWriter, r *http.Request) {
-	after, ok := decodeCursor(r.URL.Query().Get("cursor"))
+	q, ok := feedQuery(w, r)
 	if !ok {
-		writeError(w, http.StatusBadRequest, "bad_request", "Неверный адрес страницы ленты.")
 		return
 	}
-	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
-	p, err := s.tasks.Feed(r.Context(), after, limit)
+	p, err := s.tasks.Feed(r.Context(), q)
 	if err != nil {
 		s.fail(w, r, err)
 		return
 	}
 	w.Header().Set("Cache-Control", "public, max-age=30")
 	writeJSON(w, http.StatusOK, feedOut{Tasks: toTasksDTO(p.Tasks), Next: encodeCursor(p.Next)})
+}
+
+// GET /api/tasks/{id} — опубликованное задание (страница задания).
+func (s *Server) getPublicTask(w http.ResponseWriter, r *http.Request) {
+	id, ok := pathID(w, r)
+	if !ok {
+		return
+	}
+	t, err := s.tasks.Public(r.Context(), id)
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	w.Header().Set("Cache-Control", "public, max-age=30")
+	writeJSON(w, http.StatusOK, toTaskDTO(t))
+}
+
+// GET /api/cards — лента опубликованных анкет (только после входа; cursor, limit; отбор: topic, city).
+func (s *Server) getCardFeed(w http.ResponseWriter, r *http.Request) {
+	q, ok := feedQuery(w, r)
+	if !ok {
+		return
+	}
+	q.Filter.Category = r.URL.Query().Get("topic")
+	p, err := s.cards.Feed(r.Context(), q)
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	out := make([]cardDTO, 0, len(p.Cards))
+	for i := range p.Cards {
+		out = append(out, *toCardDTO(&p.Cards[i]))
+	}
+	writeJSON(w, http.StatusOK, cardFeedOut{Cards: out, Next: encodeCursor(p.Next)})
+}
+
+// GET /api/cards/{id} — опубликованная анкета автора (id — автора).
+func (s *Server) getPublicCard(w http.ResponseWriter, r *http.Request) {
+	id, ok := pathID(w, r)
+	if !ok {
+		return
+	}
+	c, err := s.cards.Public(r.Context(), id)
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, toCardDTO(&c))
+}
+
+// feedQuery — курсор, размер и отбор ленты из адреса; неверный курсор — 400.
+func feedQuery(w http.ResponseWriter, r *http.Request) (service.FeedQuery, bool) {
+	v := r.URL.Query()
+	after, ok := decodeCursor(v.Get("cursor"))
+	if !ok {
+		writeError(w, http.StatusBadRequest, "bad_request", "Неверный адрес страницы ленты.")
+		return service.FeedQuery{}, false
+	}
+	limit, _ := strconv.Atoi(v.Get("limit"))
+	f := domain.FeedFilter{Category: clip(v.Get("category"), 64), City: clip(v.Get("city"), 200), Format: clip(v.Get("format"), 32)}
+	return service.FeedQuery{Filter: f, After: after, Limit: limit}, true
+}
+
+// clip — не длиннее n байт (защита от огромных параметров; проверку делает сервис).
+func clip(s string, n int) string {
+	if len(s) > n {
+		return s[:n]
+	}
+	return s
 }
 
 // ===== анкета автора =====

@@ -377,9 +377,72 @@ export interface paths {
         };
         /**
          * Лента опубликованных заданий
-         * @description Новые сверху. Курсор `next` из ответа — в параметр `cursor` следующего запроса.
+         * @description Новые сверху. Курсор `next` из ответа — в параметр `cursor` следующего запроса. Отбор (пусто — без отбора):
+         *     сфера, город (без регистра; задания «Вся Россия» подходят любому городу), формат. Неверный отбор — 400 с `fields`.
          */
         get: operations["getFeed"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/tasks/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["TaskID"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Опубликованное задание
+         * @description Страница задания для всех. Не опубликовано или нет — 404.
+         */
+        get: operations["getPublicTask"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/cards": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Лента опубликованных анкет авторов
+         * @description Только после входа. Новые сверху, курсор — как у заданий. Отбор — тема и город (без регистра).
+         */
+        get: operations["getCardFeed"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/cards/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description id автора (`Card.id`) */
+                id: number;
+            };
+            cookie?: never;
+        };
+        /** Опубликованная анкета автора */
+        get: operations["getPublicCard"];
         put?: never;
         post?: never;
         delete?: never;
@@ -440,9 +503,9 @@ export interface paths {
         put?: never;
         /**
          * Отправить на проверку
-         * @description Из `draft` или `rejected` в `pending_review`. Обязательно: название 5–100, город (или «Вся Россия»), сфера,
-         *     формат, просмотры или лайки, оплата от 100 ₽, срок — от завтра до полугода (по Москве), хотя бы один
-         *     блок с пунктами.
+         * @description Из `draft` или `rejected` в `pending_review` (при `MODERATION_MODE=auto` — сразу `published`). Обязательно:
+         *     название 5–100, город (или «Вся Россия»), сфера, формат, просмотры или лайки, оплата от 100 ₽, срок — от
+         *     завтра до полугода (по Москве), хотя бы один блок с пунктами (заголовок блока — по желанию).
          */
         post: operations["submitTask"];
         delete?: never;
@@ -462,7 +525,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Вернуть с проверки в черновик */
+        /** Вернуть в черновик (с проверки или снять с публикации) */
         post: operations["withdrawTask"];
         delete?: never;
         options?: never;
@@ -499,7 +562,8 @@ export interface paths {
         put?: never;
         /**
          * Отправить анкету на проверку
-         * @description Обязательно — имя, город, 1–5 тем (своих — до 3), площадки с подписчиками, хотя бы один блок с пунктами.
+         * @description Обязательно — имя, город, 1–5 тем (своих — до 3), площадки с подписчиками. Блоки и фото — по желанию.
+         *     При `MODERATION_MODE=auto` — сразу `published`.
          */
         post: operations["submitCard"];
         delete?: never;
@@ -517,7 +581,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Вернуть анкету с проверки в черновик */
+        /** Вернуть анкету в черновик (с проверки или снять с публикации) */
         post: operations["withdrawCard"];
         delete?: never;
         options?: never;
@@ -1015,11 +1079,18 @@ export interface components {
             works: string[];
         };
         Card: {
+            /**
+             * Format: int64
+             * @description id автора — адрес страницы анкеты
+             */
+            id: number;
             status: components["schemas"]["Status"];
             rejectReason: string;
             name: string;
             city: string;
             topics: string[];
+            /** @description Названия тем (лента и страница анкеты) */
+            topicTitles?: string[];
             platforms: components["schemas"]["Platform"][];
             blocks: components["schemas"]["Block"][];
             avatar: components["schemas"]["Photo"] | null;
@@ -1028,6 +1099,13 @@ export interface components {
             updatedAt: string;
             /** Format: date-time */
             submittedAt: string | null;
+            /** Format: date-time */
+            publishedAt: string | null;
+        };
+        CardFeed: {
+            cards: components["schemas"]["Card"][];
+            /** @description Курсор следующей страницы */
+            next: string | null;
         };
         CardResult: {
             card: components["schemas"]["Card"] | null;
@@ -1732,6 +1810,10 @@ export interface operations {
             query?: {
                 cursor?: string;
                 limit?: number;
+                /** @description slug сферы */
+                category?: string;
+                city?: string;
+                format?: components["schemas"]["TaskFormat"];
             };
             header?: never;
             path?: never;
@@ -1750,6 +1832,84 @@ export interface operations {
             };
             400: components["responses"]["BadRequest"];
             429: components["responses"]["TooMany"];
+        };
+    };
+    getPublicTask: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["TaskID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Задание (с `brand` и `categoryTitle`) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Task"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["TooMany"];
+        };
+    };
+    getCardFeed: {
+        parameters: {
+            query?: {
+                cursor?: string;
+                limit?: number;
+                /** @description slug темы */
+                topic?: string;
+                city?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Страница ленты */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CardFeed"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            429: components["responses"]["TooMany"];
+        };
+    };
+    getPublicCard: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description id автора (`Card.id`) */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Анкета (с `topicTitles`) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Card"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
         };
     };
     listMyTasks: {
@@ -1904,7 +2064,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description На проверке */
+            /** @description На проверке или опубликовано (auto) */
             200: {
                 headers: {
                     [name: string]: unknown;

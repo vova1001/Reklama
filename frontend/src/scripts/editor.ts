@@ -1,10 +1,11 @@
-// Редактор задания (бизнес) и анкеты автора: черновик сохраняется сам (через ~1 с после правки, при уходе со
-// страницы — предупреждение, если не успел), «На проверку» недоступна, пока не заполнено обязательное — причина
-// по наведению и фокусу; предпросмотр — как увидят другие. Ошибки сервера — у полей.
+// Редактор задания (бизнес) и анкеты автора на весь экран: черновик сохраняется сам (через ~1 с после правки; при
+// уходе — предупреждение, если не успел). Проверка удобная: ошибка у поля — сразу после ухода с него; «Опубликовать»
+// нажимается всегда — если что-то не заполнено, прокручиваем к первому и подсвечиваем; у кнопки — «Осталось: …»
+// (каждое слово ведёт к полю). Тексты ошибок — те же, что у сервера (content/app.ts). Предпросмотр — как увидят.
 import type { components } from '../lib/api.gen';
 import { $, $$, api, busy, clearErrs, setErr } from '../lib/client';
 import { confirmDialog, fmtNum, guard, parseNum, toast } from '../lib/ui';
-import { PLATFORM_TITLE } from '../content/app';
+import { CARD_RULES, DUE_RANGE, FOLLOWERS_MSG, PLATFORM_TITLE, PLATFORM_URL_MSG, TASK_RULES, type BlockKind } from '../content/app';
 import { formatsTitle, goal, num, rub, until } from '../lib/format';
 import { BlocksEditor, type Block } from './editor/blocks';
 import { CategoryPicker } from './editor/category';
@@ -21,6 +22,7 @@ interface Init {
   id: number | null;
   status: string;
   blocks: Block[];
+  templates: { title: string; kind: BlockKind }[];
   cover: Photo[];
   photos: Photo[];
   selected: string[];
@@ -43,6 +45,11 @@ function start(form: HTMLFormElement) {
   const stateEl = $('[data-state]', form)!;
   const submit = $<HTMLButtonElement>('[data-submit]', form)!;
 
+  const leftEl = $('[data-left]', form)!;
+  const RULES = isTask ? TASK_RULES : CARD_RULES;
+  const touched = new Set<string>(); // поля, с которых ушли (или все — после «Опубликовать»)
+  let tried = false;
+
   const changed = () => {
     dirty = true;
     stateEl.textContent = 'Изменено';
@@ -52,11 +59,13 @@ function start(form: HTMLFormElement) {
   };
 
   // ===== части формы =====
-  const blocks = new BlocksEditor($('[data-blocks]', form)!, init.blocks, changed);
+  const blocks = new BlocksEditor($('[data-blocks]', form)!, init.blocks, init.templates, changed);
   const picker = new CategoryPicker($('[data-cats]', form)!, init.categories.common, init.categories.own, init.selected, {
     multi: !isTask, max: isTask ? 1 : 5, maxCustom: 3, label: isTask ? 'Сфера' : 'Темы', onChange: changed,
   });
-  const onBusy = (b: boolean) => (b ? (stateEl.textContent = 'Загружаю фото…') : check());
+  const onBusy = (b: boolean) => {
+    if (b) stateEl.textContent = 'Загружаю фото…';
+  };
   const cover = new Uploader($('[data-cover]', form)!, init.cover, {
     purpose: isTask ? 'task_cover' : 'card_avatar', max: 1, aspect: isTask ? 16 / 9 : 1, round: !isTask,
     label: isTask ? 'Обложка' : 'Фото', onChange: changed, onBusy,
@@ -153,6 +162,12 @@ function start(form: HTMLFormElement) {
     const row = h('div', { class: 'plat' }, h('span', { class: 'plat-ic', html: ic('link', 18) }), url, fol, rm);
     const err = h('p', { class: 'ferr', 'data-err-plat': '' });
     const wrap = h('div', { class: 'plat-w' }, row, err);
+    // ошибка строки — после ухода из неё: ссылка без подписчиков или ссылка не похожа на адрес
+    wrap.addEventListener('focusout', (e) => {
+      if (wrap.contains(e.relatedTarget as Node)) return;
+      wrap.dataset.touched = '1';
+      check();
+    });
     rm.addEventListener('click', () => void vanish(wrap).then(() => {
       syncPlats();
       changed();
@@ -188,10 +203,15 @@ function start(form: HTMLFormElement) {
 
   form.addEventListener('input', (e) => {
     const t = e.target as HTMLElement;
-    if (t.matches('.inp, [name]') && !t.closest('[data-blocks], .cb')) {
-      setErr(form, (t as HTMLInputElement).name, '');
-      changed();
-    }
+    if (t.matches('.inp, [name]') && !t.closest('[data-blocks], .cb')) changed();
+  });
+  // ушли с поля — показать его ошибку (поле — ближайший [data-sec])
+  form.addEventListener('focusout', (e) => {
+    const sec = (e.target as HTMLElement).closest<HTMLElement>('[data-sec]');
+    if (!sec || sec.contains(e.relatedTarget as Node)) return;
+    touched.add(sec.dataset.sec!);
+    if (sec.dataset.sec === 'minViews') touched.add('minViews');
+    check();
   });
   form.addEventListener('submit', (e) => e.preventDefault());
 
@@ -212,50 +232,102 @@ function start(form: HTMLFormElement) {
           blocks: blocks.value(), avatar: cover.value()[0] ?? '', works: photos.value(),
         };
 
-  /** Что ещё нужно для отправки на проверку (как на сервере): [поле, текст]. */
-  const missing = (): [string, string][] => {
+  /** Что ещё нужно для публикации (как на сервере): поле → текст ошибки. Порядок — как поля на экране. */
+  const problems = (): Map<string, string> => {
     const p = payload() as Record<string, unknown>;
-    const out: [string, string][] = [];
+    const out = new Map<string, string>();
+    const r = (k: string) => RULES[k].msg;
     const hasBlocks = (p.blocks as Block[]).some((b) => b.items.length);
     if (isTask) {
-      if ((p.title as string).length < 5) out.push(['title', 'Добавьте название']);
-      if (!p.nationwide && (p.city as string).length < 2) out.push(['city', 'Укажите город или «Вся Россия»']);
-      if (!p.category) out.push(['category', 'Выберите сферу']);
-      if (!(p.formats as string[]).length) out.push(['formats', 'Выберите формат']);
-      if (!p.minViews && !p.minLikes) out.push(['minViews', 'Укажите просмотры или лайки']);
-      if ((p.rewardKopecks as number) < 10000) out.push(['reward', 'Оплата — от 100 ₽']);
+      const title = p.title as string;
+      if (title.length < 5) out.set('title', r('title'));
+      if (!p.category) out.set('category', r('category'));
+      if (!p.nationwide && (p.city as string).length < 2) out.set('city', r('city'));
+      if (!(p.formats as string[]).length) out.set('formats', r('formats'));
+      if (!p.minViews && !p.minLikes) out.set('minViews', r('minViews'));
+      if ((p.rewardKopecks as number) < 10000) out.set('reward', r('reward'));
       const d = p.publishBy as string;
-      const tomorrow = new Date();
-      tomorrow.setDate(tomorrow.getDate() + 1);
-      const min = tomorrow.toISOString().slice(0, 10);
-      if (!d || d < min) out.push(['publishBy', 'Срок — от завтра']);
-      if (!hasBlocks) out.push(['blocks', 'Опишите задание']);
+      if (!d) out.set('publishBy', due?.value ? 'Дата в формате ДД.ММ.ГГГГ' : r('publishBy'));
+      else if (d <= isoDay(0) || d > isoDay(180)) out.set('publishBy', DUE_RANGE);
+      if (!hasBlocks) out.set('blocks', r('blocks'));
     } else {
-      if ((p.name as string).length < 2) out.push(['name', 'Укажите имя']);
-      if ((p.city as string).length < 2) out.push(['city', 'Укажите город']);
-      if (!(p.topics as string[]).length) out.push(['topics', 'Выберите тему']);
-      const ps = p.platforms as { url: string; followers: number }[];
-      if (!ps.length) out.push(['platforms', 'Добавьте площадку']);
-      else if (ps.some((x) => !x.followers)) out.push(['platforms', 'Укажите подписчиков']);
-      if (!hasBlocks) out.push(['blocks', 'Расскажите о себе']);
+      if ((p.name as string).length < 2) out.set('name', r('name'));
+      if ((p.city as string).length < 2) out.set('city', r('city'));
+      if (!(p.topics as string[]).length) out.set('topics', r('topics'));
+      if (!(p.platforms as unknown[]).length) out.set('platforms', r('platforms'));
+      else if (platProblems().some(Boolean)) out.set('platforms', FOLLOWERS_MSG);
     }
     return out;
   };
 
+  /** Ошибки строк площадок (по порядку строк): ссылка не похожа на адрес; есть ссылка, нет подписчиков. */
+  const platProblems = (): string[] =>
+    plats
+      ? $$<HTMLElement>('.plat', plats).map((row) => {
+          const [u, f] = $$<HTMLInputElement>('input', row);
+          const url = u.value.trim();
+          if (!url && !parseNum(f.value)) return '';
+          if (!/^(https?:\/\/)?[^\s/.]+\.[^\s]{2,}$/i.test(url)) return PLATFORM_URL_MSG;
+          return parseNum(f.value) ? '' : FOLLOWERS_MSG;
+        })
+      : [];
+
+  /** Ошибки у полей: у тронутых (и у всех — после «Опубликовать»); исправили — ошибка уходит сразу. */
   function check() {
-    const m = missing();
-    const uploading = cover.busy() || photos.busy();
-    const reason = uploading ? 'Дождитесь загрузки фото' : m[0]?.[1] ?? '';
-    submit.setAttribute('aria-disabled', String(!!reason));
-    if (reason) {
-      submit.dataset.tip = reason;
-      submit.setAttribute('data-tip-show', '');
-      submit.setAttribute('aria-describedby', 'submit-why');
-    } else {
-      submit.removeAttribute('data-tip-show');
-      submit.removeAttribute('aria-describedby');
+    const m = problems();
+    for (const k of Object.keys(RULES)) {
+      const show = tried || touched.has(k);
+      const msg = show ? m.get(k) ?? '' : '';
+      setErr(form, k, k === 'platforms' && msg === FOLLOWERS_MSG ? '' : msg);
+      const sec = $(`[data-sec="${k}"]`, form);
+      if (!msg) sec?.classList.remove('is-bad');
     }
-    $('#submit-why', form)!.textContent = reason;
+    // площадки — у строк
+    const pp = platProblems();
+    $$<HTMLElement>('.plat-w', form).forEach((w, i) => {
+      const msg = tried || w.dataset.touched ? pp[i] ?? '' : '';
+      $('[data-err-plat]', w)!.textContent = msg;
+      $$('input', w).forEach((x) => x.setAttribute('aria-invalid', String(!!msg)));
+    });
+    // «Осталось: …» у кнопки (перестраивается, только если список изменился — иначе щелчок по слову теряется)
+    const keys = [...m.keys()];
+    const sig = keys.map((k) => `${k}:${m.get(k)}`).join('|');
+    if (sig === leftEl.dataset.sig) return;
+    leftEl.dataset.sig = sig;
+    leftEl.replaceChildren();
+    leftEl.hidden = !keys.length;
+    if (keys.length) {
+      leftEl.append('Осталось: ');
+      keys.slice(0, 3).forEach((k, i) => {
+        if (i) leftEl.append(', ');
+        const b = h('button', { type: 'button', 'data-go': k }, k === 'platforms' && m.get(k) === FOLLOWERS_MSG ? 'подписчики' : RULES[k].short);
+        b.addEventListener('click', () => goTo(k));
+        leftEl.append(b);
+      });
+      if (keys.length > 3) leftEl.append(` и ещё ${keys.length - 3}`);
+    }
+  }
+
+  /** К полю: прокрутить к середине экрана, подсветить, поставить курсор. */
+  function goTo(k: string) {
+    const sec = $(`[data-sec="${k}"]`, form);
+    if (!sec) return;
+    if ($('[data-pane="edit"]', form)!.hidden) $<HTMLButtonElement>('[data-view="edit"]', form)!.click();
+    touched.add(k);
+    check();
+    const target =
+      k === 'blocks'
+        ? blocks.first()
+        : k === 'platforms'
+          ? ($$<HTMLElement>('.plat-w', form).find((w) => $('[data-err-plat]', w)!.textContent)?.querySelector<HTMLInputElement>('input') ??
+            $$<HTMLInputElement>('.plat input', form)[0] ??
+            $('[data-add-platform]', form))
+          : $<HTMLElement>(`[name="${k}"]:not(:disabled), [data-input="${k}"] button, [data-input="${k}"] input`, sec);
+    sec.scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'center' });
+    target?.focus({ preventScroll: true });
+    sec.classList.remove('is-bad');
+    void sec.offsetWidth; // перезапуск подсветки
+    sec.classList.add('is-bad');
   }
 
   const showErrors = (e: ApiError) => {
@@ -267,7 +339,7 @@ function start(form: HTMLFormElement) {
         if (el) el.textContent = v;
         continue;
       }
-      setErr(form, k === 'reward' ? 'reward' : k, v);
+      setErr(form, k, v);
     }
     blocks.showErrors(f);
     if (!Object.keys(f).length) toast(e.message);
@@ -309,10 +381,11 @@ function start(form: HTMLFormElement) {
       if (isTask && id === null) {
         id = (r.data as Task).id;
         history.replaceState(null, '', `/app/tasks/${id}`);
-        $('[data-delete]', form)?.removeAttribute('hidden');
+        $('[data-delete-wrap]', form)?.removeAttribute('hidden');
       }
       clearErrs(form);
       blocks.showErrors({});
+      check();
       const t = new Date();
       stateEl.textContent = `Черновик сохранён · ${String(t.getHours()).padStart(2, '0')}:${String(t.getMinutes()).padStart(2, '0')}`;
       return true;
@@ -333,18 +406,13 @@ function start(form: HTMLFormElement) {
     }
   });
 
-  // ===== на проверку =====
+  // ===== опубликовать =====
   submit.addEventListener('click', async () => {
-    const m = missing();
-    if (m.length || submit.getAttribute('aria-disabled') === 'true') {
-      clearErrs(form);
-      for (const [f, msg] of m) setErr(form, f, msg);
-      const first = m[0]?.[0];
-      const target = first === 'blocks' ? null : $<HTMLElement>(`[data-input="${first}"], [name="${first}"]`, form);
-      if (first === 'blocks') blocks.focus();
-      else (target ?? $(`[data-err="${first}"]`, form)?.closest('.sec')?.querySelector<HTMLElement>('button, input'))?.focus();
-      return;
-    }
+    tried = true;
+    check();
+    const first = [...problems().keys()][0];
+    if (first) return goTo(first);
+    if (cover.busy() || photos.busy()) return toast('Дождитесь загрузки фото');
     busy(submit, true);
     const saved = await save();
     if (!saved) return busy(submit, false);
@@ -352,11 +420,27 @@ function start(form: HTMLFormElement) {
     if (!r.ok) {
       busy(submit, false);
       if (guard(r.status)) return;
-      if (r.status === 400) return showErrors(r.error);
+      if (r.status === 400) {
+        showErrors(r.error);
+        const f = Object.keys(r.error.fields ?? {})[0]?.split('.')[0];
+        if (f) goTo(f);
+        return;
+      }
       return toast(r.error.message);
     }
     dirty = false;
     location.assign(isTask ? `/app/tasks/${id}?sent=1` : '/app/card?sent=1');
+  });
+
+  // ✕ — сохранить, если не успели, и закрыть
+  $<HTMLAnchorElement>('[data-close]', form)?.addEventListener('click', async (e) => {
+    if (!dirty && !saving) return;
+    e.preventDefault();
+    const href = (e.currentTarget as HTMLAnchorElement).href;
+    if (await save()) {
+      dirty = false;
+      location.assign(href);
+    }
   });
 
   $('[data-delete]', form)?.addEventListener('click', async (e) => {
@@ -402,7 +486,7 @@ function start(form: HTMLFormElement) {
   const bodyOf = (bs: Block[], ph: Photo[]) => {
     const body = h('div', { class: 'body' });
     for (const b of bs.filter((x) => x.items.length)) {
-      const sec = h('section', { class: 'body-b' }, h('h3', {}, b.title || 'Без заголовка'));
+      const sec = h('section', { class: 'body-b' }, b.title ? h('h3', {}, b.title) : null);
       if (b.kind === 'text') b.items.forEach((p) => sec.append(h('p', {}, p)));
       else {
         const ul = h('ul', { class: `k-${b.kind}` });
@@ -458,5 +542,12 @@ function start(form: HTMLFormElement) {
   }
 
   check();
-  if (new URLSearchParams(location.search).get('new') === '1') $<HTMLInputElement>('[name="title"]', form)?.focus();
+  if (init.id === null && isTask) $<HTMLInputElement>('[name="title"]', form)?.focus({ preventScroll: true });
+}
+
+/** Дата через n дней по местному времени, ГГГГ-ММ-ДД. */
+function isoDay(n: number): string {
+  const t = new Date();
+  t.setDate(t.getDate() + n);
+  return `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}-${String(t.getDate()).padStart(2, '0')}`;
 }

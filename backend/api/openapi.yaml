@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: Охват API
-  version: 0.5.0
+  version: 0.6.0
   description: |
     API площадки «Охват»: данные главной, регистрация и вход (почта с кодом, Telegram, Google), приложение после входа:
     один аккаунт — два режима («Бизнес» и «Автор»), профили режимов заполняются, когда понадобятся.
@@ -22,6 +22,9 @@ info:
     (ошибки — в `fields`, у блоков и площадок — `blocks.<n>`, `platforms.<n>`). Отправок на проверку — до
     `MODERATION_SUBMITS_PER_DAY` в сутки (429 `rate_limited`), заданий — до `TASKS_MAX_PER_USER` (409 `tasks_limit`).
     Решение модератора — сервисный метод (админки пока нет); каждая смена статуса пишется в журнал.
+    `MODERATION_MODE=auto` (по умолчанию) — отправленное сразу публикуется: в журнале «на проверке» от владельца и
+    «опубликовано» от системы с пометкой «одобрено автоматически», ответ отправки — уже `published`;
+    `manual` — ждёт модератора. Опубликованное владелец может снять в черновик (`…/withdraw`), чтобы изменить.
 servers:
   - url: http://localhost:8000
 paths:
@@ -405,12 +408,17 @@ paths:
   /api/tasks:
     get:
       summary: Лента опубликованных заданий
-      description: Новые сверху. Курсор `next` из ответа — в параметр `cursor` следующего запроса.
+      description: |
+        Новые сверху. Курсор `next` из ответа — в параметр `cursor` следующего запроса. Отбор (пусто — без отбора):
+        сфера, город (без регистра; задания «Вся Россия» подходят любому городу), формат. Неверный отбор — 400 с `fields`.
       operationId: getFeed
       tags: [tasks]
       parameters:
         - { name: cursor, in: query, schema: { type: string } }
         - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 50, default: 20 } }
+        - { name: category, in: query, schema: { type: string }, description: slug сферы }
+        - { name: city, in: query, schema: { type: string, maxLength: 80 } }
+        - { name: format, in: query, schema: { $ref: "#/components/schemas/TaskFormat" } }
       responses:
         "200":
           description: Страница ленты
@@ -419,6 +427,58 @@ paths:
               schema: { $ref: "#/components/schemas/Feed" }
         "400": { $ref: "#/components/responses/BadRequest" }
         "429": { $ref: "#/components/responses/TooMany" }
+  /api/tasks/{id}:
+    parameters: [{ $ref: "#/components/parameters/TaskID" }]
+    get:
+      summary: Опубликованное задание
+      description: Страница задания для всех. Не опубликовано или нет — 404.
+      operationId: getPublicTask
+      tags: [tasks]
+      responses:
+        "200":
+          description: Задание (с `brand` и `categoryTitle`)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Task" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "429": { $ref: "#/components/responses/TooMany" }
+  /api/cards:
+    get:
+      summary: Лента опубликованных анкет авторов
+      description: Только после входа. Новые сверху, курсор — как у заданий. Отбор — тема и город (без регистра).
+      operationId: getCardFeed
+      tags: [cards]
+      security: [{ session: [] }]
+      parameters:
+        - { name: cursor, in: query, schema: { type: string } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 50, default: 20 } }
+        - { name: topic, in: query, schema: { type: string }, description: slug темы }
+        - { name: city, in: query, schema: { type: string, maxLength: 80 } }
+      responses:
+        "200":
+          description: Страница ленты
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CardFeed" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "429": { $ref: "#/components/responses/TooMany" }
+  /api/cards/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: integer, format: int64 }, description: id автора (`Card.id`) }
+    get:
+      summary: Опубликованная анкета автора
+      operationId: getPublicCard
+      tags: [cards]
+      security: [{ session: [] }]
+      responses:
+        "200":
+          description: Анкета (с `topicTitles`)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Card" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
   /api/me/tasks:
     get:
       summary: Мои задания (все статусы)
@@ -508,16 +568,16 @@ paths:
     post:
       summary: Отправить на проверку
       description: |
-        Из `draft` или `rejected` в `pending_review`. Обязательно: название 5–100, город (или «Вся Россия»), сфера,
-        формат, просмотры или лайки, оплата от 100 ₽, срок — от завтра до полугода (по Москве), хотя бы один
-        блок с пунктами.
+        Из `draft` или `rejected` в `pending_review` (при `MODERATION_MODE=auto` — сразу `published`). Обязательно:
+        название 5–100, город (или «Вся Россия»), сфера, формат, просмотры или лайки, оплата от 100 ₽, срок — от
+        завтра до полугода (по Москве), хотя бы один блок с пунктами (заголовок блока — по желанию).
       operationId: submitTask
       tags: [tasks]
       security: [{ session: [] }]
       parameters: [{ $ref: "#/components/parameters/CSRF" }]
       responses:
         "200":
-          description: На проверке
+          description: На проверке или опубликовано (auto)
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Task" }
@@ -530,7 +590,7 @@ paths:
   /api/me/tasks/{id}/withdraw:
     parameters: [{ $ref: "#/components/parameters/TaskID" }]
     post:
-      summary: Вернуть с проверки в черновик
+      summary: Вернуть в черновик (с проверки или снять с публикации)
       operationId: withdrawTask
       tags: [tasks]
       security: [{ session: [] }]
@@ -582,7 +642,9 @@ paths:
   /api/me/card/submit:
     post:
       summary: Отправить анкету на проверку
-      description: Обязательно — имя, город, 1–5 тем (своих — до 3), площадки с подписчиками, хотя бы один блок с пунктами.
+      description: |
+        Обязательно — имя, город, 1–5 тем (своих — до 3), площадки с подписчиками. Блоки и фото — по желанию.
+        При `MODERATION_MODE=auto` — сразу `published`.
       operationId: submitCard
       tags: [cards]
       security: [{ session: [] }]
@@ -601,7 +663,7 @@ paths:
         "429": { $ref: "#/components/responses/TooMany" }
   /api/me/card/withdraw:
     post:
-      summary: Вернуть анкету с проверки в черновик
+      summary: Вернуть анкету в черновик (с проверки или снять с публикации)
       operationId: withdrawCard
       tags: [cards]
       security: [{ session: [] }]
@@ -1210,19 +1272,28 @@ components:
         works: { type: array, maxItems: 9, items: { type: string }, description: id фото card_work по порядку }
     Card:
       type: object
-      required: [status, rejectReason, name, city, topics, platforms, blocks, avatar, works, updatedAt, submittedAt]
+      required: [id, status, rejectReason, name, city, topics, platforms, blocks, avatar, works, updatedAt, submittedAt, publishedAt]
       properties:
+        id: { type: integer, format: int64, description: id автора — адрес страницы анкеты }
         status: { $ref: "#/components/schemas/Status" }
         rejectReason: { type: string }
         name: { type: string }
         city: { type: string }
         topics: { type: array, items: { type: string } }
+        topicTitles: { type: array, items: { type: string }, description: Названия тем (лента и страница анкеты) }
         platforms: { type: array, items: { $ref: "#/components/schemas/Platform" } }
         blocks: { type: array, items: { $ref: "#/components/schemas/Block" } }
         avatar: { nullable: true, allOf: [{ $ref: "#/components/schemas/Photo" }] }
         works: { type: array, items: { $ref: "#/components/schemas/Photo" } }
         updatedAt: { type: string, format: date-time }
         submittedAt: { type: string, format: date-time, nullable: true }
+        publishedAt: { type: string, format: date-time, nullable: true }
+    CardFeed:
+      type: object
+      required: [cards, next]
+      properties:
+        cards: { type: array, items: { $ref: "#/components/schemas/Card" } }
+        next: { type: string, nullable: true, description: Курсор следующей страницы }
     CardResult:
       type: object
       required: [card]

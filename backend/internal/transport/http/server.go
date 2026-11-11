@@ -60,7 +60,8 @@ type TaskService interface {
 	Delete(ctx context.Context, u domain.User, id int64) error
 	Submit(ctx context.Context, u domain.User, id int64) (domain.Task, error)
 	Withdraw(ctx context.Context, u domain.User, id int64) (domain.Task, error)
-	Feed(ctx context.Context, after *domain.FeedCursor, limit int) (service.FeedPage, error)
+	Feed(ctx context.Context, q service.FeedQuery) (service.FeedPage, error)
+	Public(ctx context.Context, id int64) (domain.Task, error)
 }
 
 // CardService — анкета автора.
@@ -69,6 +70,8 @@ type CardService interface {
 	Save(ctx context.Context, u domain.User, in service.CardInput) (domain.CreatorCard, error)
 	Submit(ctx context.Context, u domain.User) (domain.CreatorCard, error)
 	Withdraw(ctx context.Context, u domain.User) (domain.CreatorCard, error)
+	Feed(ctx context.Context, q service.FeedQuery) (service.CardPage, error)
+	Public(ctx context.Context, userID int64) (domain.CreatorCard, error)
 }
 
 // CategoryService — справочник и свои категории.
@@ -153,6 +156,12 @@ func (s *Server) Routes() http.Handler {
 		r.Use(limit(s.opt.APILimiter, byIP("ip:")), s.client, s.csrf)
 		r.Get("/home", s.getHome)
 		r.Get("/tasks", s.getFeed)
+		r.Get("/tasks/{id}", s.getPublicTask)
+		r.Group(func(r chi.Router) {
+			r.Use(noStore, s.requireUser, limit(s.opt.UserLimiter, byUser("user:")))
+			r.Get("/cards", s.getCardFeed)
+			r.Get("/cards/{id}", s.getPublicCard)
+		})
 		r.Route("/auth", func(r chi.Router) {
 			r.Use(noStore)
 			r.Get("/config", s.getAuthConfig)

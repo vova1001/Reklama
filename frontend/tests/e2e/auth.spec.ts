@@ -106,7 +106,7 @@ test('вход по почте → сразу приложение → выхо�
   await page.locator('[data-digit]').first().fill(code);
   await page.waitForURL('**/app');
   await expect(page.locator('[data-app]')).toHaveAttribute('data-mode', 'business');
-  await expect(page.getByRole('heading', { level: 1, name: 'Ваши задания' })).toBeVisible();
+  await expect(page.getByRole('heading', { level: 1, name: 'Авторы' })).toBeVisible();
 
   // /login и /account для вошедшего — в приложение
   await page.goto('/login');

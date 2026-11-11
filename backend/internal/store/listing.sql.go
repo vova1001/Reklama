@@ -224,6 +224,120 @@ func (q *Queries) GetOwnTask(ctx context.Context, arg GetOwnTaskParams) (Task, e
 	return i, err
 }
 
+const getPublishedCard = `-- name: GetPublishedCard :one
+SELECT cc.user_id, cc.status, cc.reject_reason, cc.name, cc.city, cc.topics, cc.platforms, cc.blocks, cc.avatar, cc.works, cc.created_at, cc.updated_at, cc.submitted_at, cc.published_at, ARRAY(SELECT c.title FROM unnest(cc.topics) WITH ORDINALITY AS x(slug, n)
+                   JOIN categories c ON c.slug = x.slug ORDER BY x.n)::text[] AS topic_titles
+FROM creator_cards cc
+WHERE cc.user_id = $1 AND cc.status = 'published'
+`
+
+type GetPublishedCardRow struct {
+	UserID       int64
+	Status       string
+	RejectReason string
+	Name         string
+	City         string
+	Topics       []string
+	Platforms    []byte
+	Blocks       []byte
+	Avatar       pgtype.Text
+	Works        []string
+	CreatedAt    pgtype.Timestamptz
+	UpdatedAt    pgtype.Timestamptz
+	SubmittedAt  pgtype.Timestamptz
+	PublishedAt  pgtype.Timestamptz
+	TopicTitles  []string
+}
+
+func (q *Queries) GetPublishedCard(ctx context.Context, userID int64) (GetPublishedCardRow, error) {
+	row := q.db.QueryRow(ctx, getPublishedCard, userID)
+	var i GetPublishedCardRow
+	err := row.Scan(
+		&i.UserID,
+		&i.Status,
+		&i.RejectReason,
+		&i.Name,
+		&i.City,
+		&i.Topics,
+		&i.Platforms,
+		&i.Blocks,
+		&i.Avatar,
+		&i.Works,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.SubmittedAt,
+		&i.PublishedAt,
+		&i.TopicTitles,
+	)
+	return i, err
+}
+
+const getPublishedTask = `-- name: GetPublishedTask :one
+SELECT t.id, t.owner_id, t.status, t.reject_reason, t.title, t.city, t.nationwide, t.category, t.formats, t.access, t.min_views, t.min_likes, t.reward_kopecks, t.publish_by, t.blocks, t.cover, t.photos, t.created_at, t.updated_at, t.submitted_at, t.published_at, COALESCE(NULLIF(b.name, ''), NULLIF(u.name, ''), '')::text AS brand, COALESCE(c.title, '')::text AS category_title
+FROM tasks t
+JOIN users u ON u.id = t.owner_id
+LEFT JOIN business_profiles b ON b.user_id = t.owner_id
+LEFT JOIN categories c ON c.slug = t.category
+WHERE t.id = $1 AND t.status = 'published'
+`
+
+type GetPublishedTaskRow struct {
+	ID            int64
+	OwnerID       int64
+	Status        string
+	RejectReason  string
+	Title         string
+	City          string
+	Nationwide    bool
+	Category      pgtype.Text
+	Formats       []string
+	Access        string
+	MinViews      int64
+	MinLikes      int64
+	RewardKopecks int64
+	PublishBy     pgtype.Date
+	Blocks        []byte
+	Cover         pgtype.Text
+	Photos        []string
+	CreatedAt     pgtype.Timestamptz
+	UpdatedAt     pgtype.Timestamptz
+	SubmittedAt   pgtype.Timestamptz
+	PublishedAt   pgtype.Timestamptz
+	Brand         string
+	CategoryTitle string
+}
+
+func (q *Queries) GetPublishedTask(ctx context.Context, id int64) (GetPublishedTaskRow, error) {
+	row := q.db.QueryRow(ctx, getPublishedTask, id)
+	var i GetPublishedTaskRow
+	err := row.Scan(
+		&i.ID,
+		&i.OwnerID,
+		&i.Status,
+		&i.RejectReason,
+		&i.Title,
+		&i.City,
+		&i.Nationwide,
+		&i.Category,
+		&i.Formats,
+		&i.Access,
+		&i.MinViews,
+		&i.MinLikes,
+		&i.RewardKopecks,
+		&i.PublishBy,
+		&i.Blocks,
+		&i.Cover,
+		&i.Photos,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.SubmittedAt,
+		&i.PublishedAt,
+		&i.Brand,
+		&i.CategoryTitle,
+	)
+	return i, err
+}
+
 const getTask = `-- name: GetTask :one
 SELECT id, owner_id, status, reject_reason, title, city, nationwide, category, formats, access, min_views, min_likes, reward_kopecks, publish_by, blocks, cover, photos, created_at, updated_at, submitted_at, published_at FROM tasks WHERE id = $1
 `
@@ -308,6 +422,87 @@ func (q *Queries) ListOwnTasks(ctx context.Context, arg ListOwnTasksParams) ([]T
 	return items, nil
 }
 
+const listPublishedCards = `-- name: ListPublishedCards :many
+SELECT cc.user_id, cc.status, cc.reject_reason, cc.name, cc.city, cc.topics, cc.platforms, cc.blocks, cc.avatar, cc.works, cc.created_at, cc.updated_at, cc.submitted_at, cc.published_at, ARRAY(SELECT c.title FROM unnest(cc.topics) WITH ORDINALITY AS x(slug, n)
+                   JOIN categories c ON c.slug = x.slug ORDER BY x.n)::text[] AS topic_titles
+FROM creator_cards cc
+WHERE cc.status = 'published'
+  AND ($1::timestamptz IS NULL OR (cc.published_at, cc.user_id) < ($1::timestamptz, $2::bigint))
+  AND ($3::text = '' OR $3::text = ANY(cc.topics))
+  AND ($4::text = '' OR lower(cc.city) = lower($4::text))
+ORDER BY cc.published_at DESC, cc.user_id DESC
+LIMIT $5
+`
+
+type ListPublishedCardsParams struct {
+	BeforeAt pgtype.Timestamptz
+	BeforeID int64
+	Topic    string
+	City     string
+	Lim      int32
+}
+
+type ListPublishedCardsRow struct {
+	UserID       int64
+	Status       string
+	RejectReason string
+	Name         string
+	City         string
+	Topics       []string
+	Platforms    []byte
+	Blocks       []byte
+	Avatar       pgtype.Text
+	Works        []string
+	CreatedAt    pgtype.Timestamptz
+	UpdatedAt    pgtype.Timestamptz
+	SubmittedAt  pgtype.Timestamptz
+	PublishedAt  pgtype.Timestamptz
+	TopicTitles  []string
+}
+
+// Лента анкет: опубликованные, новые сверху; курсор — (published_at, user_id). Названия тем — по порядку.
+func (q *Queries) ListPublishedCards(ctx context.Context, arg ListPublishedCardsParams) ([]ListPublishedCardsRow, error) {
+	rows, err := q.db.Query(ctx, listPublishedCards,
+		arg.BeforeAt,
+		arg.BeforeID,
+		arg.Topic,
+		arg.City,
+		arg.Lim,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListPublishedCardsRow{}
+	for rows.Next() {
+		var i ListPublishedCardsRow
+		if err := rows.Scan(
+			&i.UserID,
+			&i.Status,
+			&i.RejectReason,
+			&i.Name,
+			&i.City,
+			&i.Topics,
+			&i.Platforms,
+			&i.Blocks,
+			&i.Avatar,
+			&i.Works,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.SubmittedAt,
+			&i.PublishedAt,
+			&i.TopicTitles,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listPublishedTasks = `-- name: ListPublishedTasks :many
 SELECT t.id, t.owner_id, t.status, t.reject_reason, t.title, t.city, t.nationwide, t.category, t.formats, t.access, t.min_views, t.min_likes, t.reward_kopecks, t.publish_by, t.blocks, t.cover, t.photos, t.created_at, t.updated_at, t.submitted_at, t.published_at, COALESCE(NULLIF(b.name, ''), NULLIF(u.name, ''), '')::text AS brand, COALESCE(c.title, '')::text AS category_title
 FROM tasks t
@@ -316,13 +511,19 @@ LEFT JOIN business_profiles b ON b.user_id = t.owner_id
 LEFT JOIN categories c ON c.slug = t.category
 WHERE t.status = 'published'
   AND ($1::timestamptz IS NULL OR (t.published_at, t.id) < ($1::timestamptz, $2::bigint))
+  AND ($3::text = '' OR t.category = $3::text)
+  AND ($4::text = '' OR t.nationwide OR lower(t.city) = lower($4::text))
+  AND ($5::text = '' OR $5::text = ANY(t.formats))
 ORDER BY t.published_at DESC, t.id DESC
-LIMIT $3
+LIMIT $6
 `
 
 type ListPublishedTasksParams struct {
 	BeforeAt pgtype.Timestamptz
 	BeforeID int64
+	Category string
+	City     string
+	Format   string
 	Lim      int32
 }
 
@@ -353,8 +554,16 @@ type ListPublishedTasksRow struct {
 }
 
 // Лента: опубликованные, новые сверху; курсор — (published_at, id) последнего на прошлой странице.
+// Отбор (пусто — без отбора): сфера, город (без регистра; «Вся Россия» подходит любому), формат.
 func (q *Queries) ListPublishedTasks(ctx context.Context, arg ListPublishedTasksParams) ([]ListPublishedTasksRow, error) {
-	rows, err := q.db.Query(ctx, listPublishedTasks, arg.BeforeAt, arg.BeforeID, arg.Lim)
+	rows, err := q.db.Query(ctx, listPublishedTasks,
+		arg.BeforeAt,
+		arg.BeforeID,
+		arg.Category,
+		arg.City,
+		arg.Format,
+		arg.Lim,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -399,8 +608,8 @@ func (q *Queries) ListPublishedTasks(ctx context.Context, arg ListPublishedTasks
 
 const logStatusChange = `-- name: LogStatusChange :exec
 
-INSERT INTO moderation_log (subject, subject_id, from_status, to_status, reason, actor_id)
-VALUES ($1, $2, $3, $4, $5, $6)
+INSERT INTO moderation_log (subject, subject_id, from_status, to_status, reason, actor_id, auto)
+VALUES ($1, $2, $3, $4, $5, $6, $7)
 `
 
 type LogStatusChangeParams struct {
@@ -410,6 +619,7 @@ type LogStatusChangeParams struct {
 	ToStatus   string
 	Reason     string
 	ActorID    pgtype.Int8
+	Auto       bool
 }
 
 // ===== журнал модерации =====
@@ -421,13 +631,14 @@ func (q *Queries) LogStatusChange(ctx context.Context, arg LogStatusChangeParams
 		arg.ToStatus,
 		arg.Reason,
 		arg.ActorID,
+		arg.Auto,
 	)
 	return err
 }
 
 const setCardStatus = `-- name: SetCardStatus :one
 UPDATE creator_cards
-SET status = $1::text, reject_reason = $2, updated_at = now(),
+SET status = $1::text, reject_reason = CASE WHEN $1::text = 'rejected' THEN $2::text ELSE '' END, updated_at = now(),
     submitted_at = CASE WHEN $1::text = 'pending_review' THEN now() ELSE submitted_at END,
     published_at = CASE WHEN $1::text = 'published' THEN now() ELSE published_at END
 WHERE user_id = $3 AND status = $4::text
@@ -470,7 +681,7 @@ func (q *Queries) SetCardStatus(ctx context.Context, arg SetCardStatusParams) (C
 
 const setTaskStatus = `-- name: SetTaskStatus :one
 UPDATE tasks
-SET status = $1::text, reject_reason = $2, updated_at = now(),
+SET status = $1::text, reject_reason = CASE WHEN $1::text = 'rejected' THEN $2::text ELSE '' END, updated_at = now(),
     submitted_at = CASE WHEN $1::text = 'pending_review' THEN now() ELSE submitted_at END,
     published_at = CASE WHEN $1::text = 'published' THEN now() ELSE published_at END
 WHERE id = $3 AND status = $4::text
@@ -520,7 +731,7 @@ func (q *Queries) SetTaskStatus(ctx context.Context, arg SetTaskStatusParams) (T
 }
 
 const statusHistory = `-- name: StatusHistory :many
-SELECT id, subject, subject_id, from_status, to_status, reason, actor_id, created_at FROM moderation_log WHERE subject = $1 AND subject_id = $2 ORDER BY id
+SELECT id, subject, subject_id, from_status, to_status, reason, actor_id, created_at, auto FROM moderation_log WHERE subject = $1 AND subject_id = $2 ORDER BY id
 `
 
 type StatusHistoryParams struct {
@@ -546,6 +757,7 @@ func (q *Queries) StatusHistory(ctx context.Context, arg StatusHistoryParams) ([
 			&i.Reason,
 			&i.ActorID,
 			&i.CreatedAt,
+			&i.Auto,
 		); err != nil {
 			return nil, err
 		}

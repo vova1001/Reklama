@@ -1,0 +1,29 @@
+---
+// Страница автора из ленты бизнеса: анкета целиком и «Предложить задание» (пока без сделок — сообщение).
+import App from '../../../layouts/App.astro';
+import Icon from '../../../components/Icon.astro';
+import CreatorPage from '../../../components/app/CreatorPage.astro';
+import { fetchPublicCard } from '../../../lib/auth';
+
+const me = Astro.locals.me;
+if (!me) return Astro.redirect('/login', 303);
+const id = Number(Astro.params.id);
+const card = Number.isSafeInteger(id) && id > 0 ? await fetchPublicCard(Astro.request, id) : null;
+if (!card) Astro.response.status = 404;
+---
+<App title={card?.name || 'Автор'} page="feed">
+  <a class="btn pill-text back-lnk" href="/app"><Icon name="arrow-left" size={18} />Лента</a>
+  {!card ? (
+    <div class="empty"><Icon name="inbox" size={32} /><h2>Анкета не найдена</h2><p>Возможно, автор снял её с публикации.</p><a class="btn pill-ghost" href="/app">В ленту</a></div>
+  ) : (
+    <CreatorPage card={card} topics={card.topicTitles ?? []}>
+      <div class="cta">
+        <button class="btn pill-emerald" type="button" data-soon="Предложения появятся в ближайшем обновлении"><Icon name="send" size={18} />Предложить задание</button>
+      </div>
+    </CreatorPage>
+  )}
+</App>
+<script>
+  import { toast } from '../../../lib/ui';
+  document.querySelector<HTMLButtonElement>('[data-soon]')?.addEventListener('click', (e) => toast((e.currentTarget as HTMLElement).dataset.soon!));
+</script>

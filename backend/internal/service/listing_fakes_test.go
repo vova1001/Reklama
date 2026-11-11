@@ -19,6 +19,8 @@ type memListings struct {
 	clock  Clock
 	fail   error
 	cats   *memCats
+	// lastFilter — отбор последнего запроса ленты
+	lastFilter domain.FeedFilter
 }
 
 func newMemListings(c Clock) *memListings {
@@ -101,29 +103,44 @@ func (m *memListings) DeleteTask(_ context.Context, owner, id int64) error {
 	return nil
 }
 
-func (m *memListings) SetTaskStatus(_ context.Context, ch domain.StatusChange) (domain.Task, error) {
+func (m *memListings) SetTaskStatus(_ context.Context, chain ...domain.StatusChange) (domain.Task, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	t, ok := m.tasks[ch.SubjectID]
-	if !ok || t.Status != ch.From {
+	t, ok := m.tasks[chain[0].SubjectID]
+	if !ok {
 		return domain.Task{}, domain.ErrConflict
 	}
-	now := m.clock.Now()
-	t.Status, t.RejectReason = ch.To, ch.Reason
-	if ch.To == domain.StatusPublished {
-		t.PublishedAt = &now
+	next := *t
+	var logs []domain.StatusChange
+	for _, ch := range chain {
+		if next.Status != ch.From {
+			return domain.Task{}, domain.ErrConflict // всё или ничего, как транзакция
+		}
+		now := m.clock.Now()
+		next.Status, next.RejectReason = ch.To, ""
+		if ch.To == domain.StatusRejected {
+			next.RejectReason = ch.Reason
+		}
+		if ch.To == domain.StatusPublished {
+			next.PublishedAt = &now
+		}
+		ch.Subject, ch.At = domain.SubjectTask, now
+		logs = append(logs, ch)
 	}
-	ch.Subject, ch.At = domain.SubjectTask, now
-	m.log = append(m.log, ch)
+	*t = next
+	m.log = append(m.log, logs...)
 	return *t, nil
 }
 
-func (m *memListings) PublishedTasks(_ context.Context, after *domain.FeedCursor, limit int) ([]domain.Task, error) {
+func (m *memListings) PublishedTasks(_ context.Context, f domain.FeedFilter, after *domain.FeedCursor, limit int) ([]domain.Task, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	m.lastFilter = f
 	var out []domain.Task
 	for _, t := range m.tasks {
-		if t.Status == domain.StatusPublished && (after == nil || t.ID < after.ID) {
+		if t.Status == domain.StatusPublished && (after == nil || t.ID < after.ID) &&
+			(f.Category == "" || t.Category == f.Category) && (f.City == "" || t.Nationwide || t.City == f.City) &&
+			(f.Format == "" || contains(t.Formats, f.Format)) {
 			out = append(out, *t)
 		}
 	}
@@ -132,6 +149,16 @@ func (m *memListings) PublishedTasks(_ context.Context, after *domain.FeedCursor
 		out = out[:limit]
 	}
 	return out, nil
+}
+
+func (m *memListings) PublishedTask(_ context.Context, id int64) (domain.Task, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	t, ok := m.tasks[id]
+	if !ok || t.Status != domain.StatusPublished {
+		return domain.Task{}, domain.ErrNotFound
+	}
+	return *t, nil
 }
 
 func (m *memListings) Card(_ context.Context, uid int64) (domain.CreatorCard, error) {
@@ -160,16 +187,60 @@ func (m *memListings) SaveCard(_ context.Context, c domain.CreatorCard) (domain.
 	return c, nil
 }
 
-func (m *memListings) SetCardStatus(_ context.Context, ch domain.StatusChange) (domain.CreatorCard, error) {
+func (m *memListings) SetCardStatus(_ context.Context, chain ...domain.StatusChange) (domain.CreatorCard, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	c, ok := m.cards[ch.SubjectID]
-	if !ok || c.Status != ch.From {
+	c, ok := m.cards[chain[0].SubjectID]
+	if !ok {
 		return domain.CreatorCard{}, domain.ErrConflict
 	}
-	c.Status, c.RejectReason = ch.To, ch.Reason
-	ch.Subject, ch.At = domain.SubjectCard, m.clock.Now()
-	m.log = append(m.log, ch)
+	next := *c
+	var logs []domain.StatusChange
+	for _, ch := range chain {
+		if next.Status != ch.From {
+			return domain.CreatorCard{}, domain.ErrConflict
+		}
+		now := m.clock.Now()
+		next.Status, next.RejectReason = ch.To, ""
+		if ch.To == domain.StatusRejected {
+			next.RejectReason = ch.Reason
+		}
+		if ch.To == domain.StatusPublished {
+			next.PublishedAt = &now
+		}
+		ch.Subject, ch.At = domain.SubjectCard, now
+		logs = append(logs, ch)
+	}
+	*c = next
+	m.log = append(m.log, logs...)
+	return *c, nil
+}
+
+func (m *memListings) PublishedCards(_ context.Context, f domain.FeedFilter, after *domain.FeedCursor, limit int) ([]domain.CreatorCard, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.lastFilter = f
+	var out []domain.CreatorCard
+	for _, c := range m.cards {
+		if c.Status == domain.StatusPublished && (after == nil || c.UserID < after.ID) &&
+			(f.Category == "" || contains(c.Topics, f.Category)) && (f.City == "" || c.City == f.City) {
+			out = append(out, *c)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].UserID > out[j].UserID })
+	if len(out) > limit {
+		out = out[:limit]
+	}
+	return out, nil
+}
+
+func (m *memListings) PublishedCard(_ context.Context, uid int64) (domain.CreatorCard, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	c, ok := m.cards[uid]
+	if !ok || c.Status != domain.StatusPublished {
+		return domain.CreatorCard{}, domain.ErrNotFound
+	}
 	return *c, nil
 }
 

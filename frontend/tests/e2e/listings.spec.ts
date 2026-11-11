@@ -1,10 +1,14 @@
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect, type Browser, type Page, type TestInfo } from '@playwright/test';
 import { jsErrors, login, uniq } from './helpers';
 
-// Задание бизнеса и анкета автора: черновик сохраняется сам, динамические блоки, свои категории, фото,
-// предпросмотр, отправка → «На проверке», статусы в «Мои задания».
+// Задание бизнеса и анкета автора: редактор на весь экран, черновик сохраняется сам, удобная проверка (ошибка после
+// ухода с поля, «Опубликовать» ведёт к первому незаполненному, «Осталось: …»), блоки (Enter, Backspace, вставка
+// строк, Alt+↑/↓, шаблоны), фото, предпросмотр, автоматическая проверка (MODERATION_MODE=auto — сразу «Опубликовано»),
+// лента карточками у другого пользователя: наведение — главное поверх фото, нажатие — страница целиком.
 const fixture = (name: string) => new URL(`./fixtures/${name}`, import.meta.url).pathname;
 const saved = (page: Page) => expect(page.locator('[data-state]')).toContainText('Черновик сохранён', { timeout: 10_000 });
+const vals = (l: ReturnType<Page['locator']>) => l.evaluateAll((els) => els.map((e) => (e as HTMLInputElement).value));
+const tag = () => `${Date.now().toString(36)}${Math.floor(Math.random() * 1e4)}`;
 
 test.beforeEach(async ({ context }) => {
   await context.route('https://telegram.org/**', (r) => r.abort());
@@ -16,25 +20,85 @@ function dateIn(days: number) {
   return { ru: `${String(d.getDate()).padStart(2, '0')}.${String(d.getMonth() + 1).padStart(2, '0')}.${d.getFullYear()}`, iso: d.toISOString().slice(0, 10) };
 }
 
-test('задание: блоки, фото, предпросмотр → «На проверке»', async ({ page }, info) => {
+async function csrf(page: Page) {
+  return { 'X-CSRF-Token': (await (await page.request.get('/api/auth/config')).json()).csrfToken as string };
+}
+
+/** Второй пользователь в своём окне (тот же вид устройства), сразу в нужном режиме. */
+async function otherUser(browser: Browser, info: TestInfo, name: string, mode: 'business' | 'creator') {
+  const u = info.project.use;
+  const ctx = await browser.newContext({ baseURL: u.baseURL, viewport: u.viewport, isMobile: u.isMobile, hasTouch: u.hasTouch, userAgent: u.userAgent, deviceScaleFactor: u.deviceScaleFactor });
+  const page = await ctx.newPage();
+  await login(page, uniq(info.project.name, name));
+  expect((await page.request.patch('/api/me/mode', { headers: await csrf(page), data: { mode } })).status()).toBe(200);
+  return page;
+}
+
+/** Вставка нескольких строк в поле (как Ctrl+V). */
+async function paste(page: Page, selector: string, text: string) {
+  await page.locator(selector).evaluate((el, t) => {
+    const dt = new DataTransfer();
+    dt.setData('text/plain', t);
+    el.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true }));
+  }, text);
+}
+
+/** Карточка в ленте: на устройствах с наведением — «полотно» поверх фото, на телефоне — строка под фото. */
+async function expectTileSummary(page: Page, tile: ReturnType<Page['locator']>, text: RegExp, info: TestInfo) {
+  if (info.project.use.hasTouch) {
+    await expect(tile.locator('.tile-brief')).toBeVisible();
+    await expect(tile.locator('.tile-brief')).toContainText(text);
+    await expect(tile.locator('[data-sheet]')).toBeHidden();
+  } else {
+    const sheet = tile.locator('[data-sheet]');
+    await expect(sheet).toHaveCSS('opacity', '0');
+    await tile.hover();
+    await expect(sheet).toHaveCSS('opacity', '1');
+    await expect(sheet).toContainText(text);
+    await expect(tile.locator('.tile-brief')).toBeHidden();
+  }
+}
+
+test('задание: редактор на весь экран, проверка у полей, блоки, фото → сразу опубликовано, видно автору', async ({ page, browser }, info) => {
   test.slow();
   const errors = jsErrors(page);
+  const city = `Казань ${tag()}`;
   await login(page, uniq(info.project.name, 'task'));
   await page.goto('/app/tasks/new');
-  await expect(page.getByRole('heading', { level: 1, name: 'Новое задание' })).toBeVisible();
-  const submit = page.getByRole('button', { name: 'На проверку' });
-  await expect(submit).toHaveAttribute('aria-disabled', 'true');
-  await expect(submit).toHaveAttribute('data-tip', 'Добавьте название');
+  // на весь экран: без навигации приложения, сверху — ✕, «Правка / Как увидят», сохранение, «Опубликовать»
+  await expect(page.locator('.rail, .bn, .mbar')).toHaveCount(0);
+  const bar = page.locator('.ebar');
+  await expect(bar.getByRole('link', { name: 'Закрыть' })).toBeVisible();
+  await expect(bar.getByRole('tab', { name: 'Как увидят' })).toBeVisible();
+  const submit = bar.getByRole('button', { name: 'Опубликовать' });
+  await expect(submit).toBeEnabled();
+  const left = page.locator('[data-left]');
+  await expect(left).toContainText('Осталось: название, сфера, город');
 
-  // первая правка создаёт черновик, адрес меняется на /app/tasks/{id}
-  await page.getByLabel('Название').fill('Сторис о новом осеннем меню');
+  // «Опубликовать» сразу — к первому незаполненному: подсветка, курсор, текст ошибки как у сервера
+  await submit.click();
+  await expect(page.locator('[data-err="title"]')).toHaveText('Название — от 5 до 100 символов');
+  await expect(page.getByLabel('Название задания')).toBeFocused();
+  await expect(page.locator('[data-sec="title"]')).toHaveClass(/is-bad/);
+  // «Осталось»: слово ведёт к полю
+  await left.getByRole('button', { name: 'сфера' }).click();
+  await expect(page.locator('[data-sec="category"]')).toHaveClass(/is-bad/);
+
+  // первая правка создаёт черновик; ошибка уходит, как только поле заполнено
+  await page.getByLabel('Название задания').fill('Сторис о новом осеннем меню');
+  await expect(page.locator('[data-err="title"]')).toBeHidden();
   await saved(page);
   await expect(page).toHaveURL(/\/app\/tasks\/\d+$/);
   const id = Number(page.url().split('/').pop());
 
-  // сфера, город, формат, тип, условия, оплата, срок
+  // ошибка у поля — после ухода с него
+  await page.getByLabel('Город').fill('К');
+  await page.getByLabel('Просмотры от').focus();
+  await expect(page.locator('[data-err="city"]')).toHaveText('Укажите город или «Вся Россия»');
+  await page.getByLabel('Город').fill(city);
+  await expect(page.locator('[data-err="city"]')).toBeHidden();
+
   await page.locator('[data-cats] [data-slug]').first().click();
-  await page.getByLabel('Город').fill('Казань');
   await page.getByRole('button', { name: 'Reels' }).click();
   await page.getByRole('button', { name: 'Shorts' }).click();
   await page.getByRole('radio', { name: 'С одобрением' }).click();
@@ -43,32 +107,51 @@ test('задание: блоки, фото, предпросмотр → «На 
   await page.getByLabel('Оплата').fill('3000');
   await page.getByRole('button', { name: 'Неделя' }).click();
   await expect(page.getByLabel('Срок')).toHaveValue(dateIn(7).ru);
+  await expect(left).toContainText('Осталось: описание');
 
-  // блоки: пункты по Enter, свой блок, порядок с клавиатуры, удаление блока с «Вернуть»
+  // блоки: пункт — сразу поле (текст без Enter тоже сохраняется), Enter — следующий, Alt+↑ — выше
   const blocks = page.locator('[data-blocks] .bk');
-  await expect(blocks).toHaveCount(3);
-  await blocks.nth(0).locator('.bi-add input').fill('Снимите завтрак при утреннем свете');
-  await page.keyboard.press('Enter');
-  await blocks.nth(1).locator('.bi-add input').fill('Интерьер');
+  await expect.poll(() => vals(blocks.locator('.bk-title'))).toEqual(['Описание', 'Что показать']);
+  await blocks.nth(0).locator('.bi-in').first().fill('Снимите завтрак при утреннем свете');
+  await expect(left).toBeHidden();
+  await blocks.nth(1).locator('.bi-in').first().fill('Интерьер');
   await page.keyboard.press('Enter');
   await page.keyboard.type('Сырники');
+  await expect.poll(() => vals(blocks.nth(1).locator('.bi-in'))).toEqual(['Интерьер', 'Сырники']);
+  await page.keyboard.press('Alt+ArrowUp');
+  await expect.poll(() => vals(blocks.nth(1).locator('.bi-in'))).toEqual(['Сырники', 'Интерьер']);
+  await expect(blocks.nth(1).locator('.bi-in').first()).toBeFocused();
+  // Enter в конце — новый пустой, Backspace в пустом — удалить
+  await blocks.nth(1).locator('.bi-in').nth(1).press('End');
   await page.keyboard.press('Enter');
+  await expect(blocks.nth(1).locator('.bi')).toHaveCount(3);
+  await page.keyboard.press('Backspace');
   await expect(blocks.nth(1).locator('.bi')).toHaveCount(2);
-  await blocks.nth(1).locator('.bi').nth(1).locator('.grip').focus();
-  await page.keyboard.press('ArrowUp');
-  await expect(blocks.nth(1).locator('.bi-in').first()).toHaveValue('Сырники');
-  await page.getByRole('button', { name: 'Список' }).click();
-  await expect(blocks).toHaveCount(4);
+  // шаблон одним нажатием; вставка нескольких строк — несколько пунктов (маркеры списка убираются)
+  const tpl = page.locator('.bk-tpl');
+  await expect(tpl.getByRole('button')).toHaveText(['Требования', 'Формат', 'Сроки', 'Свой блок']);
+  await tpl.getByRole('button', { name: 'Требования' }).click();
+  await expect(blocks).toHaveCount(3);
+  await expect(blocks.nth(2).locator('.bi-in').first()).toBeFocused();
+  await paste(page, '[data-blocks] .bk:nth-child(3) .bi-in', 'Без мата\n- Вертикальное видео\n2) Отметить нас');
+  await expect.poll(() => vals(blocks.nth(2).locator('.bi-in'))).toEqual(['Без мата', 'Вертикальное видео', 'Отметить нас']);
+  await expect(tpl.getByRole('button', { name: 'Требования' })).toHaveCount(0);
+  // свой блок: заголовок в строке, Enter — к пунктам; Alt+↑ в заголовке — блок выше
+  await tpl.getByRole('button', { name: 'Свой блок' }).click();
+  await expect(blocks.nth(3).locator('.bk-title')).toBeFocused();
   await page.keyboard.type('Хештеги');
-  await blocks.nth(3).locator('.bi-add input').fill('#зерно');
   await page.keyboard.press('Enter');
-  await blocks.nth(2).getByRole('button', { name: 'Удалить блок' }).click();
+  await page.keyboard.type('#зерно');
+  await blocks.nth(3).locator('.bk-title').focus();
+  await page.keyboard.press('Alt+ArrowUp');
+  await expect.poll(() => vals(blocks.locator('.bk-title'))).toEqual(['Описание', 'Что показать', 'Хештеги', 'Требования']);
+  // удалить блок — «Вернуть»
+  await blocks.nth(3).getByRole('button', { name: 'Удалить блок' }).click();
   await expect(blocks).toHaveCount(3);
   await expect(page.locator('[data-toast]')).toContainText('Блок удалён');
   await page.locator('[data-toast-act]').click();
   await expect(blocks).toHaveCount(4);
-  await expect(blocks.nth(2).locator('.bk-title')).toHaveValue('Требования');
-  await blocks.nth(2).getByRole('button', { name: 'Удалить блок' }).click();
+  await blocks.nth(3).getByRole('button', { name: 'Удалить блок' }).click();
   await expect(blocks).toHaveCount(3);
 
   // обложка — с кадрированием 16:9; два фото «что показать»
@@ -79,7 +162,6 @@ test('задание: блоки, фото, предпросмотр → «На 
   await expect(page.locator('[data-photos] .up-t[data-id]')).toHaveCount(2, { timeout: 20_000 });
   await saved(page);
 
-  // черновик на сервере — со всем введённым
   const draft = await (await page.request.get(`/api/me/tasks/${id}`)).json();
   expect(draft.status).toBe('draft');
   expect(draft.formats).toEqual(['reels', 'shorts']);
@@ -87,75 +169,88 @@ test('задание: блоки, фото, предпросмотр → «На 
   expect(draft.rewardKopecks).toBe(300000);
   expect(draft.publishBy).toBe(dateIn(7).iso);
   expect(draft.blocks.map((b: { title: string }) => b.title)).toEqual(['Описание', 'Что показать', 'Хештеги']);
+  expect(draft.blocks[0].items).toEqual(['Снимите завтрак при утреннем свете']);
   expect(draft.blocks[1].items).toEqual(['Сырники', 'Интерьер']);
-  expect(draft.cover.id).toHaveLength(22);
+  expect(draft.blocks[2].items).toEqual(['#зерно']);
   expect(draft.photos).toHaveLength(2);
   // фото черновика — только владельцу
-  const guest = await page.context().browser()!.newContext();
+  const guest = await browser.newContext();
   expect((await guest.request.get(new URL(draft.cover.src, page.url()).toString())).status()).toBe(404);
   await guest.close();
-  expect((await page.request.get(draft.cover.src)).status()).toBe(200);
 
   // предпросмотр — как увидят авторы
   await page.getByRole('tab', { name: 'Как увидят' }).click();
   const pv = page.locator('[data-preview]');
   await expect(pv.locator('.it-t')).toHaveText('Сторис о новом осеннем меню');
   await expect(pv).toContainText(/3\s000\s₽/);
-  await expect(pv).toContainText(/от 5\s000 просм\./);
-  await expect(pv).toContainText('Reels, Shorts');
   await expect(pv.locator('.body-b h3')).toHaveText(['Описание', 'Что показать', 'Хештеги']);
-  await expect(pv.locator('.it-cover')).toBeVisible();
   await page.getByRole('tab', { name: 'Правка' }).click();
 
-  // на проверку
-  await expect(submit).toHaveAttribute('aria-disabled', 'false');
+  // опубликовать — проверка автоматическая: сразу «Опубликовано», в журнале — «одобрено автоматически»
   await submit.click();
   await page.waitForURL(`**/app/tasks/${id}?sent=1`);
-  await expect(page.locator('[data-status-label]')).toHaveText('На проверке');
-  await expect(page.locator('.banner')).toContainText('Отправлено');
-  expect((await (await page.request.get(`/api/me/tasks/${id}`)).json()).status).toBe('pending_review');
-
-  // в «Мои задания» и в ленте бизнеса — со статусом
+  await expect(page.locator('[data-status-label]')).toHaveText('Опубликовано');
+  await expect(page.locator('.banner.is-ok')).toContainText('Опубликовано');
+  expect((await (await page.request.get(`/api/me/tasks/${id}`)).json()).status).toBe('published');
   await page.goto('/app/tasks');
-  const row = page.locator('.it', { hasText: 'Сторис о новом осеннем меню' });
-  await expect(row.locator('.st')).toHaveText('На проверке');
-  await page.goto('/app');
-  await expect(page.locator('.it', { hasText: 'Сторис о новом осеннем меню' }).locator('.st')).toHaveText('На проверке');
+  await expect(page.locator('.it', { hasText: 'Сторис о новом осеннем меню' }).locator('.st')).toHaveText('Опубликовано');
 
-  // вернуть в черновик — снова правится
+  // другой пользователь (автор) видит задание в ленте карточкой; отбор по городу
+  const other = await otherUser(browser, info, 'task-viewer', 'creator');
+  await other.goto(`/app?city=${encodeURIComponent(city)}`);
+  await expect(other.getByRole('heading', { level: 1, name: 'Задания' })).toBeVisible();
+  const tile = other.locator(`[data-tile="${id}"]`);
+  await expect(tile.locator('.tile-t')).toHaveText('Сторис о новом осеннем меню');
+  await expect(tile.locator('.tile-m')).toContainText(city);
+  await expect(tile.locator('.tile-ph img')).toBeVisible();
+  await expectTileSummary(other, tile, /3\s000\s₽/, info);
+  await other.goto('/app?city=Нетакогогорода');
+  await expect(other.locator(`[data-tile="${id}"]`)).toHaveCount(0);
+  // нажатие — страница задания целиком
+  await other.goto(`/app?city=${encodeURIComponent(city)}`);
+  await other.locator(`[data-tile="${id}"] a`).click();
+  await other.waitForURL(`**/app/task/${id}`);
+  await expect(other.getByRole('heading', { level: 1, name: 'Сторис о новом осеннем меню' })).toBeVisible();
+  await expect(other.locator('.terms')).toContainText(/3\s000\s₽/);
+  await expect(other.locator('.body-b h3')).toHaveText(['Описание', 'Что показать', 'Хештеги']);
+  await other.getByRole('button', { name: 'Откликнуться' }).click();
+  await expect(other.locator('[data-toast]')).toContainText('Отклики появятся');
+
+  // снять и изменить — пропадает из ленты, снова правится
   await page.goto(`/app/tasks/${id}`);
-  await page.getByRole('button', { name: 'В черновик' }).click();
-  await expect(page.getByLabel('Название')).toHaveValue('Сторис о новом осеннем меню');
+  await page.getByRole('button', { name: 'Снять и изменить' }).click();
+  await page.getByRole('dialog', { name: 'Снять с публикации?' }).getByRole('button', { name: 'Снять' }).click();
+  await expect(page.getByLabel('Название задания')).toHaveValue('Сторис о новом осеннем меню');
+  expect((await other.request.get(`/api/tasks/${id}`)).status()).toBe(404);
+  await other.context().close();
   expect(errors).toEqual([]);
 });
 
-test('черновик: сохраняется сам, открывается из «Мои», удаляется', async ({ page }, info) => {
+test('черновик: сохраняется сам, ✕ закрывает, открывается из «Мои», удаляется', async ({ page }, info) => {
   const errors = jsErrors(page);
   await login(page, uniq(info.project.name, 'draft'));
   await page.goto('/app/tasks/new');
-  await page.getByLabel('Название').fill('Черновик про кофе');
+  await page.getByLabel('Название задания').fill('Черновик про кофе');
   await page.getByLabel('Лайки от').fill('300');
-  await page.locator('[data-blocks] .bk').first().locator('.bi-add input').fill('Пока только идея');
-  await page.keyboard.press('Enter');
-  await saved(page);
-  // ушли и вернулись — всё на месте
-  await page.goto('/app/tasks');
+  await page.locator('[data-blocks] .bk').first().locator('.bi-in').first().fill('Пока только идея');
+  // ✕ — сохраняет, если не успели, и закрывает
+  await page.getByRole('link', { name: 'Закрыть' }).click();
+  await page.waitForURL('**/app/tasks');
   await page.getByRole('button', { name: /Черновик/ }).click();
   const row = page.locator('.it', { hasText: 'Черновик про кофе' });
   await expect(row.locator('.st')).toHaveText('Черновик');
   await row.getByRole('link', { name: 'Изменить' }).click();
-  await expect(page.getByLabel('Название')).toHaveValue('Черновик про кофе');
+  await expect(page.getByLabel('Название задания')).toHaveValue('Черновик про кофе');
   await expect(page.getByLabel('Лайки от')).toHaveValue('300');
   await expect(page.locator('[data-blocks] .bi-in').first()).toHaveValue('Пока только идея');
-  // отправить нельзя — причина у кнопки; щелчок показывает, что заполнить
-  const submit = page.getByRole('button', { name: 'На проверку' });
-  await expect(submit).toHaveAttribute('aria-disabled', 'true');
-  await submit.click({ force: true }); // aria-disabled: кнопка доступна для фокуса и щелчка — показывает, что заполнить
+  // «Опубликовать» — ошибки у всех незаполненных, курсор — в первом
+  await page.getByRole('button', { name: 'Опубликовать' }).click();
   await expect(page.locator('[data-err="category"]')).toHaveText('Выберите сферу');
-  // в ленте бизнеса — строка «Черновики: 1»
-  await page.goto('/app');
-  await expect(page.locator('.nudge', { hasText: 'Черновики: 1' })).toBeVisible();
-  // удалить
+  await expect(page.locator('[data-err="reward"]')).toHaveText('Оплата — от 100 ₽');
+  await expect(page.locator('[data-err="title"]')).toBeHidden();
+  await expect(page.locator('[data-left]')).toContainText('и ещё');
+  expect((await (await page.request.get('/api/me/tasks')).json()).tasks[0].status).toBe('draft');
+  // удалить из «Мои»
   await page.goto('/app/tasks');
   await page.locator('.it', { hasText: 'Черновик про кофе' }).getByRole('button', { name: 'Удалить' }).click();
   await page.getByRole('dialog', { name: 'Удалить задание?' }).getByRole('button', { name: 'Удалить' }).click();
@@ -164,78 +259,78 @@ test('черновик: сохраняется сам, открывается и
   expect(errors).toEqual([]);
 });
 
-test('анкета автора: своя тема, площадки, работы → «На проверке»', async ({ page }, info) => {
+// Баг 09: анкета автора не отправлялась — текст «О себе» без Enter не считался, «О себе» было обязательным,
+// площадки из профиля приходили без подписчиков без подсказки, кнопка была недоступна без объяснения.
+test('анкета автора: из профиля, текст без Enter, без блоков → сразу опубликована, видна бизнесу', async ({ page, browser }, info) => {
   test.slow();
   const errors = jsErrors(page);
+  const city = `Самара ${tag()}`;
   await login(page, uniq(info.project.name, 'card'));
-  await page.locator('#mode-rail:visible, #mode-bar:visible').first().getByRole('radio', { name: 'Автор' }).click();
-  await expect(page.getByRole('heading', { level: 1, name: 'Задания', exact: true })).toBeVisible(); // лента перезагрузилась в режиме автора
+  const h = await csrf(page);
+  expect((await page.request.patch('/api/me/mode', { headers: h, data: { mode: 'creator' } })).status()).toBe(200);
+  // как у заказчика: профиль автора из первого входа — темы и каналы (ссылка и @ник)
+  expect((await page.request.put('/api/me/profile/creator', { headers: h, data: { name: 'Алина', city, spheres: ['food', 'beauty'], channels: ['https://t.me/alina', '@alina_ig'] } })).status()).toBe(200);
   await page.goto('/app/card');
-  await expect(page.getByRole('heading', { level: 1, name: 'Анкета' })).toBeVisible();
-  const submit = page.getByRole('button', { name: 'На проверку' });
-  await expect(submit).toHaveAttribute('aria-disabled', 'true');
-
-  await page.getByLabel('Имя').fill('Алина');
-  await page.getByLabel('Город').fill('Москва');
-  // темы: общая и своя (подсказки похожих, без дублей)
-  await page.locator('[data-cats] [data-slug]').first().click();
+  await expect(page.locator('.rail, .bn')).toHaveCount(0);
+  await expect(page.getByLabel('Имя')).toHaveValue('Алина');
+  await expect(page.locator('[data-cats] [aria-pressed="true"]')).toHaveCount(2);
+  const plats = page.locator('[data-platforms] .plat');
+  await expect(plats.first().getByLabel('Ссылка на площадку')).toHaveValue('t.me/alina');
+  // подписчиков нет — «Осталось: подписчики», «Опубликовать» ведёт к строке площадки
+  await expect(page.locator('[data-left]')).toContainText('подписчики');
+  const submit = page.getByRole('button', { name: 'Опубликовать' });
+  await submit.click();
+  await expect(page.locator('[data-err-plat]').first()).toHaveText('Укажите число подписчиков');
+  await expect(plats.first().getByLabel('Ссылка на площадку')).toBeFocused();
+  await plats.first().getByLabel('Подписчики').fill('12000');
+  await expect(page.locator('[data-err-plat]').first()).toBeHidden();
+  await expect(page.locator('[data-left]')).toBeHidden();
+  // своя тема (подсказки похожих)
   await page.getByRole('button', { name: 'Своя' }).click();
   const cb = page.getByRole('combobox', { name: 'Своя категория' });
-  await cb.fill('красот');
-  await expect(page.getByRole('option', { name: 'Красота' })).toBeVisible();
   await cb.fill('Настольные игры');
   await page.getByRole('option', { name: 'Добавить «Настольные игры»' }).click();
   await expect(page.locator('[data-cats] .chip.is-own[aria-pressed="true"]')).toContainText('Настольные игры');
-  await expect(page.locator('[data-cats] .chip.is-own')).toContainText('на проверке');
-
-  // площадки: ссылка + подписчики
-  const plats = page.locator('[data-platforms] .plat');
-  await plats.first().getByLabel('Ссылка на площадку').fill('youtube.com/@alina');
-  await plats.first().getByLabel('Подписчики').fill('12000');
-  await expect(plats.first().getByLabel('Подписчики')).toHaveValue('12 000');
-  await page.getByRole('button', { name: 'Площадка' }).click();
-  await plats.nth(1).getByLabel('Ссылка на площадку').fill('t.me/alina');
-  await plats.nth(1).getByLabel('Подписчики').fill('800');
-
-  // блоки: о себе, форматы и цены, примеры — ссылки
-  const blocks = page.locator('[data-blocks] .bk');
-  expect(await blocks.locator('.bk-title').evaluateAll((els) => els.map((e) => (e as HTMLInputElement).value))).toEqual(['О себе', 'Форматы и цены', 'Примеры работ']);
-  await blocks.nth(0).locator('.bi-add input').fill('Снимаю еду и городские места');
-  await page.keyboard.press('Enter');
-  await blocks.nth(1).locator('.bi-add input').fill('Reels — 5 000 ₽');
-  await page.keyboard.press('Enter');
-  await blocks.nth(2).locator('.bi-add input').fill('vk.com/clip-1');
-  await page.keyboard.press('Enter');
-
-  // аватар (кадр 1:1) и работы
+  // «О себе» — текст без Enter
+  await page.locator('[data-blocks] .bk').first().locator('.bi-in').first().fill('Снимаю еду и городские места');
+  // фото
   await page.locator('[data-cover] input[type=file]').setInputFiles(fixture('portrait.jpg'));
   await page.getByRole('dialog', { name: 'Кадрирование' }).getByRole('button', { name: 'Готово' }).click();
   await page.locator('[data-photos] input[type=file]').setInputFiles([fixture('photo.jpg')]);
   await expect(page.locator('[data-cover] .up-t[data-id], [data-photos] .up-t[data-id]')).toHaveCount(2, { timeout: 20_000 });
   await saved(page);
-
   const card = (await (await page.request.get('/api/me/card')).json()).card;
-  expect(card.status).toBe('draft');
-  expect(card.platforms.map((p: { kind: string }) => p.kind)).toEqual(['youtube', 'telegram']);
-  expect(card.platforms[0].followers).toBe(12000);
-  expect(card.topics).toHaveLength(2);
-  expect(card.blocks[2].items).toEqual(['https://vk.com/clip-1']);
-  expect(card.avatar.id).toHaveLength(22);
-  expect(card.works).toHaveLength(1);
-
-  await page.getByRole('tab', { name: 'Как увидят' }).click();
-  await expect(page.locator('[data-preview]')).toContainText(/12\s000 подписч\./);
-  await expect(page.locator('[data-preview]')).toContainText('Настольные игры');
-  await page.getByRole('tab', { name: 'Правка' }).click();
+  expect(card.platforms).toEqual([{ kind: 'telegram', url: 'https://t.me/alina', followers: 12000 }]);
+  expect(card.blocks[0].items).toEqual(['Снимаю еду и городские места']);
+  expect(card.topics).toHaveLength(3);
 
   await submit.click();
   await page.waitForURL('**/app/card?sent=1');
-  await expect(page.locator('[data-status-label]')).toHaveText('На проверке');
-  expect((await (await page.request.get('/api/me/card')).json()).card.status).toBe('pending_review');
-  // фото анкеты на проверке — только владельцу
-  const guest = await page.context().browser()!.newContext();
-  expect((await guest.request.get(new URL(card.works[0].src, page.url()).toString())).status()).toBe(404);
-  await guest.close();
+  await expect(page.locator('[data-status-label]')).toHaveText('Опубликовано');
+  expect((await (await page.request.get('/api/me/card')).json()).card.status).toBe('published');
+
+  // бизнес видит анкету в ленте; наведение — главное; нажатие — анкета целиком
+  const biz = await otherUser(browser, info, 'card-viewer', 'business');
+  await biz.goto(`/app?city=${encodeURIComponent(city)}`);
+  await expect(biz.getByRole('heading', { level: 1, name: 'Авторы' })).toBeVisible();
+  const tile = biz.locator(`[data-tile="${card.id}"]`);
+  await expect(tile.locator('.tile-t')).toHaveText('Алина');
+  await expectTileSummary(biz, tile, /12\s000/, info);
+  await tile.locator('a').click();
+  await biz.waitForURL(`**/app/creator/${card.id}`);
+  await expect(biz.getByRole('heading', { level: 1, name: 'Алина' })).toBeVisible();
+  await expect(biz.locator('.pv-tags')).toContainText('Настольные игры');
+  await expect(biz.locator('.rows')).toContainText(/12\s000 подписч\./);
+  await biz.getByRole('button', { name: 'Предложить задание' }).click();
+  await expect(biz.locator('[data-toast]')).toContainText('Предложения появятся');
+  // фото опубликованной анкеты — всем
+  expect((await biz.request.get(card.works[0].src)).status()).toBe(200);
+  await biz.context().close();
+
+  // снять и изменить
+  await page.getByRole('button', { name: 'Снять и изменить' }).click();
+  await page.getByRole('dialog', { name: 'Снять с публикации?' }).getByRole('button', { name: 'Снять' }).click();
+  await expect(page.getByLabel('Имя')).toHaveValue('Алина');
   expect(errors).toEqual([]);
 });
 

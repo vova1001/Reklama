@@ -76,8 +76,9 @@ type Config struct {
 	RedisURL     string        // REDIS_URL — общие лимиты для нескольких серверов; пусто — лимиты в памяти процесса
 	MailWorkers  int           // MAIL_WORKERS, 2
 
-	TasksMax      int // TASKS_MAX_PER_USER — заданий на пользователя, 50
-	SubmitsPerDay int // MODERATION_SUBMITS_PER_DAY — отправок на проверку в сутки, 10
+	TasksMax      int    // TASKS_MAX_PER_USER — заданий на пользователя, 50
+	SubmitsPerDay int    // MODERATION_SUBMITS_PER_DAY — отправок на проверку в сутки, 10
+	Moderation    string // MODERATION_MODE: auto (сразу публикуется) | manual (ждёт модератора), auto
 
 	MediaStore      string  // MEDIA_STORE: postgres | s3 (postgres)
 	StorageEndpoint string  // STORAGE_ENDPOINT — https://… (R2, Яндекс Object Storage, MinIO)
@@ -305,6 +306,14 @@ func load(get func(string) string) (Config, error) {
 	c.WebhookBurst = num("TELEGRAM_WEBHOOK_BURST", 200)
 	c.TasksMax = num("TASKS_MAX_PER_USER", 50)
 	c.SubmitsPerDay = num("MODERATION_SUBMITS_PER_DAY", 10)
+	c.Moderation = strings.ToLower(strings.TrimSpace(get("MODERATION_MODE")))
+	switch c.Moderation {
+	case "":
+		c.Moderation = "auto"
+	case "auto", "manual":
+	default:
+		errs = append(errs, errors.New("MODERATION_MODE: auto или manual"))
+	}
 	c.MediaMaxMB = num("MEDIA_MAX_MB", 10)
 	c.MediaQuotaMB = num("MEDIA_QUOTA_MB", 300)
 	c.MediaMaxFiles = num("MEDIA_MAX_FILES", 300)

@@ -68,11 +68,19 @@ func (f *fakeListings) Submit(_ context.Context, _ domain.User, id int64) (domai
 func (f *fakeListings) Withdraw(_ context.Context, _ domain.User, id int64) (domain.Task, error) {
 	return sampleTask(id, domain.StatusDraft), f.err
 }
-func (f *fakeListings) Feed(_ context.Context, after *domain.FeedCursor, limit int) (service.FeedPage, error) {
-	f.put("feed", after)
+func (f *fakeListings) Feed(_ context.Context, q service.FeedQuery) (service.FeedPage, error) {
+	f.put("feed", q.After)
+	f.put("filter", q.Filter)
 	t := sampleTask(9, domain.StatusPublished)
 	t.Brand, t.CategoryTitle = "Кофейня", "Еда и кафе"
 	return service.FeedPage{Tasks: []domain.Task{t}, Next: &domain.FeedCursor{PublishedAt: day, ID: 9}}, f.err
+}
+
+func (f *fakeListings) Public(_ context.Context, id int64) (domain.Task, error) {
+	if id == 404 {
+		return domain.Task{}, domain.ErrNotFound
+	}
+	return sampleTask(id, domain.StatusPublished), f.err
 }
 
 // карточка — отдельный тип (у сервисов одинаковые имена методов)
@@ -90,6 +98,18 @@ func (c fakeCards) Submit(context.Context, domain.User) (domain.CreatorCard, err
 }
 func (c fakeCards) Withdraw(context.Context, domain.User) (domain.CreatorCard, error) {
 	return domain.CreatorCard{Status: domain.StatusDraft}, c.f.err
+}
+
+func (c fakeCards) Feed(_ context.Context, q service.FeedQuery) (service.CardPage, error) {
+	c.f.put("cardFilter", q.Filter)
+	card := domain.CreatorCard{UserID: 8, Status: domain.StatusPublished, Name: "Алина", Topics: []string{"food"}, TopicTitles: []string{"Еда"}, PublishedAt: &day}
+	return service.CardPage{Cards: []domain.CreatorCard{card}, Next: &domain.FeedCursor{PublishedAt: day, ID: 8}}, c.f.err
+}
+func (c fakeCards) Public(_ context.Context, id int64) (domain.CreatorCard, error) {
+	if id == 404 {
+		return domain.CreatorCard{}, domain.ErrNotFound
+	}
+	return domain.CreatorCard{UserID: id, Status: domain.StatusPublished, Name: "Алина"}, c.f.err
 }
 
 type fakeCats struct{ f *fakeListings }
@@ -258,6 +278,55 @@ func TestFeedEndpoint(t *testing.T) {
 		if rec := serve(s, httptest.NewRequest(http.MethodGet, "/api/tasks?cursor="+bad, nil)); rec.Code != 400 {
 			t.Errorf("%s: %d", bad, rec.Code)
 		}
+	}
+	// отбор — в сервис как есть (проверяет сервис), огромный параметр обрезается
+	serve(s, httptest.NewRequest(http.MethodGet, "/api/tasks?category=food&city=%D0%9A%D0%B0%D0%B7%D0%B0%D0%BD%D1%8C&format=reels&city2="+strings.Repeat("x", 300), nil))
+	if f := f.last["filter"].(domain.FeedFilter); f.Category != "food" || f.City != "Казань" || f.Format != "reels" {
+		t.Errorf("отбор: %+v", f)
+	}
+	serve(s, httptest.NewRequest(http.MethodGet, "/api/tasks?city="+strings.Repeat("x", 300), nil))
+	if f := f.last["filter"].(domain.FeedFilter); len(f.City) != 200 {
+		t.Errorf("обрезка: %d", len(f.City))
+	}
+	// страница задания: опубликованное — всем, иначе 404
+	if rec := serve(s, httptest.NewRequest(http.MethodGet, "/api/tasks/9", nil)); rec.Code != 200 || !strings.Contains(rec.Body.String(), `"status":"published"`) {
+		t.Errorf("задание: %d %s", rec.Code, rec.Body.String())
+	}
+	if rec := serve(s, httptest.NewRequest(http.MethodGet, "/api/tasks/404", nil)); rec.Code != 404 {
+		t.Errorf("нет задания: %d", rec.Code)
+	}
+}
+
+func TestCardFeedEndpoints(t *testing.T) {
+	f := &fakeListings{}
+	s := listSrv(f, Options{})
+	// только после входа
+	if rec := serve(s, httptest.NewRequest(http.MethodGet, "/api/cards", nil)); rec.Code != 401 {
+		t.Errorf("без входа: %d", rec.Code)
+	}
+	rec := serve(s, meReq(http.MethodGet, "/api/cards?topic=food&city=Москва&cursor=", ""))
+	var out cardFeedOut
+	_ = json.Unmarshal(rec.Body.Bytes(), &out)
+	if rec.Code != 200 || len(out.Cards) != 1 || out.Cards[0].ID != 8 || out.Cards[0].TopicTitles[0] != "Еда" || out.Next == nil || out.Cards[0].PublishedAt == nil {
+		t.Fatalf("%d %s", rec.Code, rec.Body.String())
+	}
+	if q := f.last["cardFilter"].(domain.FeedFilter); q.Category != "food" || q.City != "Москва" {
+		t.Errorf("отбор: %+v", q)
+	}
+	if rec := serve(s, meReq(http.MethodGet, "/api/cards?cursor=!!", "")); rec.Code != 400 {
+		t.Errorf("курсор: %d", rec.Code)
+	}
+	if rec := serve(s, meReq(http.MethodGet, "/api/cards/8", "")); rec.Code != 200 || !strings.Contains(rec.Body.String(), `"id":8`) {
+		t.Errorf("анкета: %d %s", rec.Code, rec.Body.String())
+	}
+	for _, p := range []string{"/api/cards/404", "/api/cards/x"} {
+		if rec := serve(s, meReq(http.MethodGet, p, "")); rec.Code != 404 {
+			t.Errorf("%s: %d", p, rec.Code)
+		}
+	}
+	f.err = &service.ValidationError{Fields: map[string]string{"format": "Выберите формат из списка"}}
+	if rec := serve(s, meReq(http.MethodGet, "/api/cards?format=reels", "")); rec.Code != 400 {
+		t.Errorf("ошибка отбора: %d", rec.Code)
 	}
 }
 

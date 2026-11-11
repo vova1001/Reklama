@@ -116,6 +116,7 @@ type ModerationLog struct {
 	Reason     string
 	ActorID    pgtype.Int8
 	CreatedAt  pgtype.Timestamptz
+	Auto       bool
 }
 
 type Plan struct {

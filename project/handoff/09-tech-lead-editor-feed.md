@@ -14,3 +14,59 @@
    - **По нажатию** — страница задания/анкеты: полностью расписанный кейс (обложка, фото, все блоки, кнопка «Откликнуться»/«Предложить задание» — пока заглушка без сделок).
    - Пагинация (курсор), сортировка «новые», фильтр по сфере/городу/формату — компактно сверху.
 - Go три слоя, интерфейсы, тесты (-race), e2e (бот анкеты исправлен, публикация автоматическая, лента видна другому пользователю, наведение/переход). Скриншоты не нужны. Коммит, не пушить. Отчёт коротко + дерево по слоям.
+
+## Отчёт (техлид)
+- **Баг анкеты** (воспроизведён локально в Playwright: вход по почте на живом сайте без кода из письма недоступен):
+  пункт блока появлялся только по Enter — текст «О себе» без Enter не считался, а «О себе или примеры» было
+  обязательным; площадки из профиля приходили без подписчиков; кнопка была недоступна, причина — только по наведению.
+  Исправлено: пункты — сразу поля, блоки анкеты не обязательны, «Опубликовать» нажимается всегда и ведёт к полю;
+  темы из профиля вне списка не подставляются. Тесты: сервис (анкета без блоков) и e2e «как у заказчика».
+- **Сделано:** ошибки у поля после ухода с него, «Опубликовать» → прокрутка и подсветка первого, «Осталось: …»
+  (слова ведут к полям), тексты ошибок = серверные; `MODERATION_MODE=auto|manual` (auto — сразу «Опубликовано»,
+  в журнале «одобрено автоматически», атомарно); редактор на весь экран; блоки: заголовок в строке, Enter / Backspace /
+  вставка строк / Alt+↑↓ / перетаскивание, шаблоны; лента у всех: авторам — задания, бизнесу — анкеты, сетка
+  карточек 4:3, «полотно» при наведении (телефон — строка под фото), страница задания / автора, отбор, курсор.
+- **Проверено:** `make test` (-race, PostgreSQL) — зелёные, покрытие 91,2%; gofmt, go vet; `astro check` — 0 ошибок;
+  e2e (1440 / 768 / 375) — 103 пройдено, 2 пропущены по замыслу.
+
+### Изменения по слоям
+```
+backend/
+  migrations/00007_auto_moderation_feed.sql  нов.  moderation_log.auto; индекс ленты анкет (published_at, user_id)
+  queries/listing.sql   изм.  отбор ленты (сфера, город, формат), GetPublishedTask, ListPublishedCards, GetPublishedCard;
+                              reject_reason — только при отказе → store/ (sqlc)
+  domain/listing.go     изм.  Actor — маска (+ActorSystem), published → draft владельцем, ModerationMode, SubmitChain,
+                              StatusChange.Auto, FeedFilter, CreatorCard.TopicTitles
+  repository/listing.go изм.  SetTaskStatus/SetCardStatus(ctx, chain...) — одной транзакцией; PublishedTasks(фильтр),
+                              PublishedTask, PublishedCards, PublishedCard
+  service/
+    tasks.go            изм.  ListingDeps.Mode; Submit по SubmitChain; Feed(FeedQuery), Public; проверка отбора
+    cards.go            изм.  то же для анкет; Feed, Public; полнота — имя, город, темы, площадки с подписчиками
+    listing_check.go    изм.  blocksFilled (заголовок блока не обязателен)
+    moderation.go       изм.  интерфейс репозитория — цепочки
+    listing_auto_test.go нов. автопроверка, журнал, атомарность, отбор и курсор, анкета без блоков
+  transport/http/       изм.  GET /api/tasks?category&city&format, GET /api/tasks/{id}, GET /api/cards, GET /api/cards/{id};
+                              cardDTO: id, topicTitles, publishedAt
+  config, cmd/server    изм.  MODERATION_MODE (auto | manual, по умолчанию auto)
+  api/openapi.yaml      0.6.0
+frontend/src/
+  layouts/Editor.astro нов.; App.astro изм. (wide="grid", Overlays)
+  components/app/ EditorBar, Overlays, TaskTile, CreatorTile, FeedFilters, TaskPage, CreatorPage нов.;
+                  TaskForm, CardForm, TaskBody, TaskItem изм.
+  pages/app/ index (лента карточками), more (догрузка), task/[id], creator/[id] нов./изм.;
+             tasks/new, tasks/[id], card — редактор на весь экран, «Снять и изменить»
+  scripts/ editor.ts (проверка у полей, «Осталось», переход к полю), editor/blocks.ts (заново), feed.ts нов.
+  content/app.ts (шаблоны блоков, тексты ошибок как у сервера), lib/auth.ts, styles/app.css
+  tests/e2e/ listings.spec.ts (заново), app.spec.ts, auth.spec.ts изм.
+окружение: render.yaml, .env.example, docker-compose*.yml (MODERATION_MODE); README, project/architecture.md,
+  project/design/tokens.md
+```
+
+### Вопросы к заказчику
+1. Свои темы и сферы (созданные пользователем) пока остаются «на проверке» и в автоматическом режиме — их тоже
+   одобрять автоматически (тогда они сразу попадут в общий список и на главную)?
+2. «Откликнуться» и «Предложить задание» — сейчас сообщение «появится в ближайшем обновлении». Подходит до сделок?
+
+### Сверх задачи (на одобрение)
+1. «Снять и изменить» у опубликованного задания и анкеты (без этого в автоматическом режиме опечатку не исправить).
+2. Лента анкет и страница автора — только после входа (там ссылки и подписчики авторов).

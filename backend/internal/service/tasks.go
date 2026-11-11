@@ -22,9 +22,13 @@ type TaskRepository interface {
 	// UpdateTask / DeleteTask — только черновик или отклонённое, иначе domain.ErrConflict.
 	UpdateTask(ctx context.Context, t domain.Task) (domain.Task, error)
 	DeleteTask(ctx context.Context, ownerID, id int64) error
-	// SetTaskStatus — смена статуса из ch.From (иначе domain.ErrConflict) и запись в журнал — атомарно.
-	SetTaskStatus(ctx context.Context, ch domain.StatusChange) (domain.Task, error)
-	PublishedTasks(ctx context.Context, after *domain.FeedCursor, limit int) ([]domain.Task, error)
+	// SetTaskStatus — смены статуса по цепочке (каждая — из ch.From, иначе domain.ErrConflict и ничего не меняется)
+	// и записи в журнал — атомарно.
+	SetTaskStatus(ctx context.Context, chain ...domain.StatusChange) (domain.Task, error)
+	// PublishedTasks — опубликованные по отбору, новые сверху, после курсора (nil — с начала).
+	PublishedTasks(ctx context.Context, f domain.FeedFilter, after *domain.FeedCursor, limit int) ([]domain.Task, error)
+	// PublishedTask — опубликованное задание; нет или не опубликовано — domain.ErrNotFound.
+	PublishedTask(ctx context.Context, id int64) (domain.Task, error)
 }
 
 // SubmitCounter — сколько раз пользователь отправлял на проверку с момента since и когда впервые.
@@ -87,11 +91,17 @@ type ListingDeps struct {
 	Media      MediaLookup
 	Clock      Clock // nil — системное время
 	Limits     ListingLimits
+	// Mode — проверка отправленного: auto — сразу публикуется (журнал: «одобрено автоматически»),
+	// manual (и пусто) — ждёт модератора.
+	Mode domain.ModerationMode
 }
 
 func (d *ListingDeps) defaults() {
 	if d.Clock == nil {
 		d.Clock = SystemClock{}
+	}
+	if d.Mode != domain.ModerationAuto {
+		d.Mode = domain.ModerationManual
 	}
 	d.Limits.defaults()
 }
@@ -174,6 +184,7 @@ func (s *Tasks) Delete(ctx context.Context, u domain.User, id int64) error {
 }
 
 // Submit — отправить на проверку: задание заполнено полностью, лимит отправок за сутки не исчерпан.
+// В автоматическом режиме задание публикуется сразу (в той же транзакции).
 func (s *Tasks) Submit(ctx context.Context, u domain.User, id int64) (domain.Task, error) {
 	cur, err := s.repo.OwnTask(ctx, u.ID, id)
 	if err != nil {
@@ -188,11 +199,11 @@ func (s *Tasks) Submit(ctx context.Context, u domain.User, id int64) (domain.Tas
 	if err := checkSubmitQuota(ctx, s.Submits, s.Clock, u.ID, s.Limits.SubmitsPerDay); err != nil {
 		return domain.Task{}, err
 	}
-	out, err := s.repo.SetTaskStatus(ctx, domain.StatusChange{SubjectID: id, From: cur.Status, To: domain.StatusPending, ActorID: u.ID})
+	out, err := s.repo.SetTaskStatus(ctx, domain.SubmitChain(s.Mode, domain.SubjectTask, id, cur.Status, u.ID)...)
 	return out, conflictToStatus(err)
 }
 
-// Withdraw — вернуть с проверки в черновик (чтобы поправить).
+// Withdraw — вернуть в черновик (чтобы поправить): с проверки или снять с публикации.
 func (s *Tasks) Withdraw(ctx context.Context, u domain.User, id int64) (domain.Task, error) {
 	cur, err := s.repo.OwnTask(ctx, u.ID, id)
 	if err != nil {
@@ -201,34 +212,69 @@ func (s *Tasks) Withdraw(ctx context.Context, u domain.User, id int64) (domain.T
 	if !domain.CanTransition(cur.Status, domain.StatusDraft, domain.ActorOwner) {
 		return domain.Task{}, ErrWrongStatus
 	}
-	out, err := s.repo.SetTaskStatus(ctx, domain.StatusChange{SubjectID: id, From: cur.Status, To: domain.StatusDraft, ActorID: u.ID})
+	out, err := s.repo.SetTaskStatus(ctx, domain.StatusChange{Subject: domain.SubjectTask, SubjectID: id, From: cur.Status, To: domain.StatusDraft, ActorID: u.ID})
 	return out, conflictToStatus(err)
 }
 
-// FeedPage — страница ленты и курсор следующей (nil — дальше нет).
+// FeedQuery — запрос страницы ленты: отбор, курсор (nil — с начала), размер (1–50, иначе 20).
+type FeedQuery struct {
+	Filter domain.FeedFilter
+	After  *domain.FeedCursor
+	Limit  int
+}
+
+// FeedPage — страница ленты заданий и курсор следующей (nil — дальше нет).
 type FeedPage struct {
 	Tasks []domain.Task
 	Next  *domain.FeedCursor
 }
 
-// Feed — опубликованные задания, новые сверху (limit 1–50).
-func (s *Tasks) Feed(ctx context.Context, after *domain.FeedCursor, limit int) (FeedPage, error) {
-	if limit <= 0 || limit > 50 {
-		limit = 20
+// Feed — опубликованные задания по отбору, новые сверху.
+func (s *Tasks) Feed(ctx context.Context, q FeedQuery) (FeedPage, error) {
+	f, limit, err := feedFilter(q, true)
+	if err != nil {
+		return FeedPage{}, err
 	}
-	ts, err := s.repo.PublishedTasks(ctx, after, limit+1)
+	ts, err := s.repo.PublishedTasks(ctx, f, q.After, limit+1)
 	if err != nil {
 		return FeedPage{}, err
 	}
 	page := FeedPage{Tasks: ts}
 	if len(ts) > limit {
 		page.Tasks = ts[:limit]
-		last := page.Tasks[limit-1]
-		if last.PublishedAt != nil {
-			page.Next = &domain.FeedCursor{PublishedAt: *last.PublishedAt, ID: last.ID}
-		}
+		page.Next = cursorOf(page.Tasks[limit-1].PublishedAt, page.Tasks[limit-1].ID)
 	}
 	return page, nil
+}
+
+// Public — опубликованное задание (страница задания для всех); иначе domain.ErrNotFound.
+func (s *Tasks) Public(ctx context.Context, id int64) (domain.Task, error) {
+	return s.repo.PublishedTask(ctx, id)
+}
+
+// feedFilter — проверка отбора ленты: сфера — slug, город — до 80 символов, формат — из списка (только задания).
+func feedFilter(q FeedQuery, tasks bool) (domain.FeedFilter, int, error) {
+	f := domain.FeedFilter{Category: squash(q.Filter.Category), City: squash(q.Filter.City), Format: squash(q.Filter.Format)}
+	ve := &ValidationError{}
+	if f.Category != "" && !reSlug.MatchString(f.Category) {
+		ve.add("category", "Выберите сферу из списка")
+	}
+	maxLen(ve, "city", f.City, 80, "Город — до 80 символов")
+	if f.Format != "" && (!tasks || !contains(Formats, f.Format)) {
+		ve.add("format", "Выберите формат из списка")
+	}
+	limit := q.Limit
+	if limit <= 0 || limit > 50 {
+		limit = 20
+	}
+	return f, limit, ve.orNil()
+}
+
+func cursorOf(at *time.Time, id int64) *domain.FeedCursor {
+	if at == nil {
+		return nil
+	}
+	return &domain.FeedCursor{PublishedAt: *at, ID: id}
 }
 
 // shape — проверка формы (любое сохранение): длины, перечни, числа, дата, блоки; сфера — общая или своя;
@@ -315,7 +361,9 @@ func (s *Tasks) complete(t domain.Task) error {
 	case !t.PublishBy.After(day) || t.PublishBy.After(day.AddDate(0, 0, maxDeadlineDay)):
 		ve.add("publishBy", "Срок — от завтра до полугода")
 	}
-	blocksComplete(ve, t.Blocks, "Опишите задание: добавьте описание или требования")
+	if !blocksFilled(t.Blocks) {
+		ve.add("blocks", "Опишите задание: добавьте описание или требования")
+	}
 	return ve.orNil()
 }
 

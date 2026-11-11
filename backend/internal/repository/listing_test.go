@@ -129,13 +129,67 @@ func TestListingsTasks(t *testing.T) {
 
 	// лента: название бизнеса и сферы, курсор
 	_, _ = repository.NewProfiles(pool).SaveBusinessProfile(ctx, u.ID, domain.BusinessProfile{Name: "Кофейня", City: "Казань", Spheres: []string{"food"}})
-	feed, err := r.PublishedTasks(ctx, nil, 10)
+	feed, err := r.PublishedTasks(ctx, domain.FeedFilter{}, nil, 10)
 	if err != nil || len(feed) != 1 || feed[0].Brand != "Кофейня" || feed[0].CategoryTitle != "Еда и кафе" {
 		t.Fatalf("%v %+v", err, feed)
 	}
-	next, _ := r.PublishedTasks(ctx, &domain.FeedCursor{PublishedAt: *feed[0].PublishedAt, ID: feed[0].ID}, 10)
+	next, _ := r.PublishedTasks(ctx, domain.FeedFilter{}, &domain.FeedCursor{PublishedAt: *feed[0].PublishedAt, ID: feed[0].ID}, 10)
 	if len(next) != 0 {
 		t.Errorf("после курсора: %+v", next)
+	}
+	// отбор: город без регистра, сфера, формат
+	for f, want := range map[domain.FeedFilter]int{
+		{City: "казань"}: 1, {City: "Москва"}: 0, {Category: "food", Format: "reels"}: 1, {Category: "beauty"}: 0, {Format: "tiktok"}: 0,
+	} {
+		if got, err := r.PublishedTasks(ctx, f, nil, 10); err != nil || len(got) != want {
+			t.Errorf("отбор %+v: %v %d", f, err, len(got))
+		}
+	}
+	if one, err := r.PublishedTask(ctx, tk.ID); err != nil || one.Brand != "Кофейня" || one.CategoryTitle != "Еда и кафе" {
+		t.Errorf("страница задания: %v %+v", err, one)
+	}
+	if _, err := r.PublishedTask(ctx, empty.ID); !errors.Is(err, domain.ErrNotFound) {
+		t.Errorf("черновик не опубликован: %v", err)
+	}
+
+	// автоматическая проверка: цепочка «→ на проверке → опубликовано» одной транзакцией; «Вся Россия» — любому городу
+	auto, _ := r.CreateTask(ctx, domain.Task{OwnerID: u.ID, Title: "Вся страна", Nationwide: true, Access: "open", Formats: []string{"tiktok"}})
+	chain := domain.SubmitChain(domain.ModerationAuto, domain.SubjectTask, auto.ID, domain.StatusDraft, u.ID)
+	ap, err := r.SetTaskStatus(ctx, chain...)
+	if err != nil || ap.Status != domain.StatusPublished || ap.SubmittedAt == nil || ap.PublishedAt == nil || ap.RejectReason != "" {
+		t.Fatalf("авто: %v %+v", err, ap)
+	}
+	ah, _ := r.History(ctx, domain.SubjectTask, auto.ID)
+	if len(ah) != 2 || ah[0].Auto || ah[0].ActorID != u.ID || !ah[1].Auto || ah[1].ActorID != 0 || ah[1].Reason != domain.AutoApproveNote {
+		t.Errorf("журнал авто: %+v", ah)
+	}
+	if n, _, _ := r.SubmitStats(ctx, u.ID, time.Now().Add(-time.Hour)); n != 3 {
+		t.Errorf("отправки считаются и в авто: %d", n)
+	}
+	if got, _ := r.PublishedTasks(ctx, domain.FeedFilter{City: "Тверь"}, nil, 10); len(got) != 1 || got[0].ID != auto.ID {
+		t.Errorf("«Вся Россия»: %+v", got)
+	}
+	// цепочка с неверным вторым шагом откатывается целиком
+	again, _ := r.CreateTask(ctx, domain.Task{OwnerID: u.ID, Access: "open"})
+	bad := []domain.StatusChange{
+		{SubjectID: again.ID, From: domain.StatusDraft, To: domain.StatusPending, ActorID: u.ID},
+		{SubjectID: again.ID, From: domain.StatusRejected, To: domain.StatusPublished, Auto: true},
+	}
+	if _, err := r.SetTaskStatus(ctx, bad...); !errors.Is(err, domain.ErrConflict) {
+		t.Errorf("откат: %v", err)
+	}
+	if g, _ := r.OwnTask(ctx, u.ID, again.ID); g.Status != domain.StatusDraft {
+		t.Errorf("частично: %+v", g)
+	}
+	if h, _ := r.History(ctx, domain.SubjectTask, again.ID); len(h) != 0 {
+		t.Errorf("журнал после отката: %+v", h)
+	}
+	if _, err := r.SetTaskStatus(ctx); err == nil {
+		t.Error("пустая цепочка")
+	}
+	// снять с публикации
+	if d, err := r.SetTaskStatus(ctx, domain.StatusChange{SubjectID: auto.ID, From: domain.StatusPublished, To: domain.StatusDraft, ActorID: u.ID}); err != nil || d.Status != domain.StatusDraft {
+		t.Errorf("снять: %v", err)
 	}
 
 	// удаление черновика открепляет его фото
@@ -193,6 +247,41 @@ func TestListingsCards(t *testing.T) {
 	h, _ := r.History(ctx, domain.SubjectCard, u.ID)
 	if len(h) != 2 {
 		t.Errorf("журнал: %+v", h)
+	}
+
+	// лента анкет: названия тем по порядку, отбор, курсор (user_id)
+	u2 := newUser(t, auth, "c2@x.ru")
+	if _, err := r.SaveCard(ctx, domain.CreatorCard{UserID: u2.ID, Name: "Борис", City: "Казань", Topics: []string{"sport", "food"}}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := r.SetCardStatus(ctx, domain.SubmitChain(domain.ModerationAuto, domain.SubjectCard, u2.ID, domain.StatusDraft, u2.ID)...); err != nil {
+		t.Fatal(err)
+	}
+	cards, err := r.PublishedCards(ctx, domain.FeedFilter{}, nil, 10)
+	if err != nil || len(cards) != 2 || cards[0].UserID != u2.ID || len(cards[0].TopicTitles) != 2 || cards[0].TopicTitles[0] != "Спорт и фитнес" {
+		t.Fatalf("лента анкет: %v %+v", err, cards)
+	}
+	page2, _ := r.PublishedCards(ctx, domain.FeedFilter{}, &domain.FeedCursor{PublishedAt: *cards[0].PublishedAt, ID: cards[0].UserID}, 10)
+	if len(page2) != 1 || page2[0].UserID != u.ID {
+		t.Errorf("курсор: %+v", page2)
+	}
+	for f, want := range map[domain.FeedFilter]int{{Category: "food"}: 1, {Category: "beauty"}: 1, {City: "москва"}: 1, {City: "Тверь"}: 0} {
+		if got, _ := r.PublishedCards(ctx, f, nil, 10); len(got) != want {
+			t.Errorf("отбор %+v: %d", f, len(got))
+		}
+	}
+	if one, err := r.PublishedCard(ctx, u.ID); err != nil || one.Name != "Алина К" || one.TopicTitles[0] != "Красота и салоны" {
+		t.Errorf("страница анкеты: %v %+v", err, one)
+	}
+	// снять с публикации — из ленты пропадает
+	if _, err := r.SetCardStatus(ctx, domain.StatusChange{SubjectID: u2.ID, From: domain.StatusPublished, To: domain.StatusDraft, ActorID: u2.ID}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := r.PublishedCard(ctx, u2.ID); !errors.Is(err, domain.ErrNotFound) {
+		t.Errorf("снятая: %v", err)
+	}
+	if _, err := r.SetCardStatus(ctx); err == nil {
+		t.Error("пустая цепочка")
 	}
 }
 

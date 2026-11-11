@@ -23,7 +23,7 @@ test('без входа приложение недоступно; API режи�
 const modeSwitch = (page: Page) => page.locator('#mode-rail:visible, #mode-bar:visible').first();
 const accountBtn = (page: Page) => page.locator('[data-menu-btn]:visible').first();
 
-test('раскладка: служебное слева, справа одна колонка, правой колонки нет', async ({ page }, info) => {
+test('раскладка: служебное слева, справа содержимое, правой колонки нет', async ({ page }, info) => {
   const errors = jsErrors(page);
   await login(page, uniq(info.project.name, 'shell'));
   const w = page.viewportSize()!.width;
@@ -45,9 +45,11 @@ test('раскладка: служебное слева, справа одна �
     await expect(page.locator('.mbar')).toBeVisible();
     await expect(page.locator('.bn')).toBeVisible();
   }
-  // содержимое — одна колонка не шире 600
+  // лента — сетка карточек не шире 1040; остальные страницы — одна колонка не шире 600
   const content = await page.locator('main.col > section').boundingBox();
-  expect(content!.width).toBeLessThanOrEqual(601);
+  expect(content!.width).toBeLessThanOrEqual(1041);
+  await page.goto('/app/profile');
+  expect((await page.locator('main.col > *').first().boundingBox())!.width).toBeLessThanOrEqual(601);
   // правой колонки, виджетов прогресса, тарифа и «как это работает» нет
   await expect(page.locator('.app-side, [data-progress], .side-card')).toHaveCount(0);
   expect(await page.locator('main').textContent()).not.toMatch(/Как это работает|Тариф/);
@@ -59,8 +61,8 @@ test('режим: переключатель слева (или в шапке), 
   await login(page, uniq(info.project.name, 'mode'));
   const app = page.locator('[data-app]');
   await expect(app).toHaveAttribute('data-mode', 'business');
-  // бизнес: свои задания — пусто, «Создать задание», тонкая строка-напоминание
-  await expect(page.getByRole('heading', { level: 1, name: 'Ваши задания' })).toBeVisible();
+  // бизнес: лента авторов, «Создать задание», тонкая строка-напоминание
+  await expect(page.getByRole('heading', { level: 1, name: 'Авторы' })).toBeVisible();
   await expect(page.locator('[data-create-task]')).toHaveAttribute('href', '/app/tasks/new');
   await expect(page.locator('[data-nudge="business"]')).toBeVisible();
   await expect(page.locator('[data-nudge="business"]')).toContainText('Заполните профиль бизнеса');
@@ -86,7 +88,7 @@ test('режим: переключатель слева (или в шапке), 
   await modeSwitch(page).getByRole('radio', { name: 'Автор' }).focus();
   await page.keyboard.press('ArrowLeft');
   await expect.poll(async () => (await (await page.request.get('/api/me')).json()).user.mode).toBe('business');
-  await expect(page.getByRole('heading', { level: 1, name: 'Ваши задания' })).toBeVisible();
+  await expect(page.getByRole('heading', { level: 1, name: 'Авторы' })).toBeVisible();
   const nav2 = page.locator('.rail-nav:visible, .bn:visible').first();
   await expect(nav2.getByRole('link', { name: 'Создать' })).toBeVisible();
   await expect(nav2.getByRole('link', { name: 'Мои' })).toBeVisible();

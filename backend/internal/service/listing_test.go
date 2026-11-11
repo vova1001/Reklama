@@ -124,9 +124,6 @@ func TestTaskLifecycle(t *testing.T) {
 	if _, err := e.mod.Decide(ctx, Decision{Subject: domain.SubjectTask, ID: d.ID, ModeratorID: 1, Approve: true}); !errors.Is(err, ErrWrongStatus) {
 		t.Errorf("дважды: %v", err)
 	}
-	if _, err := e.tasks.Withdraw(ctx, biz, d.ID); !errors.Is(err, ErrWrongStatus) {
-		t.Errorf("опубликованное не отзывается: %v", err)
-	}
 	// журнал
 	h, _ := e.mod.History(ctx, domain.SubjectTask, d.ID)
 	var path []string
@@ -137,9 +134,19 @@ func TestTaskLifecycle(t *testing.T) {
 		t.Errorf("журнал: %v", path)
 	}
 	// лента
-	p, err := e.tasks.Feed(ctx, nil, 0)
+	p, err := e.tasks.Feed(ctx, FeedQuery{})
 	if err != nil || len(p.Tasks) != 1 || p.Next != nil {
 		t.Fatalf("%v %+v", err, p)
+	}
+	if pub, err := e.tasks.Public(ctx, d.ID); err != nil || pub.ID != d.ID {
+		t.Fatalf("страница задания: %v", err)
+	}
+	// снять с публикации, чтобы изменить: из ленты и со страницы пропадает
+	if got, err = e.tasks.Withdraw(ctx, biz, d.ID); err != nil || got.Status != domain.StatusDraft {
+		t.Fatalf("снять с публикации: %v %+v", err, got)
+	}
+	if _, err := e.tasks.Public(ctx, d.ID); !errors.Is(err, domain.ErrNotFound) {
+		t.Errorf("черновик не виден: %v", err)
 	}
 	// чужое — как нет
 	if _, err := e.tasks.Get(ctx, domain.User{ID: 99}, d.ID); !errors.Is(err, domain.ErrNotFound) {
@@ -345,10 +352,13 @@ func TestCardLifecycle(t *testing.T) {
 		t.Fatalf("черновик: %v %+v", err, c)
 	}
 	f := fields(t, func() error { _, err := e.cards.Submit(ctx, author); return err }())
-	for _, k := range []string{"name", "city", "topics", "platforms", "blocks"} {
+	for _, k := range []string{"name", "city", "topics", "platforms"} {
 		if f[k] == "" {
 			t.Errorf("нет ошибки %s: %v", k, f)
 		}
+	}
+	if f["blocks"] != "" || f["works"] != "" || f["avatar"] != "" {
+		t.Errorf("лишнее обязательное: %v", f)
 	}
 	c, err = e.cards.Save(ctx, author, fullCard())
 	if err != nil {
@@ -435,7 +445,11 @@ func TestModerationGuards(t *testing.T) {
 	if !domain.CanTransition(domain.StatusPending, domain.StatusPublished, domain.ActorModerator) ||
 		domain.CanTransition(domain.StatusPending, domain.StatusPublished, domain.ActorOwner) ||
 		domain.CanTransition(domain.StatusDraft, domain.StatusPublished, domain.ActorModerator) ||
-		domain.CanTransition(domain.StatusPublished, domain.StatusDraft, domain.ActorOwner) {
+		!domain.CanTransition(domain.StatusPublished, domain.StatusDraft, domain.ActorOwner) ||
+		!domain.CanTransition(domain.StatusPending, domain.StatusPublished, domain.ActorSystem) ||
+		domain.CanTransition(domain.StatusPending, domain.StatusRejected, domain.ActorSystem) ||
+		domain.CanTransition(domain.StatusDraft, domain.StatusPublished, domain.ActorSystem) ||
+		domain.CanTransition(domain.StatusPending, domain.StatusPublished, 0) {
 		t.Error("таблица переходов")
 	}
 }
