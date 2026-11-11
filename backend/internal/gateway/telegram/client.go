@@ -231,7 +231,7 @@ func (c *Client) GetUpdates(ctx context.Context, offset int64, timeoutSec int) (
 }
 
 // AllowedUpdates — какие обновления нужны боту.
-var AllowedUpdates = []string{"message", "callback_query", "my_chat_member"}
+var AllowedUpdates = []string{"message", "callback_query", "my_chat_member"} // my_chat_member — и личные чаты, и каналы/группы, куда добавили бота
 
 // InlineButton — кнопка под сообщением.
 type InlineButton struct {
@@ -270,4 +270,41 @@ func (c *Client) EditMessageText(ctx context.Context, chatID, messageID int64, t
 // AnswerCallbackQuery — ответ на нажатие кнопки (короткая подсказка).
 func (c *Client) AnswerCallbackQuery(ctx context.Context, id, text string) error {
 	return c.Call(ctx, "answerCallbackQuery", map[string]string{"callback_query_id": id, "text": text}, nil)
+}
+
+// ===== каналы и группы (подтверждение соцсетей) =====
+
+// Chat — канал или группа (getChat).
+type Chat struct {
+	ID       int64  `json:"id"`
+	Type     string `json:"type"` // channel | group | supergroup | private
+	Title    string `json:"title"`
+	Username string `json:"username"`
+}
+
+// ChatMember — участник чата (getChatAdministrators).
+type ChatMember struct {
+	Status string `json:"status"` // creator | administrator | …
+	User   User   `json:"user"`
+}
+
+// GetChat — сведения о чате.
+func (c *Client) GetChat(ctx context.Context, chatID int64) (Chat, error) {
+	var ch Chat
+	err := c.Call(ctx, "getChat", map[string]int64{"chat_id": chatID}, &ch)
+	return ch, err
+}
+
+// GetChatAdministrators — админы чата (бот должен быть в чате).
+func (c *Client) GetChatAdministrators(ctx context.Context, chatID int64) ([]ChatMember, error) {
+	var out []ChatMember
+	err := c.Call(ctx, "getChatAdministrators", map[string]int64{"chat_id": chatID}, &out)
+	return out, err
+}
+
+// GetChatMemberCount — подписчиков канала или участников группы.
+func (c *Client) GetChatMemberCount(ctx context.Context, chatID int64) (int64, error) {
+	var n int64
+	err := c.Call(ctx, "getChatMemberCount", map[string]int64{"chat_id": chatID}, &n)
+	return n, err
 }

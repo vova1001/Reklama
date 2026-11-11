@@ -350,7 +350,8 @@ func TestCardAndCategoryEndpoints(t *testing.T) {
 		t.Errorf("нет анкеты: %s", rec.Body.String())
 	}
 	rec := serve(s, meReq(http.MethodPut, "/api/me/card", `{"name":"Алина","city":"","topics":["food"],"platforms":[{"url":"t.me/a","followers":10}],"blocks":[],"avatar":"","works":[]}`))
-	if rec.Code != 200 || f.last["card"].(service.CardInput).Platforms[0].Followers != 10 {
+	// площадки из прежних форм игнорируются: подписчики — только подтверждённые (Social)
+	if rec.Code != 200 || f.last["card"].(service.CardInput).Name != "Алина" {
 		t.Fatalf("%d %s", rec.Code, rec.Body.String())
 	}
 	for _, p := range []string{"/api/me/card/submit", "/api/me/card/withdraw"} {

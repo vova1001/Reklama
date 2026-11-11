@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: Охват API
-  version: 0.8.0
+  version: 0.9.0
   description: |
     API площадки «Охват»: данные главной, регистрация и вход (почта с кодом, Telegram, Google), приложение после входа:
     один аккаунт — два режима («Бизнес» и «Автор»), профили режимов заполняются, когда понадобятся.
@@ -19,7 +19,7 @@ info:
 
     Задания бизнеса и анкеты авторов проходят модерацию: `draft` → `pending_review` → `published` | `rejected`
     (с причиной). Черновик сохраняется неполным; полноту сервер проверяет при отправке на проверку
-    (ошибки — в `fields`, у блоков и площадок — `blocks.<n>`, `platforms.<n>`). Отправок на проверку — до
+    (ошибки — в `fields`, у блоков — `blocks.<n>`). Отправок на проверку — до
     `MODERATION_SUBMITS_PER_DAY` в сутки (429 `rate_limited`), заданий — до `TASKS_MAX_PER_USER` (409 `tasks_limit`).
     Решение модератора — сервисный метод (админки пока нет); каждая смена статуса пишется в журнал.
     `MODERATION_MODE=auto` (по умолчанию) — отправленное сразу публикуется: в журнале «на проверке» от владельца и
@@ -923,6 +923,111 @@ paths:
         "400": { $ref: "#/components/responses/BadRequest" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
+  /api/me/social:
+    get:
+      summary: Соцсети автора — площадки, статусы, подтверждённые аккаунты
+      description: |
+        Цифры (подписчики, просмотры, видео) — только из официальных API площадок, не со слов автора; в анкете
+        показываются только подтверждённые (`verified`). `available: false` — площадка ещё не подключена («Скоро»):
+        сейчас работают Telegram (бот-админ канала или группы) и YouTube (Google OAuth, `youtube.readonly`).
+        Цифры обновляются сами раз в `SOCIAL_REFRESH_HOURS` (±2 ч).
+      operationId: getSocial
+      tags: [social]
+      security: [{ session: [] }]
+      responses:
+        "200":
+          description: Площадки по порядку показа
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SocialOverview" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+  /api/me/social/{platform}/start:
+    post:
+      summary: Подключить площадку
+      description: |
+        OAuth (YouTube): адрес страницы разрешения площадки; state (одноразовый, 10 мин, с PKCE) — в httpOnly-cookie
+        `ohvat_social` на `/api/social`. Telegram: ссылка на бота `t.me/<бот>?start=ch_<токен>` (30 мин) — в боте
+        «Привязать», затем бота добавляют в канал или группу админом. Не больше `SOCIAL_STARTS_PER_HOUR` в час.
+      operationId: startSocial
+      tags: [social]
+      security: [{ session: [] }]
+      parameters:
+        - $ref: "#/components/parameters/CSRF"
+        - { name: platform, in: path, required: true, schema: { $ref: "#/components/schemas/SocialPlatform" } }
+      responses:
+        "200":
+          description: Куда перейти
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [url]
+                properties:
+                  url: { type: string }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "429": { $ref: "#/components/responses/TooMany" }
+        "503": { $ref: "#/components/responses/Unavailable" }
+  /api/social/{platform}/callback:
+    get:
+      summary: Возврат с площадки (OAuth)
+      description: |
+        Сверка state (cookie = адрес), сессия того же автора, обмен кода, аккаунты с цифрами; токены — только
+        зашифрованно (AES-256-GCM, `TOKEN_ENC_KEY`). Итог — переход на `/app/card?social=<площадка>&result=<итог>#social`:
+        `ok`, `denied` (отказ автора или не выдана область), `state`, `no_channel`, `too_many`, `limit`, `disabled`,
+        `unavailable`, `error`. Без входа — на `/login`.
+      operationId: socialCallback
+      tags: [social]
+      parameters:
+        - { name: platform, in: path, required: true, schema: { $ref: "#/components/schemas/SocialPlatform" } }
+        - { name: state, in: query, schema: { type: string } }
+        - { name: code, in: query, schema: { type: string } }
+        - { name: error, in: query, schema: { type: string } }
+      responses:
+        "303": { description: Переход в анкету с итогом }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /api/me/social/accounts/{id}/refresh:
+    post:
+      summary: Проверить аккаунт ещё раз сейчас
+      description: Не чаще раза в 10 минут у подтверждённого (429 `rate_limited`). Доступ потерян — `failed` с причиной.
+      operationId: refreshSocial
+      tags: [social]
+      security: [{ session: [] }]
+      parameters:
+        - $ref: "#/components/parameters/CSRF"
+        - { name: id, in: path, required: true, schema: { type: integer, format: int64 } }
+      responses:
+        "200":
+          description: Аккаунт после проверки
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [account]
+                properties:
+                  account: { $ref: "#/components/schemas/SocialAccount" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "429": { $ref: "#/components/responses/TooMany" }
+        "503": { $ref: "#/components/responses/Unavailable" }
+  /api/me/social/accounts/{id}:
+    delete:
+      summary: Отвязать аккаунт
+      description: Последний аккаунт доступа OAuth — токен отзывается у площадки и удаляется.
+      operationId: unlinkSocial
+      tags: [social]
+      security: [{ session: [] }]
+      parameters:
+        - $ref: "#/components/parameters/CSRF"
+        - { name: id, in: path, required: true, schema: { type: integer, format: int64 } }
+      responses:
+        "204": { description: Отвязан }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
   /media/{id}/{size}.webp:
     get:
       summary: Файл фото
@@ -1344,29 +1449,64 @@ components:
       properties:
         tasks: { type: array, items: { $ref: "#/components/schemas/Task" } }
         next: { type: string, nullable: true, description: Курсор следующей страницы }
-    PlatformInput:
-      type: object
-      required: [url, followers]
-      additionalProperties: false
-      properties:
-        url: { type: string, maxLength: 300, description: "https://… (http повышается)" }
-        followers: { type: integer, format: int64, minimum: 0, maximum: 1000000000 }
     Platform:
       type: object
-      required: [kind, url, followers]
+      description: Подтверждённая соцсеть в анкете — цифры только от площадки
+      required: [kind, type, handle, title, url, followers, followersHidden, verified, refreshedAt]
       properties:
-        kind: { type: string, enum: [telegram, youtube, vk, tiktok, instagram, dzen, rutube, other], description: По домену }
+        kind: { $ref: "#/components/schemas/SocialPlatform" }
+        type: { type: string, enum: [profile, channel, group], description: "Telegram: канал или группа" }
+        handle: { type: string }
+        title: { type: string }
+        url: { type: string, description: "https://… или пусто (закрытая группа)" }
+        followers: { type: integer, format: int64, description: Подписчики канала / участники группы }
+        followersHidden: { type: boolean, description: "Автор скрыл число (YouTube)" }
+        verified: { type: boolean }
+        refreshedAt: { type: string, format: date-time, nullable: true, description: Когда цифры обновлены }
+    SocialPlatform:
+      type: string
+      enum: [telegram, youtube, vk, tiktok, instagram, threads]
+    SocialAccount:
+      type: object
+      required: [id, kind, handle, title, url, status, followers, followersHidden, views, videos, likes, failReason, verifiedAt, refreshedAt]
+      properties:
+        id: { type: integer, format: int64 }
+        kind: { type: string, enum: [profile, channel, group] }
+        handle: { type: string }
+        title: { type: string }
         url: { type: string }
-        followers: { type: integer, format: int64 }
+        status: { type: string, enum: [unverified, pending, verified, failed] }
+        followers: { type: integer, format: int64, nullable: true }
+        followersHidden: { type: boolean }
+        views: { type: integer, format: int64, nullable: true }
+        videos: { type: integer, format: int64, nullable: true }
+        likes: { type: integer, format: int64, nullable: true }
+        failReason: { type: string, description: "Почему доступ потерян (failed)" }
+        verifiedAt: { type: string, format: date-time, nullable: true }
+        refreshedAt: { type: string, format: date-time, nullable: true }
+    SocialOverview:
+      type: object
+      required: [platforms]
+      properties:
+        platforms:
+          type: array
+          items:
+            type: object
+            required: [platform, available, method, status, accounts]
+            properties:
+              platform: { $ref: "#/components/schemas/SocialPlatform" }
+              available: { type: boolean, description: "false — «Скоро»" }
+              method: { type: string, enum: [bot, oauth] }
+              status: { type: string, enum: [unverified, pending, verified, failed] }
+              accounts: { type: array, items: { $ref: "#/components/schemas/SocialAccount" } }
     CardInput:
       type: object
-      required: [name, city, topics, platforms, blocks, avatar, works]
+      required: [name, city, topics, blocks, avatar, works]
       additionalProperties: false
       properties:
         name: { type: string, maxLength: 80 }
         city: { type: string, maxLength: 80 }
         topics: { type: array, maxItems: 5, items: { type: string }, description: "slug; своих — до 3" }
-        platforms: { type: array, maxItems: 6, items: { $ref: "#/components/schemas/PlatformInput" } }
         blocks: { type: array, maxItems: 8, items: { $ref: "#/components/schemas/Block" } }
         avatar: { type: string, description: "id фото card_avatar или \"\"" }
         works: { type: array, maxItems: 9, items: { type: string }, description: id фото card_work по порядку }

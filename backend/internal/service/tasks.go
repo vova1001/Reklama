@@ -92,7 +92,8 @@ type ListingDeps struct {
 	Categories CategoryChecker
 	Submits    SubmitCounter
 	Media      MediaLookup
-	Clock      Clock // nil — системное время
+	Platforms  PlatformSource // подтверждённые соцсети в анкетах; nil — без них
+	Clock      Clock          // nil — системное время
 	Limits     ListingLimits
 	// Mode — проверка отправленного: auto — сразу публикуется (журнал: «одобрено автоматически»),
 	// manual (и пусто) — ждёт модератора.

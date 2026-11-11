@@ -12,7 +12,7 @@ const { task: t, categories, brand } = Astro.props;
 const init = {
   kind: 'task', id: t?.id ?? null, status: t?.status ?? 'draft', blocks: t ? t.blocks : TASK_BLOCKS, templates: TASK_TEMPLATES,
   cover: t?.cover ? [t.cover] : [], photos: t?.photos ?? [], selected: t?.categories ?? [], formats: t?.formats ?? [],
-  categories, platforms: [], brand, uid: Astro.locals.me!.user.id, updatedAt: t?.updatedAt ?? null,
+  categories, brand, uid: Astro.locals.me!.user.id, updatedAt: t?.updatedAt ?? null,
 };
 const json = JSON.stringify(init).replace(/</g, '\\u003c');
 const due = t?.publishBy ? t.publishBy.split('-').reverse().join('.') : '';

@@ -9,7 +9,7 @@ interface Props { card: Card }
 const { card: c } = Astro.props;
 const photo = c.avatar ?? c.works[0] ?? null;
 const followers = c.platforms.reduce((s, p) => s + p.followers, 0);
-const where = [...new Set(c.platforms.map((p) => PLATFORM_TITLE[p.kind] ?? 'Сайт'))].slice(0, 3).join(', ');
+const where = [...new Set(c.platforms.map((p) => PLATFORM_TITLE[p.kind] ?? p.kind))].slice(0, 3).join(', ');
 const topics = (c.topicTitles ?? []).slice(0, 3).join(', ');
 const price = c.blocks.find((b) => b.kind === 'list' && b.items.length)?.items[0] ?? '';
 const brief = [followers ? `${num(followers)} подписч.` : '', where].filter(Boolean).join(' · ');
@@ -22,13 +22,13 @@ const brief = [followers ? `${num(followers)} подписч.` : '', where].filt
       ) : <span class="tile-none tile-init">{c.name.slice(0, 1).toUpperCase()}</span>}
       <ul class="tile-sheet" data-sheet>
         {followers > 0 && <li><Icon name="users" size={16} /><b>{num(followers)}</b>&nbsp;подписч.</li>}
-        {where && <li><Icon name="link" size={16} />{where}</li>}
+        {where && <li><Icon name="badge-check" size={16} />{where} · подтверждено</li>}
         {topics && <li><Icon name="tag" size={16} />{topics}</li>}
         {price && <li><Icon name="wallet" size={16} />{price}</li>}
       </ul>
     </div>
     <p class="tile-t">{c.name}</p>
     <p class="tile-m">{[c.city, c.topicTitles?.[0]].filter(Boolean).join(' · ')}</p>
-    {brief && <p class="tile-brief">{brief}</p>}
+    {brief && <p class="tile-brief">{brief}{c.platforms.length > 0 && <span class="tile-ok" aria-label="Подтверждено площадкой"><Icon name="badge-check" size={14} /></span>}</p>}
   </a>
 </li>

@@ -255,11 +255,10 @@ func TestListingsCards(t *testing.T) {
 	}
 	c, err := r.SaveCard(ctx, domain.CreatorCard{
 		UserID: u.ID, Name: "Алина", City: "Москва", Topics: []string{"beauty"},
-		Platforms: []domain.Platform{{Kind: "youtube", URL: "https://youtube.com/@a", Followers: 1200}},
-		Blocks:    []domain.Block{{Kind: domain.BlockText, Title: "О себе", Items: []string{"Привет"}}},
-		Avatar:    "avatar0000000000000000", Works: []string{"work100000000000000000"},
+		Blocks: []domain.Block{{Kind: domain.BlockText, Title: "О себе", Items: []string{"Привет"}}},
+		Avatar: "avatar0000000000000000", Works: []string{"work100000000000000000"},
 	})
-	if err != nil || c.Status != domain.StatusDraft || c.Platforms[0].Followers != 1200 || c.Avatar == "" || len(c.Works) != 1 {
+	if err != nil || c.Status != domain.StatusDraft || len(c.Platforms) != 0 || c.Avatar == "" || len(c.Works) != 1 {
 		t.Fatalf("%v %+v", err, c)
 	}
 	c.Name = "Алина К"

@@ -61,6 +61,11 @@ project/    бриф, ТЗ, макет, задачи (handoff/), architecture.md
 Redis (`REDIS_URL`; локально — сервис `redis` в docker-compose, на Render — Key Value `ohvat-kv`) — лимиты и черновики
 форм редактора; без него — память процесса и PostgreSQL. Проверка заданий и анкет — `MODERATION_MODE`: `auto` (по умолчанию, сразу публикуются) или `manual` (ждут модератора).
 
+Подтверждение соцсетей автора: Telegram работает с ботом (`TELEGRAM_*`) — автор добавляет бота в канал или группу;
+YouTube — ключи Google + `TOKEN_ENC_KEY` (токены площадок хранятся только зашифрованно, AES-256-GCM;
+`openssl rand -base64 32`; при переезде перенести тот же ключ) и redirect URI `${PUBLIC_URL}/api/social/youtube/callback`
+в Google Cloud. Остальные площадки — «Скоро». Цифры обновляются раз в `SOCIAL_REFRESH_HOURS` (24).
+
 Бесплатный Render усыпляет сервис через 15 минут без запросов: `KEEPALIVE_URL` (= `PUBLIC_URL`) включает самопинг —
 бэкенд раз в 10 минут запрашивает `KEEPALIVE_URL/healthz` через публичный адрес (в журнал — только ошибки); пусто —
 выключено. Workflow `.github/workflows/keepalive.yml` — запасной.

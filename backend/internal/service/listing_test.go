@@ -10,7 +10,21 @@ import (
 	"ohvat/backend/internal/domain"
 )
 
+// fakePlatforms — подтверждённые соцсети авторов (сервис Social в тестах).
+type fakePlatforms map[int64][]domain.Platform
+
+func (f fakePlatforms) CardPlatforms(_ context.Context, ids []int64) (map[int64][]domain.Platform, error) {
+	out := map[int64][]domain.Platform{}
+	for _, id := range ids {
+		if ps, ok := f[id]; ok {
+			out[id] = ps
+		}
+	}
+	return out, nil
+}
+
 type listingEnv struct {
+	plats fakePlatforms
 	clock *fakeClock
 	repo  *memListings
 	cats  *memCats
@@ -22,9 +36,9 @@ type listingEnv struct {
 
 func newListingEnv(lim ListingLimits) *listingEnv {
 	c := &fakeClock{t: time.Date(2026, 11, 10, 9, 0, 0, 0, time.UTC)}
-	e := &listingEnv{clock: c, repo: newMemListings(c), cats: newMemCats(), media: newMemMedia(c)}
+	e := &listingEnv{clock: c, repo: newMemListings(c), cats: newMemCats(), media: newMemMedia(c), plats: fakePlatforms{}}
 	e.repo.cats = e.cats
-	d := ListingDeps{Categories: e.cats, Submits: e.repo, Media: e.media, Clock: c, Limits: lim}
+	d := ListingDeps{Categories: e.cats, Submits: e.repo, Media: e.media, Clock: c, Limits: lim, Platforms: e.plats}
 	e.tasks, e.cards, e.mod = NewTasks(e.repo, d), NewCards(e.repo, d), NewModeration(e.repo)
 	return e
 }
@@ -333,7 +347,6 @@ var author = domain.User{ID: 8, ActiveMode: domain.ModeCreator}
 func fullCard() CardInput {
 	return CardInput{
 		Name: "Алина", City: "Москва", Topics: []string{"beauty", "food"},
-		Platforms: []PlatformInput{{URL: "youtube.com/@alina", Followers: 12000}, {URL: "https://t.me/alina", Followers: 800}, {}},
 		Blocks: []domain.Block{
 			{Kind: domain.BlockText, Title: "О себе", Items: []string{"Снимаю еду"}},
 			{Kind: domain.BlockList, Title: "Форматы и цены", Items: []string{"Reels — 5 000 ₽"}},
@@ -368,8 +381,16 @@ func TestCardLifecycle(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(c.Platforms) != 2 || c.Platforms[0].Kind != "youtube" || c.Platforms[0].URL != "https://youtube.com/@alina" || c.Platforms[1].Kind != "telegram" {
-		t.Fatalf("площадки: %+v", c.Platforms)
+	if len(c.Platforms) != 0 {
+		t.Fatalf("соцсетей ещё нет: %+v", c.Platforms)
+	}
+	// без подтверждённой соцсети — не отправить; цифры — только от площадки
+	if f := fields(t, func() error { _, err := e.cards.Submit(ctx, author); return err }()); f["platforms"] != "Подтвердите хотя бы одну соцсеть" {
+		t.Fatalf("без соцсети: %v", f)
+	}
+	e.plats[author.ID] = []domain.Platform{{Kind: "telegram", Type: domain.SocialChannel, Title: "Алина", Followers: 800, Verified: true}}
+	if got, err := e.cards.Get(ctx, author); err != nil || len(got.Platforms) != 1 || got.Platforms[0].Followers != 800 {
+		t.Fatalf("анкета с соцсетью: %v %+v", err, got)
 	}
 	if c, err = e.cards.Submit(ctx, author); err != nil || c.Status != domain.StatusPending {
 		t.Fatalf("%v %+v", err, c)
@@ -393,11 +414,8 @@ func TestCardShape(t *testing.T) {
 		mut   func(*CardInput)
 		field string
 	}{
-		"тем много":      {func(in *CardInput) { in.Topics = []string{"a", "b", "c", "d", "e", "f"} }, "topics"},
-		"тема чужая":     {func(in *CardInput) { in.Topics = []string{"cars"} }, "topics"},
-		"ссылка":         {func(in *CardInput) { in.Platforms = []PlatformInput{{URL: "ftp://x.ru", Followers: 1}} }, "platforms.0"},
-		"подписчики":     {func(in *CardInput) { in.Platforms = []PlatformInput{{URL: "t.me/a", Followers: -5}} }, "platforms.0"},
-		"площадок много": {func(in *CardInput) { in.Platforms = make([]PlatformInput, 7) }, "platforms"},
+		"тем много":  {func(in *CardInput) { in.Topics = []string{"a", "b", "c", "d", "e", "f"} }, "topics"},
+		"тема чужая": {func(in *CardInput) { in.Topics = []string{"cars"} }, "topics"},
 		"работ много": {func(in *CardInput) {
 			in.Works = strings.Split(strings.Repeat("a,", 10), ",")
 		}, "works"},
@@ -407,25 +425,6 @@ func TestCardShape(t *testing.T) {
 		c.mut(&in)
 		if f := fields(t, func() error { _, err := e.cards.Save(ctx, author, in); return err }()); f[c.field] == "" {
 			t.Errorf("%s: %v", name, f)
-		}
-	}
-	// подписчиков нет — к отправке нельзя
-	in := fullCard()
-	in.Platforms = []PlatformInput{{URL: "t.me/a"}}
-	_, _ = e.cards.Save(ctx, author, in)
-	if f := fields(t, func() error { _, err := e.cards.Submit(ctx, author); return err }()); f["platforms.0"] == "" {
-		t.Errorf("подписчики: %v", f)
-	}
-}
-
-func TestPlatformKind(t *testing.T) {
-	for in, want := range map[string]string{
-		"https://www.youtube.com/@a": "youtube", "https://m.youtube.com/x": "youtube", "https://youtu.be/x": "youtube",
-		"https://t.me/a": "telegram", "https://vk.com/a": "vk", "https://vkvideo.ru/a": "vk", "https://www.tiktok.com/@a": "tiktok",
-		"https://dzen.ru/a": "dzen", "https://rutube.ru/a": "rutube", "https://notyoutube.com": "other", "https://my.site.ru": "other",
-	} {
-		if got := platformKind(in); got != want {
-			t.Errorf("%s: %s", in, got)
 		}
 	}
 }

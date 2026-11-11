@@ -9,6 +9,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"ohvat/backend/internal/secretbox"
 )
 
 // Режимы.
@@ -100,6 +102,13 @@ type Config struct {
 	UploadRPS       float64 // RATE_LIMIT_UPLOAD_RPS — загрузок фото в секунду на пользователя, 0.5
 	UploadBurst     int     // RATE_LIMIT_UPLOAD_BURST, 20
 
+	// Подтверждение соцсетей.
+	TokenEncKey    string        // TOKEN_ENC_KEY — ключ AES-256 для токенов площадок (32 байта base64/hex); пусто — YouTube выключен
+	TokenEncKeyOld string        // TOKEN_ENC_KEY_OLD — прежний ключ (только расшифровка, при смене ключа)
+	SocialRefresh  time.Duration // SOCIAL_REFRESH_HOURS — обновление цифр, 24
+	SocialPerHour  int           // SOCIAL_STARTS_PER_HOUR — подключений на пользователя в час, 20
+	YouTubeConnect bool          // YOUTUBE_CONNECT: on | off (по умолчанию on, если есть ключи Google и TOKEN_ENC_KEY)
+
 	Warnings []string // некритичные замечания для журнала при запуске
 }
 
@@ -141,6 +150,11 @@ func (c Config) TelegramWebhookURL() string {
 		return ""
 	}
 	return c.PublicURL + "/api/telegram/webhook"
+}
+
+// YouTubeEnabled — подключение YouTube: ключи Google (те же, что для входа), ключ шифрования токенов, не выключено.
+func (c Config) YouTubeEnabled() bool {
+	return c.GoogleEnabled() && c.TokenEncKey != "" && c.YouTubeConnect
 }
 
 // Load читает настройки из окружения.
@@ -353,6 +367,26 @@ func load(get func(string) string) (Config, error) {
 			errs = append(errs, errors.New("KEEPALIVE_URL: адрес вида https://example.ru без пути (обычно = PUBLIC_URL) или пусто"))
 		}
 	}
+	c.TokenEncKey = strings.TrimSpace(get("TOKEN_ENC_KEY"))
+	c.TokenEncKeyOld = strings.TrimSpace(get("TOKEN_ENC_KEY_OLD"))
+	if c.TokenEncKey != "" && !validEncKey(c.TokenEncKey) {
+		errs = append(errs, errors.New("TOKEN_ENC_KEY: 32 байта в base64 или hex (openssl rand -base64 32)"))
+	}
+	if c.TokenEncKeyOld != "" && !validEncKey(c.TokenEncKeyOld) {
+		errs = append(errs, errors.New("TOKEN_ENC_KEY_OLD: 32 байта в base64 или hex"))
+	}
+	c.SocialRefresh = time.Duration(num("SOCIAL_REFRESH_HOURS", 24)) * time.Hour
+	c.SocialPerHour = num("SOCIAL_STARTS_PER_HOUR", 20)
+	switch strings.ToLower(strings.TrimSpace(get("YOUTUBE_CONNECT"))) {
+	case "", "on":
+		c.YouTubeConnect = true
+	case "off":
+	default:
+		errs = append(errs, errors.New("YOUTUBE_CONNECT: on или off"))
+	}
+	if c.GoogleEnabled() && c.YouTubeConnect && c.TokenEncKey == "" {
+		c.Warnings = append(c.Warnings, "TOKEN_ENC_KEY не задан — подключение YouTube выключено (токены негде хранить)")
+	}
 	c.RedisURL = strings.TrimSpace(get("REDIS_URL"))
 	if c.RedisURL != "" && !strings.HasPrefix(c.RedisURL, "redis://") && !strings.HasPrefix(c.RedisURL, "rediss://") {
 		errs = append(errs, errors.New("REDIS_URL: адрес вида redis://… или rediss://…"))
@@ -379,6 +413,8 @@ func (c Config) MailReady() (provider, reason string) {
 	}
 	return c.MailProvider, ""
 }
+
+func validEncKey(s string) bool { return secretbox.ParseKey(s) == nil }
 
 func validSecret(s string) bool {
 	if len(s) > 256 {

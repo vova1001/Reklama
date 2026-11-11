@@ -115,6 +115,7 @@ type Services struct {
 	Formats    FormatService
 	Media      MediaService
 	Drafts     DraftService
+	Social     SocialService // nil — подтверждение соцсетей выключено
 }
 
 // Options — настройки транспорта (из config).
@@ -148,6 +149,7 @@ type Server struct {
 	formats    FormatService
 	media      MediaService
 	drafts     DraftService
+	social     SocialService
 	opt        Options
 }
 
@@ -158,7 +160,7 @@ func New(svc Services, opt Options) *Server {
 	}
 	return &Server{
 		home: svc.Home, health: svc.Health, auth: svc.Auth, profiles: svc.Profiles, tasks: svc.Tasks, cards: svc.Cards,
-		categories: svc.Categories, formats: svc.Formats, media: svc.Media, drafts: svc.Drafts, opt: opt,
+		categories: svc.Categories, formats: svc.Formats, media: svc.Media, drafts: svc.Drafts, social: svc.Social, opt: opt,
 	}
 }
 
@@ -196,6 +198,9 @@ func (s *Server) Routes() http.Handler {
 				r.Get("/google/callback", s.getGoogleCallback)
 			})
 		})
+		if s.social != nil {
+			r.With(noStore).Get("/social/{platform}/callback", s.getSocialCallback)
+		}
 		r.Route("/me", func(r chi.Router) {
 			r.Use(noStore, s.requireUser, limit(s.opt.UserLimiter, byUser("user:")))
 			r.Get("/", s.getMe)
@@ -232,6 +237,13 @@ func (s *Server) Routes() http.Handler {
 			r.Get("/drafts/{form}", s.getDraft)
 			r.With(limit(s.opt.DraftLimiter, byUser("draft:"))).Put("/drafts/{form}", s.putDraft)
 			r.Delete("/drafts/{form}", s.deleteDraft)
+
+			if s.social != nil {
+				r.Get("/social", s.getSocial)
+				r.Post("/social/{platform}/start", s.postSocialStart)
+				r.Post("/social/accounts/{id}/refresh", s.postSocialRefresh)
+				r.Delete("/social/accounts/{id}", s.deleteSocialAccount)
+			}
 		})
 		r.NotFound(func(w http.ResponseWriter, _ *http.Request) {
 			writeError(w, http.StatusNotFound, "not_found", "Такого адреса нет.")

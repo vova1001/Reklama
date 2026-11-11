@@ -14,9 +14,10 @@ import (
 
 func newAutoEnv() *listingEnv {
 	c := &fakeClock{t: time.Date(2026, 11, 10, 9, 0, 0, 0, time.UTC)}
-	e := &listingEnv{clock: c, repo: newMemListings(c), cats: newMemCats(), media: newMemMedia(c)}
+	e := &listingEnv{clock: c, repo: newMemListings(c), cats: newMemCats(), media: newMemMedia(c), plats: fakePlatforms{}}
 	e.repo.cats = e.cats
-	d := ListingDeps{Categories: e.cats, Submits: e.repo, Media: e.media, Clock: c, Mode: domain.ModerationAuto}
+	e.plats[author.ID] = []domain.Platform{{Kind: "youtube", Type: domain.SocialChannel, Followers: 12000, Verified: true}}
+	d := ListingDeps{Categories: e.cats, Submits: e.repo, Media: e.media, Clock: c, Mode: domain.ModerationAuto, Platforms: e.plats}
 	e.tasks, e.cards, e.mod = NewTasks(e.repo, d), NewCards(e.repo, d), NewModeration(e.repo)
 	return e
 }

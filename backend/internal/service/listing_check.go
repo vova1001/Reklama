@@ -23,7 +23,6 @@ const (
 	maxListItem    = 200   // символов в пункте списка
 	maxLink        = 300   // символов в ссылке
 	maxBlocksText  = 6000  // символов во всех блоках вместе
-	maxPlatforms   = 6     // площадок в анкете
 	maxCount       = 1e9   // просмотров, подписчиков
 	maxRewardKop   = 1e8   // оплата — до 1 000 000 ₽
 	minRewardKop   = 10000 // от 100 ₽
@@ -205,35 +204,6 @@ func normURL(raw string) (string, bool) {
 	u.Scheme = "https"
 	u.Host = strings.ToLower(u.Host)
 	return u.String(), true
-}
-
-// platformKinds — вид площадки по домену (и его поддоменам); иначе — "other".
-var platformKinds = map[string]string{
-	"t.me": "telegram", "telegram.me": "telegram",
-	"youtube.com": "youtube", "youtu.be": "youtube",
-	"vk.com": "vk", "vk.ru": "vk", "vkvideo.ru": "vk",
-	"tiktok.com":    "tiktok",
-	"instagram.com": "instagram",
-	"dzen.ru":       "dzen",
-	"rutube.ru":     "rutube",
-}
-
-func platformKind(link string) string {
-	u, err := url.Parse(link)
-	if err != nil {
-		return "other"
-	}
-	h := strings.TrimPrefix(u.Hostname(), "www.")
-	for {
-		if k, ok := platformKinds[h]; ok {
-			return k
-		}
-		i := strings.IndexByte(h, '.')
-		if i < 0 {
-			return "other"
-		}
-		h = h[i+1:]
-	}
 }
 
 // checkSlugs — форма списка сфер или тем: без повторов, до maxCategories, вид slug. Сообщения — с нужным словом.

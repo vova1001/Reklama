@@ -1,5 +1,6 @@
 import { test, expect, type Browser, type Page, type TestInfo } from '@playwright/test';
 import { jsErrors, login, uniq } from './helpers';
+import { botOn, chatId, connectTelegram, tgUser } from './social';
 
 // Задание бизнеса и анкета автора: редактор на весь экран, черновик сохраняется сам, удобная проверка (ошибка после
 // ухода с поля, «Опубликовать» ведёт к первому незаполненному, «Осталось: …»), блоки (Enter, Backspace, вставка
@@ -355,9 +356,11 @@ test('черновик: сохраняется сам, ✕ закрывает, �
 });
 
 // Баг 09: анкета автора не отправлялась — текст «О себе» без Enter не считался, «О себе» было обязательным,
-// площадки из профиля приходили без подписчиков без подсказки, кнопка была недоступна без объяснения.
-test('анкета автора: из профиля, текст без Enter, без блоков → сразу опубликована, видна бизнесу', async ({ page, browser }, info) => {
+// кнопка была недоступна без объяснения. Задача 12: подписчики — только из подтверждённой соцсети (Telegram — ботом).
+test('анкета автора: из профиля, текст без Enter, без блоков → сразу опубликована, видна бизнесу', async ({ page, browser, request, context }, info) => {
   test.slow();
+  test.skip(!(await botOn(request)), 'подтверждение Telegram — нужен стек make e2e-up');
+  await context.route('https://t.me/**', (r) => r.fulfill({ body: 'telegram' }));
   const errors = jsErrors(page);
   const city = `Самара ${tag()}`;
   await login(page, uniq(info.project.name, 'card'));
@@ -370,16 +373,14 @@ test('анкета автора: из профиля, текст без Enter, �
   await expect(page.locator('.rail:visible, .bn:visible')).toHaveCount(1);
   await expect(page.getByLabel('Имя')).toHaveValue('Алина');
   await expect(page.locator('[data-cats] [aria-pressed="true"]')).toHaveCount(2);
-  const plats = page.locator('[data-platforms] .plat');
-  await expect(plats.first().getByLabel('Ссылка на площадку')).toHaveValue('t.me/alina');
-  // подписчиков нет — «Осталось: подписчики», «Опубликовать» ведёт к строке площадки
-  await expect(page.locator('[data-left]')).toContainText('подписчики');
+  // соцсеть не подтверждена — «Осталось: соцсети», «Опубликовать» ведёт к кнопке «Подключить»
+  await expect(page.locator('[data-left]')).toContainText('соцсети');
   const submit = page.getByRole('button', { name: 'Опубликовать' });
   await submit.click();
-  await expect(page.locator('[data-err-plat]').first()).toHaveText('Укажите число подписчиков');
-  await expect(plats.first().getByLabel('Ссылка на площадку')).toBeFocused();
-  await plats.first().getByLabel('Подписчики').fill('12000');
-  await expect(page.locator('[data-err-plat]').first()).toBeHidden();
+  await expect(page.locator('[data-err="platforms"]')).toHaveText('Подтвердите хотя бы одну соцсеть');
+  await expect(page.locator('[data-platform="telegram"] [data-act]')).toBeFocused();
+  await connectTelegram(page, request, tgUser(), { id: chatId(), type: 'channel', title: 'Алина ест', username: 'alina_eats', members: 12_000 });
+  await expect(page.locator('[data-err="platforms"]')).toBeHidden();
   await expect(page.locator('[data-left]')).toBeHidden();
   // своя тема (подсказки похожих)
   await page.getByRole('button', { name: 'Своя' }).click();
@@ -397,7 +398,7 @@ test('анкета автора: из профиля, текст без Enter, �
   await saved(page);
   await expect.poll(async () => (await (await page.request.get('/api/me/card')).json()).card?.works.length, { timeout: 10_000 }).toBe(2);
   const card = (await (await page.request.get('/api/me/card')).json()).card;
-  expect(card.platforms).toEqual([{ kind: 'telegram', url: 'https://t.me/alina', followers: 12000 }]);
+  expect(card.platforms).toMatchObject([{ kind: 'telegram', type: 'channel', url: 'https://t.me/alina_eats', followers: 12000, verified: true }]);
   expect(card.blocks[0].items).toEqual(['Снимаю еду и городские места']);
   expect(card.topics).toHaveLength(3);
 
@@ -417,7 +418,8 @@ test('анкета автора: из профиля, текст без Enter, �
   await biz.waitForURL(`**/app/creator/${card.id}`);
   await expect(biz.getByRole('heading', { level: 1, name: 'Алина' })).toBeVisible();
   await expect(biz.locator('.pv-tags')).toContainText('Настольные игры');
-  await expect(biz.locator('.rows')).toContainText(/12\s000 подписч\./);
+  await expect(biz.locator('.rows')).toContainText('Подтверждено');
+  await expect(biz.locator('.rows .row-v')).toHaveText(/12\s000/);
   // портфолио — просмотр поверх страницы, листание
   await biz.locator('.body-ph [data-lb]').nth(1).click();
   const lb = biz.getByRole('dialog', { name: 'Просмотр фото' });

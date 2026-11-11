@@ -51,7 +51,7 @@ export const FORM_GROUPS = {
   },
   card: {
     main: { title: 'Основное', hint: 'Как вас зовут, где вы и о чём снимаете' },
-    platforms: { title: 'Площадки', hint: 'Ссылка и число подписчиков на каждой' },
+    platforms: { title: 'Соцсети', hint: 'Подтвердите аккаунт — цифры возьмём у площадки' },
     desc: { title: 'О себе', hint: 'По желанию: опыт, форматы и цены' },
     photo: { title: 'Работы', hint: 'Кадры из ваших видео — до 9 фото' },
   },
@@ -62,8 +62,20 @@ export const FORM_GROUPS = {
 } as const;
 
 export const PLATFORM_TITLE: Record<string, string> = {
-  telegram: 'Telegram', youtube: 'YouTube', vk: 'ВКонтакте', tiktok: 'TikTok', instagram: 'Instagram',
-  dzen: 'Дзен', rutube: 'Rutube', other: 'Сайт',
+  telegram: 'Telegram', youtube: 'YouTube', vk: 'ВКонтакте', tiktok: 'TikTok', instagram: 'Instagram', threads: 'Threads',
+};
+
+/** Итог возврата с площадки (?result=…) — {p}: название площадки. Коды — как у сервера (/api/social/{p}/callback). */
+export const SOCIAL_RESULT: Record<string, string> = {
+  ok: '{p} подтверждён — цифры взяли у площадки',
+  denied: 'Без разрешения {p} подтвердить нельзя. Нажмите «Подключить» и разрешите доступ',
+  state: 'Подключение устарело. Нажмите «Подключить» ещё раз',
+  no_channel: 'У этого аккаунта нет канала {p}. Выберите другой аккаунт',
+  too_many: 'Соцсетей слишком много — отвяжите ненужные',
+  limit: 'Подключений много. Попробуйте через час',
+  disabled: 'Подключение {p} появится скоро',
+  unavailable: '{p} не ответил. Попробуйте через минуту',
+  error: 'Не получилось подключить. Попробуйте позже',
 };
 
 /** Шаблоны блоков: одним нажатием (заголовок можно поменять). */
@@ -103,10 +115,8 @@ export const CARD_RULES: Record<string, { short: string; msg: string }> = {
   name: { short: 'имя', msg: 'Имя — от 2 символов' },
   city: { short: 'город', msg: 'Укажите город' },
   topics: { short: 'темы', msg: 'Выберите хотя бы одну тему' },
-  platforms: { short: 'площадки', msg: 'Добавьте хотя бы одну площадку' },
+  platforms: { short: 'соцсети', msg: 'Подтвердите хотя бы одну соцсеть' },
 };
-export const FOLLOWERS_MSG = 'Укажите число подписчиков';
-export const PLATFORM_URL_MSG = 'Ссылка на площадку — https://…';
 
 /** Способы входа. how — как подключить (только то, что уже работает). */
 export const PROVIDERS = [

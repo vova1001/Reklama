@@ -1,13 +1,13 @@
 ---
-// Анкета автора целиком: фото, имя, город, темы, площадки с подписчиками, блоки, работы. Слот — действие внизу.
+// Анкета автора целиком: фото, имя, город, темы, подтверждённые соцсети (цифры — от площадки, дата обновления),
+// блоки, работы. Слот — действие внизу.
 import Icon from '../Icon.astro';
 import TaskBody from './TaskBody.astro';
 import { PLATFORM_TITLE } from '../../content/app';
-import { num } from '../../lib/format';
+import { socialFacts } from '../../lib/format';
 import type { Card } from '../../lib/auth';
 interface Props { card: Card; topics: string[] }
 const { card: c, topics } = Astro.props;
-const host = (u: string) => { try { return new URL(u).hostname.replace(/^www\./, ''); } catch { return u; } };
 ---
 <article class="page" data-card-page={c.id} data-lb-group>
   <div class="pv-who">
@@ -17,7 +17,14 @@ const host = (u: string) => { try { return new URL(u).hostname.replace(/^www\./,
   {topics.length > 0 && <div class="chips pv-tags">{topics.map((t) => <span class="chip is-static">{t}</span>)}</div>}
   <ul class="rows">
     {c.platforms.map((p) => (
-      <li><Icon name="link" size={20} /><div><p class="row-t">{PLATFORM_TITLE[p.kind] ?? 'Сайт'}</p><a class="row-s" href={p.url} target="_blank" rel="noopener nofollow ugc">{host(p.url)}</a></div><span class="row-v">{num(p.followers)} подписч.</span></li>
+      <li data-platform={p.kind}>
+        <Icon name="badge-check" size={20} class="ic-ok" />
+        <div>
+          <p class="row-t">{PLATFORM_TITLE[p.kind] ?? p.kind} · {p.url ? <a href={p.url} target="_blank" rel="noopener nofollow ugc">{p.title || `@${p.handle}`}</a> : p.title}</p>
+          <p class="row-s"><span class="soc-badge">Подтверждено</span> {socialFacts(p)}</p>
+        </div>
+        <span class="row-v">{p.followersHidden ? 'скрыто' : `${p.followers.toLocaleString('ru-RU')}`}</span>
+      </li>
     ))}
   </ul>
   <TaskBody blocks={c.blocks} photos={c.works} />

@@ -6,15 +6,16 @@
 import type { components } from '../lib/api.gen';
 import { $, $$, api, busy, clearErrs, setErr } from '../lib/client';
 import { confirmDialog, fmtNum, guard, parseNum, toast } from '../lib/ui';
-import { CARD_RULES, DUE_RANGE, FOLLOWERS_MSG, PLATFORM_TITLE, PLATFORM_URL_MSG, TASK_RULES, type BlockKind } from '../content/app';
-import { formatsTitle, goal, num, rub, until } from '../lib/format';
+import { CARD_RULES, DUE_RANGE, PLATFORM_TITLE, TASK_RULES, type BlockKind } from '../content/app';
+import { formatsTitle, goal, rub, until } from '../lib/format';
 import { BlocksEditor, type Block } from './editor/blocks';
 import { CategoryPicker } from './editor/category';
 import { FormatPicker } from './editor/formats';
 import { DuePicker, isoDay } from './editor/due';
-import { appear, h, ic, vanish } from './editor/dom';
+import { h, ic } from './editor/dom';
 import { Uploader, type Photo } from './editor/uploader';
 import { DraftSync } from './editor/drafts';
+import { SocialList, followers, kindTitle } from './editor/social';
 
 type Task = components['schemas']['Task'];
 type Card = components['schemas']['Card'];
@@ -32,7 +33,6 @@ interface Init {
   selected: string[];
   formats?: string[];
   categories: { common: Item[]; own: Item[] };
-  platforms: { url: string; followers: number }[];
   brand: string;
   uid: number;
   updatedAt: string | null;
@@ -46,7 +46,6 @@ interface Snap {
   formats: string[];
   access: string;
   selected: string[];
-  platforms: { url: string; followers: number }[];
   blocks: Block[];
   cover: Photo[];
   photos: Photo[];
@@ -77,12 +76,6 @@ function restore(form: HTMLFormElement, init: Init, d: Partial<Snap>) {
     });
   }
   if (d.selected) init.selected = strs(d.selected).filter((x) => known.has(x));
-  if (Array.isArray(d.platforms)) {
-    init.platforms = d.platforms
-      .filter((p) => p && typeof p.url === 'string' && typeof p.followers === 'number')
-      .slice(0, 6)
-      .map((p) => ({ url: p.url.slice(0, 300), followers: Math.max(0, Math.floor(p.followers)) }));
-  }
   if (Array.isArray(d.blocks)) {
     init.blocks = d.blocks
       .filter((b) => b && ['text', 'list', 'links'].includes(b.kind) && typeof b.title === 'string')
@@ -199,51 +192,9 @@ async function start(form: HTMLFormElement) {
   const timeOk = () => !dueTime?.value || /^([01]\d|2[0-3]):[0-5]\d$/.test(dueTime.value);
   const isoDue = () => duePick?.iso() ?? '';
 
-  // площадки автора: ссылка + подписчики, добавить и убрать
-  const plats = $('[data-platforms]', form);
-  const addPlat = $<HTMLButtonElement>('[data-add-platform]', form);
-  const platRow = (p = { url: '', followers: 0 }) => {
-    const url = h('input', { class: 'inp', type: 'url', inputmode: 'url', maxlength: '300', placeholder: 'youtube.com/@канал', 'aria-label': 'Ссылка на площадку' });
-    url.value = p.url.replace(/^https:\/\//, '');
-    const fol = h('input', { class: 'inp', type: 'text', inputmode: 'numeric', maxlength: '13', placeholder: 'Подписчики', 'aria-label': 'Подписчики', 'data-num': '' });
-    fol.value = p.followers ? fmtNum(p.followers) : '';
-    fol.addEventListener('input', () => {
-      const n = parseNum(fol.value);
-      fol.value = n ? fmtNum(n) : '';
-    });
-    const rm = h('button', { class: 'ibtn', type: 'button', 'aria-label': 'Убрать площадку', html: ic('x', 18) });
-    const row = h('div', { class: 'plat' }, h('span', { class: 'plat-ic', html: ic('link', 18) }), url, fol, rm);
-    const err = h('p', { class: 'ferr', 'data-err-plat': '' });
-    const wrap = h('div', { class: 'plat-w' }, row, err);
-    // ошибка строки — после ухода из неё: ссылка без подписчиков или ссылка не похожа на адрес
-    wrap.addEventListener('focusout', (e) => {
-      if (wrap.contains(e.relatedTarget as Node)) return;
-      wrap.dataset.touched = '1';
-      check();
-    });
-    rm.addEventListener('click', () => void vanish(wrap).then(() => {
-      syncPlats();
-      changed();
-      addPlat?.focus();
-    }));
-    return wrap;
-  };
-  const syncPlats = () => {
-    if (addPlat && plats) addPlat.hidden = plats.children.length >= 6;
-  };
-  if (plats) {
-    (init.platforms.length ? init.platforms : [{ url: '', followers: 0 }]).forEach((p) => plats.append(platRow(p)));
-    addPlat?.addEventListener('click', () => {
-      const r = platRow();
-      plats.append(r);
-      appear(r);
-      $<HTMLInputElement>('input', r)!.focus();
-      syncPlats();
-    });
-    syncPlats();
-  }
-  const platValue = () =>
-    plats ? $$<HTMLElement>('.plat', plats).map((r) => ({ url: $$<HTMLInputElement>('input', r)[0].value.trim(), followers: parseNum($$<HTMLInputElement>('input', r)[1].value) })) : [];
+  // соцсети автора — только подтверждённые площадкой (scripts/editor/social.ts); в форму анкеты не входят
+  const socialEl = $('[data-social]', form);
+  const social = socialEl ? new SocialList(socialEl, () => check(), () => save()) : null;
 
   // счётчик у длинного поля (название — только когда близко к пределу)
   $$<HTMLInputElement>('[data-count]', form).forEach((i) => {
@@ -291,7 +242,7 @@ async function start(form: HTMLFormElement) {
           cover: cover.value()[0] ?? '', photos: photos.value(),
         }
       : {
-          name: val('name'), city: val('city'), topics: picker.value(), platforms: platValue().filter((p) => p.url || p.followers),
+          name: val('name'), city: val('city'), topics: picker.value(),
           blocks: blocks.value(), avatar: cover.value()[0] ?? '', works: photos.value(),
         };
 
@@ -303,7 +254,7 @@ async function start(form: HTMLFormElement) {
       v: 1, fields, nationwide: nation?.getAttribute('aria-checked') === 'true',
       formats: fmts?.value() ?? [],
       access: $<HTMLButtonElement>('[data-access] [aria-checked="true"]', form)?.dataset.v ?? '',
-      selected: picker.value(), platforms: platValue(), blocks: blocks.value(), cover: cover.photos(), photos: photos.photos(),
+      selected: picker.value(), blocks: blocks.value(), cover: cover.photos(), photos: photos.photos(),
     };
   }
 
@@ -330,23 +281,10 @@ async function start(form: HTMLFormElement) {
       if ((p.name as string).length < 2) out.set('name', r('name'));
       if ((p.city as string).length < 2) out.set('city', r('city'));
       if (!(p.topics as string[]).length) out.set('topics', r('topics'));
-      if (!(p.platforms as unknown[]).length) out.set('platforms', r('platforms'));
-      else if (platProblems().some(Boolean)) out.set('platforms', FOLLOWERS_MSG);
+      if (social && !social.verified().length) out.set('platforms', r('platforms'));
     }
     return out;
   };
-
-  /** Ошибки строк площадок (по порядку строк): ссылка не похожа на адрес; есть ссылка, нет подписчиков. */
-  const platProblems = (): string[] =>
-    plats
-      ? $$<HTMLElement>('.plat', plats).map((row) => {
-          const [u, f] = $$<HTMLInputElement>('input', row);
-          const url = u.value.trim();
-          if (!url && !parseNum(f.value)) return '';
-          if (!/^(https?:\/\/)?[^\s/.]+\.[^\s]{2,}$/i.test(url)) return PLATFORM_URL_MSG;
-          return parseNum(f.value) ? '' : FOLLOWERS_MSG;
-        })
-      : [];
 
   /** Ошибки у полей: у тронутых (и у всех — после «Опубликовать»); исправили — ошибка уходит сразу. */
   function check() {
@@ -354,17 +292,10 @@ async function start(form: HTMLFormElement) {
     for (const k of Object.keys(RULES)) {
       const show = tried || touched.has(k);
       const msg = show ? m.get(k) ?? '' : '';
-      setErr(form, k, k === 'platforms' && msg === FOLLOWERS_MSG ? '' : msg);
+      setErr(form, k, msg);
       const sec = $(`[data-sec="${k}"]`, form);
       if (!msg) sec?.classList.remove('is-bad');
     }
-    // площадки — у строк
-    const pp = platProblems();
-    $$<HTMLElement>('.plat-w', form).forEach((w, i) => {
-      const msg = tried || w.dataset.touched ? pp[i] ?? '' : '';
-      $('[data-err-plat]', w)!.textContent = msg;
-      $$('input', w).forEach((x) => x.setAttribute('aria-invalid', String(!!msg)));
-    });
     // «Осталось: …» у кнопки (перестраивается, только если список изменился — иначе щелчок по слову теряется)
     const keys = [...m.keys()];
     const sig = keys.map((k) => `${k}:${m.get(k)}`).join('|');
@@ -376,7 +307,7 @@ async function start(form: HTMLFormElement) {
       leftEl.append('Осталось: ');
       keys.slice(0, 3).forEach((k, i) => {
         if (i) leftEl.append(', ');
-        const b = h('button', { type: 'button', 'data-go': k }, k === 'platforms' && m.get(k) === FOLLOWERS_MSG ? 'подписчики' : RULES[k].short);
+        const b = h('button', { type: 'button', 'data-go': k }, RULES[k].short);
         b.addEventListener('click', () => goTo(k));
         leftEl.append(b);
       });
@@ -397,9 +328,7 @@ async function start(form: HTMLFormElement) {
         : k === 'publishBy' && duePick
           ? duePick.focusTarget()
         : k === 'platforms'
-          ? ($$<HTMLElement>('.plat-w', form).find((w) => $('[data-err-plat]', w)!.textContent)?.querySelector<HTMLInputElement>('input') ??
-            $$<HTMLInputElement>('.plat input', form)[0] ??
-            $('[data-add-platform]', form))
+          ? social?.focusTarget()
           : $<HTMLElement>(`[name="${k}"]:not(:disabled), [data-input="${k}"] button, [data-input="${k}"] input`, sec);
     sec.scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'center' });
     target?.focus({ preventScroll: true });
@@ -412,11 +341,6 @@ async function start(form: HTMLFormElement) {
     const f = e.fields ?? {};
     for (const [k, v] of Object.entries(f)) {
       if (k.startsWith('blocks.')) continue;
-      if (k.startsWith('platforms.')) {
-        const el = $$('[data-err-plat]', form)[Number(k.split('.')[1])];
-        if (el) el.textContent = v;
-        continue;
-      }
       setErr(form, k, v);
     }
     blocks.showErrors(f);
@@ -600,21 +524,15 @@ async function start(form: HTMLFormElement) {
   }
 
   function cardPreview() {
-    const p = payload() as unknown as { name: string; city: string; platforms: { url: string; followers: number }[]; blocks: Block[] };
+    const p = payload() as unknown as { name: string; city: string; blocks: Block[] };
     const a = cover.photos()[0];
     const head = h('div', { class: 'pv-who' }, a ? h('img', { class: 'pv-ava', src: a.thumb, alt: '' }) : h('span', { class: 'pv-ava' }), h('div', {}, h('p', { class: 'it-t' }, p.name || 'Ваше имя'), h('p', { class: 'it-meta' }, p.city)));
     const tops = h('div', { class: 'chips pv-tags' });
     picker.titles().forEach((x) => tops.append(h('span', { class: 'chip is-static' }, x)));
     const pl = h('ul', { class: 'rows' });
-    p.platforms.forEach((x) => {
-      let host = x.url;
-      try {
-        host = new URL(x.url.includes('://') ? x.url : `https://${x.url}`).hostname.replace(/^www\./, '');
-      } catch {
-        /* показать как есть */
-      }
-      const kind = Object.entries({ telegram: /t\.me|telegram/, youtube: /youtu/, vk: /vk\.(com|ru)|vkvideo/, tiktok: /tiktok/, instagram: /instagram/, dzen: /dzen/, rutube: /rutube/ }).find(([, re]) => re.test(host))?.[0] ?? 'other';
-      pl.append(h('li', { html: ic('link', 20) }, h('div', {}, h('p', { class: 'row-t' }, PLATFORM_TITLE[kind]), h('p', { class: 'row-s' }, host)), h('span', { class: 'row-v' }, x.followers ? `${num(x.followers)} подписч.` : '')));
+    (social?.verified() ?? []).forEach((x) => {
+      pl.append(h('li', { html: ic('badge', 20) }, h('div', {}, h('p', { class: 'row-t' }, `${PLATFORM_TITLE[x.platform] ?? x.platform} · ${x.title || x.handle}`),
+        h('p', { class: 'row-s' }, `${kindTitle(x.kind)} · подтверждено`)), h('span', { class: 'row-v' }, followers(x))));
     });
     return h('article', { class: 'pv-card' }, head, tops, pl, bodyOf(p.blocks, photos.photos()));
   }

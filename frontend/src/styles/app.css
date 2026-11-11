@@ -443,13 +443,6 @@ html:has(body.app-body) { background: var(--color-card); scroll-padding: 72px 0 
 .crop-zoom::-moz-range-thumb { width: 14px; height: 14px; border-radius: 50%; background: var(--color-ink); border: 3px solid #fff; }
 
 /* площадки автора */
-.plats { display: grid; gap: 8px; }
-.plat { display: grid; grid-template-columns: minmax(0, 1fr) 128px 40px; gap: 6px; align-items: center; position: relative; }
-.plat-ic { position: absolute; left: 14px; top: 15px; color: var(--color-gray); pointer-events: none; display: flex; }
-.ed .plat .inp:first-of-type { padding-left: 40px; }
-.plat .ferr { grid-column: 1 / -1; }
-@media (max-width: 420px) { .plat { grid-template-columns: minmax(0, 1fr) 104px 40px; } }
-.add-row { margin: 6px 0 0 -12px; }
 .who-ed { display: flex; gap: 16px; align-items: flex-start; }
 .who-ed .grow { flex: 1; min-width: 0; }
 @media (max-width: 479px) { .who-ed { flex-direction: column; } }
@@ -478,8 +471,8 @@ html:has(body.app-body) { background: var(--color-card); scroll-padding: 72px 0 
 .ed .mseg button { white-space: normal; text-align: center; line-height: 1.2; }
 @media (max-width: 399px) { .ed .mseg .ic { display: none; } }
 /* сетки форм — не шире колонки (поля ввода не распирают её на узком экране) */
-.bks, .bis, .plats, .form, .body { grid-template-columns: minmax(0, 1fr); }
-.bk, .bi, .plat-w { min-width: 0; }
+.bks, .bis, .form, .body { grid-template-columns: minmax(0, 1fr); }
+.bk, .bi { min-width: 0; }
 
 /* ===== редактор: тонкая панель формы над колонкой (навигация приложения остаётся) ===== */
 .ebar {
@@ -623,10 +616,6 @@ html:has(body.app-body) { background: var(--color-card); scroll-padding: 72px 0 
 .ed .ifx > .ic { top: 17px; left: 15px; }
 .ed .ifx .inp { padding-left: 46px; }
 .sfx-t { top: 15px; font-size: 17px; }
-.plat-ic { top: 18px; }
-.ed .plat .inp:first-of-type { padding-left: 44px; }
-.plat { grid-template-columns: minmax(0, 1fr) 136px 44px; }
-@media (max-width: 420px) { .plat { grid-template-columns: minmax(0, 1fr) 112px 44px; } }
 .chan > .ic { top: 17px; }
 .ed .ferr, .form .ferr { font-size: 15px; }
 .ed .chip { min-height: 44px; padding: 0 16px; font-size: 16px; }
@@ -693,3 +682,39 @@ html:has(body.app-body) { background: var(--color-card); scroll-padding: 72px 0 
   .lb-th { width: 48px; height: 48px; }
 }
 @media (prefers-reduced-motion: reduce) { .lb-img, .lb-th, .lb-x, .lb-nav { transition: none; } }
+
+/* ===== соцсети автора (задача 12): площадка — статус и одна кнопка; аккаунты — «Подтверждено», цифры, дата ===== */
+.soc { display: grid; }
+.soc-p { padding: 14px 0; border-bottom: 1px solid var(--color-line); }
+.soc-p:last-child { border-bottom: 0; }
+.soc-row { display: grid; grid-template-columns: 44px minmax(0, 1fr) auto; align-items: center; gap: 12px; min-height: 48px; }
+.soc-ic { width: 44px; height: 44px; border-radius: 12px; background: var(--color-panel); color: var(--color-ink); display: inline-flex; align-items: center; justify-content: center; }
+.soc-t { font-size: 17px; line-height: 1.3; font-weight: 600; }
+.soc-s { margin-top: 2px; font-size: 15px; line-height: 1.35; color: var(--color-gray); }
+.soc-s.is-ok { color: var(--color-emerald-ink); font-weight: 550; }
+.soc-s.is-err, .soc-as.is-err { color: var(--color-error); }
+.soc-act { min-height: 44px; padding: 0 18px; font-size: 16px; white-space: nowrap; }
+.soc-steps { margin: 12px 0 2px 56px; padding: 14px 16px; border-radius: 14px; background: var(--color-panel); }
+.soc-steps ol { list-style: decimal; padding-left: 20px; display: grid; gap: 6px; font-size: 16px; line-height: 1.45; }
+.soc-go { margin-top: 12px; min-height: 44px; padding: 0 20px; display: inline-flex; align-items: center; }
+.soc-accs { margin: 8px 0 0 56px; display: grid; }
+.soc-a { display: flex; align-items: center; gap: 8px; min-height: 56px; padding: 6px 0; border-top: 1px solid var(--color-line); }
+.soc-amain { flex: 1; min-width: 0; }
+.soc-at { font-size: 16px; line-height: 1.35; font-weight: 600; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; overflow-wrap: anywhere; }
+.soc-at a { color: inherit; text-decoration: underline; text-decoration-color: var(--color-line-strong); text-underline-offset: 3px; }
+.soc-as { margin-top: 2px; font-size: 15px; line-height: 1.35; color: var(--color-gray); }
+.soc-tools { display: flex; flex: none; }
+.soc-tools .ibtn { width: 44px; height: 44px; }
+.soc-tools .ibtn[aria-busy='true'] .ic { animation: soc-spin 0.8s linear infinite; }
+@keyframes soc-spin { to { transform: rotate(360deg); } }
+.soc-badge { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px 2px 6px; border-radius: 999px; background: var(--color-emerald-soft);
+  color: var(--color-emerald-ink); font-size: 13px; line-height: 1.4; font-weight: 600; }
+.rows .ic-ok, .tile-ok { color: var(--color-emerald); }
+.tile-ok { display: inline-flex; vertical-align: -2px; margin-left: 6px; }
+@media (max-width: 480px) {
+  .soc-row { grid-template-columns: 40px minmax(0, 1fr); }
+  .soc-ic { width: 40px; height: 40px; }
+  .soc-act { grid-column: 1 / -1; width: 100%; justify-content: center; }
+  .soc-steps, .soc-accs { margin-left: 0; }
+}
+@media (prefers-reduced-motion: reduce) { .soc-tools .ibtn[aria-busy='true'] .ic { animation: none; } }

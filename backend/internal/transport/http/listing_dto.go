@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"encoding/base64"
+	"encoding/json"
 	"strconv"
 	"strings"
 	"time"
@@ -34,19 +35,14 @@ type taskIn struct {
 	Photos        []string   `json:"photos"`
 }
 
-type platformIn struct {
-	URL       string `json:"url"`
-	Followers int64  `json:"followers"`
-}
-
 type cardIn struct {
-	Name      string       `json:"name"`
-	City      string       `json:"city"`
-	Topics    []string     `json:"topics"`
-	Platforms []platformIn `json:"platforms"`
-	Blocks    []blockDTO   `json:"blocks"`
-	Avatar    string       `json:"avatar"`
-	Works     []string     `json:"works"`
+	Name      string          `json:"name"`
+	City      string          `json:"city"`
+	Topics    []string        `json:"topics"`
+	Platforms json.RawMessage `json:"platforms,omitempty"` // прежние формы присылали площадки — не принимаются, игнорируются
+	Blocks    []blockDTO      `json:"blocks"`
+	Avatar    string          `json:"avatar"`
+	Works     []string        `json:"works"`
 }
 
 type photoDTO struct {
@@ -91,10 +87,17 @@ type feedOut struct {
 	Next  *string   `json:"next"`
 }
 
+// platformDTO — подтверждённая соцсеть в анкете (цифры от площадки).
 type platformDTO struct {
-	Kind      string `json:"kind"`
-	URL       string `json:"url"`
-	Followers int64  `json:"followers"`
+	Kind            string     `json:"kind"`
+	Type            string     `json:"type"`
+	Handle          string     `json:"handle"`
+	Title           string     `json:"title"`
+	URL             string     `json:"url"`
+	Followers       int64      `json:"followers"`
+	FollowersHidden bool       `json:"followersHidden"`
+	Verified        bool       `json:"verified"`
+	RefreshedAt     *time.Time `json:"refreshedAt"`
 }
 
 type cardDTO struct {
@@ -200,11 +203,7 @@ func (in taskIn) toService() service.TaskInput {
 }
 
 func (in cardIn) toService() service.CardInput {
-	ps := make([]service.PlatformInput, 0, len(in.Platforms))
-	for _, p := range in.Platforms {
-		ps = append(ps, service.PlatformInput{URL: p.URL, Followers: p.Followers})
-	}
-	return service.CardInput{Name: in.Name, City: in.City, Topics: in.Topics, Platforms: ps, Blocks: blocksIn(in.Blocks), Avatar: in.Avatar, Works: in.Works}
+	return service.CardInput{Name: in.Name, City: in.City, Topics: in.Topics, Blocks: blocksIn(in.Blocks), Avatar: in.Avatar, Works: in.Works}
 }
 
 func photo(id string) *photoDTO {
@@ -251,7 +250,8 @@ func toCardDTO(c *domain.CreatorCard) *cardDTO {
 	}
 	ps := make([]platformDTO, 0, len(c.Platforms))
 	for _, p := range c.Platforms {
-		ps = append(ps, platformDTO{Kind: p.Kind, URL: p.URL, Followers: p.Followers})
+		ps = append(ps, platformDTO{Kind: p.Kind, Type: p.Type, Handle: p.Handle, Title: p.Title, URL: p.URL,
+			Followers: p.Followers, FollowersHidden: p.FollowersHidden, Verified: p.Verified, RefreshedAt: utcPtr(p.RefreshedAt)})
 	}
 	return &cardDTO{
 		ID: c.UserID, TopicTitles: c.TopicTitles, PublishedAt: utcPtr(c.PublishedAt),

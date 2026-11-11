@@ -113,11 +113,18 @@ type Task struct {
 	PublishedAt    *time.Time
 }
 
-// Platform — площадка автора: вид (по адресу), ссылка, подписчики.
+// Platform — подтверждённая соцсеть автора в анкете. Берётся только из social_accounts (цифры — от площадки),
+// со слов автора не вводится.
 type Platform struct {
-	Kind      string
-	URL       string
-	Followers int64
+	Kind            string // площадка: telegram, youtube, vk, tiktok, instagram, threads
+	Type            string // profile | channel | group (Telegram: канал или группа)
+	Handle          string
+	Title           string
+	URL             string
+	Followers       int64
+	FollowersHidden bool
+	Verified        bool
+	RefreshedAt     *time.Time
 }
 
 // CreatorCard — анкета автора (одна на пользователя).

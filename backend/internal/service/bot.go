@@ -24,9 +24,10 @@ type BotUpdate struct {
 	Text         string // текст сообщения (команда)
 	CallbackID   string // нажатие inline-кнопки
 	CallbackData string
-	MessageID    int64 // сообщение с кнопкой (для правки)
-	Blocked      bool  // пользователь остановил бота
-	Unblocked    bool  // пользователь снова запустил бота
+	MessageID    int64         // сообщение с кнопкой (для правки)
+	Blocked      bool          // пользователь остановил бота
+	Unblocked    bool          // пользователь снова запустил бота
+	Channel      *ChannelEvent // бота добавили в канал или группу (или убрали)
 }
 
 // BotButton — кнопка под сообщением: ссылка (URL) или действие (Data, до 64 байт).
@@ -78,6 +79,7 @@ type BotDeps struct {
 	Users     BotUsers
 	Chats     BotChatRepository
 	Messenger BotMessenger
+	Social    BotSocial // nil — подтверждение каналов выключено
 	Clock     Clock
 	Log       *slog.Logger
 }
@@ -85,17 +87,20 @@ type BotDeps struct {
 // BotConfig — настройки бота.
 type BotConfig struct {
 	SiteURL string // PUBLIC_URL: кнопки-ссылки только для https (Telegram не принимает http://localhost)
+	BotName string // имя бота без @ (кнопки «Добавить в канал / группу»)
 }
 
 // Bot — обработка сообщений и нажатий.
 type Bot struct {
-	auth  BotAuth
-	users BotUsers
-	chats BotChatRepository
-	out   BotMessenger
-	clock Clock
-	log   *slog.Logger
-	texts botTexts
+	auth    BotAuth
+	users   BotUsers
+	chats   BotChatRepository
+	out     BotMessenger
+	social  BotSocial
+	botName string
+	clock   Clock
+	log     *slog.Logger
+	texts   botTexts
 }
 
 // NewBot создаёт бота.
@@ -106,7 +111,7 @@ func NewBot(d BotDeps, cfg BotConfig) *Bot {
 	if d.Log == nil {
 		d.Log = slog.Default()
 	}
-	return &Bot{auth: d.Auth, users: d.Users, chats: d.Chats, out: d.Messenger, clock: d.Clock, log: d.Log, texts: newBotTexts(cfg.SiteURL)}
+	return &Bot{auth: d.Auth, users: d.Users, chats: d.Chats, out: d.Messenger, social: d.Social, botName: cfg.BotName, clock: d.Clock, log: d.Log, texts: newBotTexts(cfg.SiteURL)}
 }
 
 // Действия inline-кнопок (callback_data ≤ 64 байт).
@@ -119,6 +124,8 @@ const (
 // Handle обрабатывает событие. Ошибка — только сбой инфраструктуры (база): транспорт попросит Telegram повторить.
 func (b *Bot) Handle(ctx context.Context, u BotUpdate) error {
 	switch {
+	case u.Channel != nil:
+		return b.channel(ctx, u)
 	case u.Blocked:
 		return b.chats.BlockChat(ctx, u.ChatID)
 	case u.Unblocked:
@@ -143,6 +150,13 @@ func (b *Bot) message(ctx context.Context, u BotUpdate) error {
 	case "/start":
 		if tok, ok := ParseBotStart(arg); ok {
 			return b.startLogin(ctx, u, tok)
+		}
+		if tok, ok := ParseSocialStart(arg); ok {
+			return b.socialStart(ctx, u, tok)
+		}
+		if strings.HasPrefix(arg, SocialStartPrefix) {
+			b.send(ctx, b.texts.linkExpired(u.ChatID, 0))
+			return nil
 		}
 		if strings.HasPrefix(arg, BotStartPrefix) {
 			b.send(ctx, b.texts.loginExpired(u.ChatID, 0)) // ссылка обрезана или испорчена
@@ -185,6 +199,9 @@ func (b *Bot) startLogin(ctx context.Context, u BotUpdate, tok string) error {
 }
 
 func (b *Bot) callback(ctx context.Context, u BotUpdate) error {
+	if done, err := b.socialCallback(ctx, u); done || err != nil {
+		return err
+	}
 	d := u.CallbackData
 	switch {
 	case strings.HasPrefix(d, cbConfirm):

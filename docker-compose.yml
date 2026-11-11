@@ -58,6 +58,11 @@ services:
       TELEGRAM_SEND_RPS: ${TELEGRAM_SEND_RPS:-}
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
       GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      TOKEN_ENC_KEY: ${TOKEN_ENC_KEY:-}
+      TOKEN_ENC_KEY_OLD: ${TOKEN_ENC_KEY_OLD:-}
+      YOUTUBE_CONNECT: ${YOUTUBE_CONNECT:-}
+      SOCIAL_REFRESH_HOURS: ${SOCIAL_REFRESH_HOURS:-}
+      SOCIAL_STARTS_PER_HOUR: ${SOCIAL_STARTS_PER_HOUR:-}
       AUTH_CODE_TTL_MIN: ${AUTH_CODE_TTL_MIN:-}
       AUTH_CODE_MAX_ATTEMPTS: ${AUTH_CODE_MAX_ATTEMPTS:-}
       AUTH_CODE_RESEND_SEC: ${AUTH_CODE_RESEND_SEC:-}
@@ -160,7 +165,7 @@ services:
       TEST_REDIS_URL: redis://redis-test:6379/0
     command: >
       sh -c "go vet ./... &&
-             go test -count=1 -p 1 -race -coverpkg=./internal/service,./internal/repository,./internal/transport/...,./internal/gateway/telegram,./internal/gateway/imaging,./internal/gateway/storage,./internal/ratelimit -coverprofile=/tmp/c.out ./... &&
+             go test -count=1 -p 1 -race -coverpkg=./internal/service,./internal/repository,./internal/transport/...,./internal/gateway/telegram,./internal/gateway/platforms/...,./internal/secretbox,./internal/gateway/imaging,./internal/gateway/storage,./internal/ratelimit -coverprofile=/tmp/c.out ./... &&
              go tool cover -func=/tmp/c.out | tail -1"
     depends_on:
       db-test:

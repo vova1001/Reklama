@@ -22,11 +22,15 @@ import (
 	"ohvat/backend/internal/gateway/imaging"
 	"ohvat/backend/internal/gateway/keepalive"
 	"ohvat/backend/internal/gateway/mail"
+	"ohvat/backend/internal/gateway/platforms/httpx"
+	tgverify "ohvat/backend/internal/gateway/platforms/telegram"
+	"ohvat/backend/internal/gateway/platforms/youtube"
 	"ohvat/backend/internal/gateway/storage"
 	tggw "ohvat/backend/internal/gateway/telegram"
 	"ohvat/backend/internal/logx"
 	"ohvat/backend/internal/ratelimit"
 	"ohvat/backend/internal/repository"
+	"ohvat/backend/internal/secretbox"
 	"ohvat/backend/internal/service"
 	httpapi "ohvat/backend/internal/transport/http"
 	tgtransport "ohvat/backend/internal/transport/telegram"
@@ -120,8 +124,12 @@ func run(log *slog.Logger) error {
 	media := service.NewMedia(mediaRepo, newBlobStore(cfg, pool, log), imgPool, service.MediaConfig{
 		MaxBytes: int64(cfg.MediaMaxMB) << 20, QuotaBytes: int64(cfg.MediaQuotaMB) << 20, MaxFiles: cfg.MediaMaxFiles,
 	}, log)
+	social, err := newSocial(cfg, pool, authRepo, tgClient, log)
+	if err != nil {
+		return err
+	}
 	deps := service.ListingDeps{
-		Categories: catRepo, Submits: listRepo, Media: mediaRepo,
+		Categories: catRepo, Submits: listRepo, Media: mediaRepo, Platforms: social,
 		Limits: service.ListingLimits{MaxTasks: cfg.TasksMax, SubmitsPerDay: cfg.SubmitsPerDay},
 		Mode:   domain.ModerationMode(cfg.Moderation),
 	}
@@ -152,14 +160,14 @@ func run(log *slog.Logger) error {
 		APILimiter: lims.api, AuthLimiter: lims.auth, UserLimiter: lims.user, UploadLimiter: lims.upload, DraftLimiter: lims.draft,
 	}
 	if cfg.BotEnabled() {
-		bot = service.NewBot(service.BotDeps{Auth: auth, Users: authRepo, Chats: tgRepo, Messenger: outbox, Log: log},
-			service.BotConfig{SiteURL: cfg.PublicURL})
+		bot = service.NewBot(service.BotDeps{Auth: auth, Users: authRepo, Chats: tgRepo, Messenger: outbox, Social: social, Log: log},
+			service.BotConfig{SiteURL: cfg.PublicURL, BotName: cfg.TelegramBotName})
 		hook = tgtransport.New(bot, tgtransport.Options{Secret: cfg.TelegramSecret, Limiter: lims.webhook, Log: log})
 		opts.TelegramWebhook = hook
 	}
 	api := httpapi.New(httpapi.Services{
 		Home: service.NewHome(repository.NewHome(pool)), Health: service.NewHealth(repository.NewHealth(pool)),
-		Auth: auth, Profiles: profiles, Tasks: tasks, Cards: cards, Categories: service.NewCategories(catRepo), Formats: service.NewFormats(listRepo), Media: media, Drafts: drafts,
+		Auth: auth, Profiles: profiles, Tasks: tasks, Cards: cards, Categories: service.NewCategories(catRepo), Formats: service.NewFormats(listRepo), Media: media, Drafts: drafts, Social: social,
 	}, opts)
 	srv := &http.Server{
 		Addr:              cfg.HTTPAddr,
@@ -193,6 +201,7 @@ func run(log *slog.Logger) error {
 	g.Go(func() error { media.RunCleanup(gctx, time.Hour); return nil })
 	g.Go(func() error { tasks.RunExpiry(gctx, 5*time.Minute, log); return nil })
 	g.Go(func() error { drafts.RunCleanup(gctx, draftsPG, time.Hour, log); return nil })
+	g.Go(func() error { social.RunRefresher(gctx, 10*time.Minute); return nil })
 	if cfg.KeepAliveURL != "" { // самопинг через публичный адрес: бесплатный хостинг не усыпляет сервис
 		ka := service.KeepAlive{Prober: keepalive.New(cfg.KeepAliveURL), Every: 10 * time.Minute, Timeout: 30 * time.Second, Log: log}
 		g.Go(func() error { ka.Run(gctx); return nil })
@@ -258,6 +267,34 @@ func newLimiters(ctx context.Context, cfg config.Config, log *slog.Logger) *limi
 	out.upload = mk("up:", ratelimit.Rate{RPS: cfg.UploadRPS, Burst: cfg.UploadBurst})
 	out.draft = mk("draft:", ratelimit.Rate{RPS: cfg.DraftRPS, Burst: cfg.DraftBurst})
 	return out
+}
+
+// newSocial — подтверждение соцсетей: Telegram (бот-админ канала или группы) — если бот включён; YouTube —
+// ключи Google + TOKEN_ENC_KEY. VK, TikTok, Instagram, Threads — интерфейс готов, адаптеры позже («Скоро»).
+func newSocial(cfg config.Config, pool *pgxpool.Pool, users *repository.Auth, tg *tggw.Client, log *slog.Logger) (*service.Social, error) {
+	var vs []service.PlatformVerifier
+	var cipher service.TokenCipher
+	if cfg.TokenEncKey != "" {
+		box, err := secretbox.New(cfg.TokenEncKey, cfg.TokenEncKeyOld)
+		if err != nil {
+			return nil, err
+		}
+		cipher = box
+	}
+	if cfg.BotEnabled() && tg != nil {
+		vs = append(vs, tgverify.New(tg, cfg.TelegramBotName))
+	}
+	if cfg.YouTubeEnabled() {
+		vs = append(vs, youtube.New(youtube.Config{ClientID: cfg.GoogleClientID, ClientSecret: cfg.GoogleClientSecret,
+			HTTP: httpx.New(httpx.Options{Hosts: youtube.Hosts, Site: cfg.PublicURL})}))
+	}
+	on := make([]string, 0, len(vs))
+	for _, v := range vs {
+		on = append(on, string(v.Platform()))
+	}
+	log.Info("соцсети: подтверждение", "platforms", on, "refresh", cfg.SocialRefresh.String())
+	return service.NewSocial(service.SocialDeps{Repo: repository.NewSocial(pool), Users: users, Cipher: cipher, Verifiers: vs, Log: log},
+		service.SocialConfig{SiteURL: cfg.PublicURL, RefreshEvery: cfg.SocialRefresh, StartsPerHour: cfg.SocialPerHour}), nil
 }
 
 // moderationRepo — хранилище для модерации: задания и анкеты + категории.

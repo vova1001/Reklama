@@ -310,3 +310,28 @@ func TestWebhookLimiter(t *testing.T) {
 		t.Fatalf("сбой лимита: %d %d", c, bot.n())
 	}
 }
+
+// Бота добавили в канал или группу (или убрали): событие для подтверждения соцсетей.
+func TestChannelMemberUpdate(t *testing.T) {
+	raw := `{"update_id":9,"my_chat_member":{"chat":{"id":-1001,"type":"channel","title":"Канал","username":"chan"},
+		"from":{"id":777,"first_name":"Алина"},"new_chat_member":{"status":"administrator"}}}`
+	var u update
+	if err := json.Unmarshal([]byte(raw), &u); err != nil {
+		t.Fatal(err)
+	}
+	ev, ok := u.toBot()
+	if !ok || ev.Channel == nil || ev.Channel.ChatID != -1001 || ev.Channel.Type != "channel" || ev.Channel.Title != "Канал" ||
+		ev.Channel.Username != "chan" || ev.Channel.Status != "administrator" || ev.Channel.From.ID != 777 || ev.Private {
+		t.Fatalf("%v %+v", ok, ev)
+	}
+	for _, typ := range []string{"group", "supergroup"} {
+		u.MyChatMember.Chat.Type = typ
+		if ev, ok := u.toBot(); !ok || ev.Channel == nil {
+			t.Errorf("%s", typ)
+		}
+	}
+	u.MyChatMember.From.IsBot = true
+	if _, ok := u.toBot(); ok {
+		t.Error("от бота — пропуск")
+	}
+}

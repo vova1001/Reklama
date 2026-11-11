@@ -1,21 +1,20 @@
 ---
 // Анкета автора на весь экран, разделами с заголовком и подсказкой в одну строку: «Основное» (фото, имя, город,
-// темы), «Площадки» (ссылка и подписчики), «О себе» (блоки, по желанию), «Работы». Начальные значения — из профиля
-// автора. Логика — scripts/editor.ts.
+// темы), «Соцсети» (подтверждение площадкой — scripts/editor/social.ts; цифры не вводятся), «О себе» (блоки, по
+// желанию), «Работы». Начальные значения — из профиля автора. Логика — scripts/editor.ts.
 import Icon from '../Icon.astro';
 import EditorBar from './EditorBar.astro';
 import { CARD_BLOCKS, CARD_TEMPLATES, FORM_GROUPS } from '../../content/app';
 import type { Card, CategoryItem, CreatorProfile, User } from '../../lib/auth';
 interface Props { card: Card | null; profile: CreatorProfile | null; user: User; categories: { common: CategoryItem[]; own: CategoryItem[] } }
 const { card: c, profile, user, categories } = Astro.props;
-const fromProfile = (profile?.channels ?? []).filter((x) => x.startsWith('https://')).map((url) => ({ url, followers: 0 }));
 const known = new Set([...categories.common, ...categories.own].map((x) => x.slug));
 const init = {
   kind: 'card', id: null, status: c?.status ?? 'draft', blocks: c ? c.blocks : CARD_BLOCKS, templates: CARD_TEMPLATES,
   cover: c?.avatar ? [c.avatar] : [], photos: c?.works ?? [],
   // из профиля — только темы, которые есть в списке (иначе их не снять и анкета не сохранится)
   selected: (c ? c.topics : profile?.spheres ?? []).filter((s) => known.has(s)),
-  categories, platforms: c ? c.platforms.map((p) => ({ url: p.url, followers: p.followers })) : fromProfile, brand: '',
+  categories, brand: '',
   uid: user.id, updatedAt: c?.updatedAt ?? null,
 };
 const json = JSON.stringify(init).replace(/</g, '\\u003c');
@@ -58,12 +57,13 @@ const G = FORM_GROUPS.card;
         </div>
       </section>
 
-      <section class="grp" aria-labelledby="g-plat" aria-describedby="g-plat-d">
+      <section class="grp" id="social" aria-labelledby="g-plat" aria-describedby="g-plat-d">
         <h2 class="grp-h" id="g-plat">{G.platforms.title}</h2>
         <p class="grp-d" id="g-plat-d">{G.platforms.hint}</p>
         <div class="sec" data-sec="platforms">
-          <div class="plats" data-platforms data-input="platforms"></div>
-          <button class="btn pill-text add-row" type="button" data-add-platform><Icon name="plus" size={18} />Площадка</button>
+          <ul class="soc" data-social data-input="platforms" aria-live="polite">
+            <li class="soc-s">Загружаю…</li>
+          </ul>
           <p class="ferr" data-err="platforms"></p>
         </div>
       </section>

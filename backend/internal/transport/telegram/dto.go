@@ -22,8 +22,10 @@ type user struct {
 }
 
 type chat struct {
-	ID   int64  `json:"id"`
-	Type string `json:"type"`
+	ID       int64  `json:"id"`
+	Type     string `json:"type"`
+	Title    string `json:"title"`
+	Username string `json:"username"`
 }
 
 type message struct {
@@ -78,11 +80,22 @@ func (u update) toBot() (service.BotUpdate, bool) {
 		default:
 			return out, false
 		}
+	case u.MyChatMember != nil && isChannel(u.MyChatMember.Chat.Type):
+		// бота добавили в канал или группу (или убрали): подтверждение соцсети; ответ — в личный чат добавившего
+		m := u.MyChatMember
+		if m.From.ID <= 0 || m.From.IsBot {
+			return out, false
+		}
+		out.ChatID, out.From = m.Chat.ID, prof(m.From)
+		out.Channel = &service.ChannelEvent{ChatID: m.Chat.ID, Title: clip(m.Chat.Title, 255), Username: clip(m.Chat.Username, 64),
+			Type: m.Chat.Type, Status: m.NewChatMember.Status, From: out.From}
 	default:
 		return out, false
 	}
 	return out, out.ChatID != 0
 }
+
+func isChannel(t string) bool { return t == "channel" || t == "group" || t == "supergroup" }
 
 func prof(u user) domain.TelegramProfile {
 	return domain.TelegramProfile{ID: u.ID, FirstName: clip(u.FirstName, 64), LastName: clip(u.LastName, 64), Username: clip(u.Username, 64), IsBot: u.IsBot}

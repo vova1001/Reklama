@@ -124,6 +124,36 @@ norm (нижний регистр, ё → е, одиночные пробелы)
   таймаут 30 с): раз в 10 минут под errgroup; пусто — выключен; в журнал — только ошибки. На Render `KEEPALIVE_URL` =
   `PUBLIC_URL`; workflow GitHub `keepalive.yml` — запасной.
 
+### Подтверждение соцсетей автора (задача 12)
+
+- **Только официальные API, цифры — не со слов автора.** `service.Social` за интерфейсом `PlatformVerifier`
+  (`Start` → адрес разрешения / ссылка на бота, `Check` → владелец и цифры, `Refresh` → свежие цифры) и
+  `TokenKeeper` (`Renew` по правилам площадки, `Revoke` при отвязке). Реализации — `gateway/platforms/<площадка>`:
+  `telegram` (Bot API: `getChat`, `getChatAdministrators`, `getChatMemberCount`), `youtube` (Google OAuth + PKCE,
+  только `youtube.readonly`, YouTube Data API `channels.list`). VK, TikTok, Instagram, Threads — интерфейс готов,
+  адаптеров нет: в анкете «Скоро» (`available: false`).
+- **Telegram:** «Подключить» → `t.me/<бот>?start=ch_<токен>` (30 мин, одноразовый, хеш в `social_oauth_states`) →
+  в боте «Привязать / Это не я» (защита от чужой ссылки) → Telegram привязывается к аккаунту как способ входа →
+  бота добавляют в канал или группу (`my_chat_member`): добавивший — создатель или админ, подписчики канала или
+  участники группы. Каналы, куда бота добавили до привязки, — `telegram_channels`, подтверждаются после привязки
+  сами. Бота убрали — отметка снимается (`failed` с причиной). Telegram не ответил — `pending`, повтор через 5 мин.
+- **OAuth (YouTube):** state (32 байта, 10 мин, одноразовый, связан с пользователем) + httpOnly-cookie
+  `ohvat_social` на `/api/social`; PKCE verifier — зашифрован; возврат `GET /api/social/{p}/callback` → анкета
+  `?social=&result=`. Токены — один шифротекст AES-256-GCM (`internal/secretbox`, ключ `TOKEN_ENC_KEY`, AAD —
+  пользователь+площадка+subject; смена ключа — `TOKEN_ENC_KEY_OLD`). Без ключа OAuth-площадки выключены.
+- **Безопасность исходящих запросов:** `gateway/platforms/httpx` — только https и только хосты площадки (белый
+  список в транспорте), редиректы не выполняются, ответ до 1 МБ, таймауты, честный User-Agent с адресом сайта;
+  ошибки без адреса и тела (токены не попадают в журнал). Страницы профилей не загружаются вовсе.
+- **Обновление:** фоновая задача раз в 10 мин забирает аккаунты со сроком (`FOR UPDATE SKIP LOCKED` + аренда —
+  несколько серверов не дублируют), пауза 1 с между запросами к одной площадке; следующее — через
+  `SOCIAL_REFRESH_HOURS` ±1/12 (разброс); временный сбой — 15 мин × 2ⁿ до 6 ч; доступ отозван — `failed`.
+  Токен обновляется под арендой строки доступа (`lock_until`). История цифр — `social_stats_history`.
+- **Анкета:** `Cards` берёт соцсети у `PlatformSource` (= `Social.CardPlatforms`, только `verified`); ручного ввода
+  площадок и подписчиков нет (колонка `creator_cards.platforms` больше не пишется); к публикации — хотя бы одна
+  подтверждённая соцсеть. Лимиты: 20 подключений в час, 20 аккаунтов, «Проверить снова» — раз в 10 мин.
+- **Таблицы** (миграция 00012): `social_credentials`, `social_accounts` (статус `unverified|pending|verified|failed`,
+  метод `bot|oauth`, вид `profile|channel|group`), `social_stats_history`, `social_oauth_states`, `telegram_channels`.
+
 ### Контракт
 
 `backend/api/openapi.yaml`: `GET /api/home`, `GET /healthz`; вход — `GET /api/auth/config`, `POST /api/auth/email/start`,
@@ -134,7 +164,9 @@ norm (нижний регистр, ё → е, одиночные пробелы)
 `GET/PUT /api/me/card`, `POST /api/me/card/submit|withdraw`, `GET/POST /api/me/categories`, `GET /api/me/categories/similar`,
 `POST /api/me/media`, `DELETE /api/me/media/{id}`, `PUT /api/me/avatar`, `GET /media/{id}/{size}.webp`; задача 09 —
 `GET /api/tasks/{id}`, `GET /api/cards`, `GET /api/cards/{id}`, отбор ленты; задача 11 — `GET /api/me/formats/similar`,
-сферы и форматы массивами (0.8.0).
+сферы и форматы массивами (0.8.0); задача 12 — `GET /api/me/social`, `POST /api/me/social/{platform}/start`,
+`GET /api/social/{platform}/callback`, `POST /api/me/social/accounts/{id}/refresh`, `DELETE /api/me/social/accounts/{id}`,
+`Platform` в анкете — подтверждённые соцсети (0.9.0).
 Типы фронта генерируются из контракта (`npm run gen:api` → `frontend/src/lib/api.gen.ts`).
 
 ## Фронтенд (Astro 7 SSR + Tailwind 4 + TypeScript)

@@ -3,7 +3,6 @@ package service
 import (
 	"context"
 	"errors"
-	"fmt"
 	"unicode/utf8"
 
 	"ohvat/backend/internal/domain"
@@ -24,21 +23,19 @@ type CardRepository interface {
 	PublishedCard(ctx context.Context, userID int64) (domain.CreatorCard, error)
 }
 
-// PlatformInput — площадка из формы: ссылка и подписчики (вид определяется по адресу).
-type PlatformInput struct {
-	URL       string
-	Followers int64
+// PlatformSource — подтверждённые соцсети авторов (сервис Social): в анкете только они, цифры — от площадок.
+type PlatformSource interface {
+	CardPlatforms(ctx context.Context, userIDs []int64) (map[int64][]domain.Platform, error)
 }
 
 // CardInput — анкета из формы. Черновик может быть неполным; полноту проверяет Submit.
 type CardInput struct {
-	Name      string
-	City      string
-	Topics    []string
-	Platforms []PlatformInput
-	Blocks    []domain.Block
-	Avatar    string   // media.id аватара
-	Works     []string // media.id примеров работ, по порядку
+	Name   string
+	City   string
+	Topics []string
+	Blocks []domain.Block
+	Avatar string   // media.id аватара
+	Works  []string // media.id примеров работ, по порядку
 }
 
 // Cards — анкета автора: черновик → на проверку → решение модератора; бизнесу видны только одобренные.
@@ -62,7 +59,34 @@ func (s *Cards) Get(ctx context.Context, u domain.User) (*domain.CreatorCard, er
 	if err != nil {
 		return nil, err
 	}
+	if err := s.withPlatforms(ctx, []*domain.CreatorCard{&c}); err != nil {
+		return nil, err
+	}
 	return &c, nil
+}
+
+// withPlatforms — подтверждённые соцсети в анкеты (одним запросом на страницу ленты).
+func (s *Cards) withPlatforms(ctx context.Context, cs []*domain.CreatorCard) error {
+	for _, c := range cs {
+		c.Platforms = []domain.Platform{}
+	}
+	if s.Platforms == nil || len(cs) == 0 {
+		return nil
+	}
+	ids := make([]int64, 0, len(cs))
+	for _, c := range cs {
+		ids = append(ids, c.UserID)
+	}
+	m, err := s.Platforms.CardPlatforms(ctx, ids)
+	if err != nil {
+		return err
+	}
+	for _, c := range cs {
+		if ps := m[c.UserID]; ps != nil {
+			c.Platforms = ps
+		}
+	}
+	return nil
 }
 
 // Save — сохранить черновик (или правку отклонённой анкеты; статус не меняется).
@@ -83,7 +107,10 @@ func (s *Cards) Save(ctx context.Context, u domain.User, in CardInput) (domain.C
 	}
 	c.UserID = u.ID
 	out, err := s.repo.SaveCard(ctx, c)
-	return out, conflictToStatus(err)
+	if err != nil {
+		return out, conflictToStatus(err)
+	}
+	return out, s.withPlatforms(ctx, []*domain.CreatorCard{&out})
 }
 
 // Submit — отправить на проверку: анкета заполнена полностью, лимит отправок за сутки не исчерпан.
@@ -96,6 +123,9 @@ func (s *Cards) Submit(ctx context.Context, u domain.User) (domain.CreatorCard, 
 	if !domain.CanTransition(cur.Status, domain.StatusPending, domain.ActorOwner) {
 		return domain.CreatorCard{}, ErrWrongStatus
 	}
+	if err := s.withPlatforms(ctx, []*domain.CreatorCard{&cur}); err != nil {
+		return domain.CreatorCard{}, err
+	}
 	if err := cardComplete(cur); err != nil {
 		return domain.CreatorCard{}, err
 	}
@@ -103,7 +133,10 @@ func (s *Cards) Submit(ctx context.Context, u domain.User) (domain.CreatorCard, 
 		return domain.CreatorCard{}, err
 	}
 	out, err := s.repo.SetCardStatus(ctx, domain.SubmitChain(s.Mode, domain.SubjectCard, u.ID, cur.Status, u.ID)...)
-	return out, conflictToStatus(err)
+	if err != nil {
+		return out, conflictToStatus(err)
+	}
+	return out, s.withPlatforms(ctx, []*domain.CreatorCard{&out})
 }
 
 // Withdraw — вернуть анкету в черновик: с проверки или снять с публикации (чтобы изменить).
@@ -116,7 +149,10 @@ func (s *Cards) Withdraw(ctx context.Context, u domain.User) (domain.CreatorCard
 		return domain.CreatorCard{}, ErrWrongStatus
 	}
 	out, err := s.repo.SetCardStatus(ctx, domain.StatusChange{Subject: domain.SubjectCard, SubjectID: u.ID, From: cur.Status, To: domain.StatusDraft, ActorID: u.ID})
-	return out, conflictToStatus(err)
+	if err != nil {
+		return out, conflictToStatus(err)
+	}
+	return out, s.withPlatforms(ctx, []*domain.CreatorCard{&out})
 }
 
 // CardPage — страница ленты анкет и курсор следующей (nil — дальше нет).
@@ -140,22 +176,30 @@ func (s *Cards) Feed(ctx context.Context, q FeedQuery) (CardPage, error) {
 		page.Cards = cs[:limit]
 		page.Next = cursorOf(page.Cards[limit-1].PublishedAt, page.Cards[limit-1].UserID)
 	}
-	return page, nil
+	ptrs := make([]*domain.CreatorCard, len(page.Cards))
+	for i := range page.Cards {
+		ptrs[i] = &page.Cards[i]
+	}
+	return page, s.withPlatforms(ctx, ptrs)
 }
 
 // Public — опубликованная анкета автора (страница анкеты); иначе domain.ErrNotFound.
 func (s *Cards) Public(ctx context.Context, userID int64) (domain.CreatorCard, error) {
-	return s.repo.PublishedCard(ctx, userID)
+	c, err := s.repo.PublishedCard(ctx, userID)
+	if err != nil {
+		return c, err
+	}
+	return c, s.withPlatforms(ctx, []*domain.CreatorCard{&c})
 }
 
-// shape — проверка формы: длины, темы (общие или свои, своих — до 3), площадки (ссылка, подписчики), блоки, фото.
+// shape — проверка формы: длины, темы (общие или свои, своих — до 3), блоки, фото. Соцсети — не из формы
+// (только подтверждённые, сервис Social).
 func (s *Cards) shape(ctx context.Context, userID int64, exists bool, in CardInput) (domain.CreatorCard, error) {
 	ve := &ValidationError{}
 	c := domain.CreatorCard{Name: squash(in.Name), City: squash(in.City)}
 	maxLen(ve, "name", c.Name, 80, "Имя — до 80 символов")
 	maxLen(ve, "city", c.City, 80, "Город — до 80 символов")
 	c.Topics = checkSlugs(ve, "topics", in.Topics, "тем", "Выберите темы из списка")
-	c.Platforms = checkPlatforms(ve, in.Platforms)
 	c.Blocks = checkBlocks(ve, in.Blocks)
 	var sid int64
 	if exists {
@@ -180,40 +224,7 @@ func (s *Cards) shape(ctx context.Context, userID int64, exists bool, in CardInp
 	return c, nil
 }
 
-// checkPlatforms — до 6 площадок: ссылка https://…, подписчики — число; вид — по домену; повторы убираются.
-// Пустая строка (ни ссылки, ни подписчиков) отбрасывается; ошибка — в "platforms.<номер во входном списке>".
-func checkPlatforms(ve *ValidationError, in []PlatformInput) []domain.Platform {
-	if len(in) > maxPlatforms {
-		ve.add("platforms", fmt.Sprintf("Не больше %d площадок", maxPlatforms))
-		return nil
-	}
-	out := make([]domain.Platform, 0, len(in))
-	seen := map[string]bool{}
-	for i, p := range in {
-		key := fmt.Sprintf("platforms.%d", i)
-		raw := squash(p.URL)
-		if raw == "" && p.Followers == 0 {
-			continue
-		}
-		link, ok := normURL(raw)
-		if !ok || utf8.RuneCountInString(link) > maxLink {
-			ve.add(key, "Ссылка на площадку — https://…")
-			continue
-		}
-		if p.Followers < 0 || p.Followers > maxCount {
-			ve.add(key, "Подписчики — число от 0 до 1 000 000 000")
-			continue
-		}
-		if seen[link] {
-			continue
-		}
-		seen[link] = true
-		out = append(out, domain.Platform{Kind: platformKind(link), URL: link, Followers: p.Followers})
-	}
-	return out
-}
-
-// cardComplete — к отправке только нужное бизнесу: имя, город, 1–5 тем, площадки с подписчиками.
+// cardComplete — к отправке только нужное бизнесу: имя, город, 1–5 тем, хотя бы одна подтверждённая соцсеть.
 // Блоки и фото — по желанию.
 func cardComplete(c domain.CreatorCard) error {
 	ve := &ValidationError{}
@@ -227,12 +238,7 @@ func cardComplete(c domain.CreatorCard) error {
 		ve.add("topics", "Выберите хотя бы одну тему")
 	}
 	if len(c.Platforms) == 0 {
-		ve.add("platforms", "Добавьте хотя бы одну площадку")
-	}
-	for i, p := range c.Platforms {
-		if p.Followers <= 0 {
-			ve.add(fmt.Sprintf("platforms.%d", i), "Укажите число подписчиков")
-		}
+		ve.add("platforms", "Подтвердите хотя бы одну соцсеть")
 	}
 	return ve.orNil()
 }

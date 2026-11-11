@@ -28,6 +28,7 @@ services:
       # все браузеры e2e — с одного адреса: лимиты на адрес шире (сами лимиты проверяют Go-тесты)
       TELEGRAM_LOGIN_PER_IP_HOUR: "1000"
       AUTH_CODE_PER_IP_HOUR: "1000"
+      SOCIAL_STARTS_PER_HOUR: "1000"
       RATE_LIMIT_RPS: "50"
       RATE_LIMIT_BURST: "200"
       RATE_LIMIT_API_RPS: "200"

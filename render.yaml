@@ -63,6 +63,17 @@ services:
         sync: false
       - key: GOOGLE_CLIENT_SECRET
         sync: false
+      # ----- подтверждение соцсетей (Telegram — бот выше; YouTube — ключи Google + область youtube.readonly) -----
+      - key: TOKEN_ENC_KEY # [ПЕРЕЕЗД] перенести тот же ключ, иначе токены YouTube не расшифровать; openssl rand -base64 32
+        generateValue: true
+      - key: TOKEN_ENC_KEY_OLD # только при смене ключа: прежний ключ (расшифровка)
+        sync: false
+      - key: YOUTUBE_CONNECT # on | off — кнопка «Подключить YouTube»
+        value: "on"
+      - key: SOCIAL_REFRESH_HOURS # обновление цифр соцсетей
+        value: "24"
+      - key: SOCIAL_STARTS_PER_HOUR # подключений на пользователя в час
+        value: "20"
       # ----- лимиты (по умолчанию — как в .env.example) -----
       - key: AUTH_CODE_TTL_MIN
         value: "10"

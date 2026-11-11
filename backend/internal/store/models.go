@@ -155,6 +155,63 @@ type Session struct {
 	LastSeenAt pgtype.Timestamptz
 }
 
+type SocialAccount struct {
+	ID              int64
+	UserID          int64
+	Platform        string
+	ExternalID      string
+	Kind            string
+	Handle          string
+	Title           string
+	Url             string
+	Status          string
+	Method          string
+	CredentialID    pgtype.Int8
+	Followers       pgtype.Int8
+	FollowersHidden bool
+	Views           pgtype.Int8
+	Videos          pgtype.Int8
+	Likes           pgtype.Int8
+	FailReason      string
+	Failures        int32
+	VerifiedAt      pgtype.Timestamptz
+	RefreshedAt     pgtype.Timestamptz
+	NextRefreshAt   pgtype.Timestamptz
+	CreatedAt       pgtype.Timestamptz
+	UpdatedAt       pgtype.Timestamptz
+}
+
+type SocialCredential struct {
+	ID               int64
+	UserID           int64
+	Platform         string
+	Subject          string
+	Secret           []byte
+	AccessExpiresAt  pgtype.Timestamptz
+	RefreshExpiresAt pgtype.Timestamptz
+	LockUntil        pgtype.Timestamptz
+	CreatedAt        pgtype.Timestamptz
+	UpdatedAt        pgtype.Timestamptz
+}
+
+type SocialOauthState struct {
+	StateHash []byte
+	UserID    int64
+	Platform  string
+	Verifier  []byte
+	CreatedAt pgtype.Timestamptz
+	ExpiresAt pgtype.Timestamptz
+}
+
+type SocialStatsHistory struct {
+	AccountID int64
+	At        pgtype.Timestamptz
+	Followers pgtype.Int8
+	Views     pgtype.Int8
+	Videos    pgtype.Int8
+	Likes     pgtype.Int8
+}
+
 type Task struct {
 	ID            int64
 	OwnerID       int64
@@ -178,6 +235,16 @@ type Task struct {
 	PublishTime   pgtype.Time
 	DeadlineAt    pgtype.Timestamptz
 	Categories    []string
+}
+
+type TelegramChannel struct {
+	ChatID    int64
+	Title     string
+	Username  string
+	ChatType  string
+	AddedBy   int64
+	BotStatus string
+	UpdatedAt pgtype.Timestamptz
 }
 
 type TelegramChat struct {

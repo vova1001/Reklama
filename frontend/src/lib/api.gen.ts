@@ -742,6 +742,114 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/me/social": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Соцсети автора — площадки, статусы, подтверждённые аккаунты
+         * @description Цифры (подписчики, просмотры, видео) — только из официальных API площадок, не со слов автора; в анкете
+         *     показываются только подтверждённые (`verified`). `available: false` — площадка ещё не подключена («Скоро»):
+         *     сейчас работают Telegram (бот-админ канала или группы) и YouTube (Google OAuth, `youtube.readonly`).
+         *     Цифры обновляются сами раз в `SOCIAL_REFRESH_HOURS` (±2 ч).
+         */
+        get: operations["getSocial"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/social/{platform}/start": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Подключить площадку
+         * @description OAuth (YouTube): адрес страницы разрешения площадки; state (одноразовый, 10 мин, с PKCE) — в httpOnly-cookie
+         *     `ohvat_social` на `/api/social`. Telegram: ссылка на бота `t.me/<бот>?start=ch_<токен>` (30 мин) — в боте
+         *     «Привязать», затем бота добавляют в канал или группу админом. Не больше `SOCIAL_STARTS_PER_HOUR` в час.
+         */
+        post: operations["startSocial"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/social/{platform}/callback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Возврат с площадки (OAuth)
+         * @description Сверка state (cookie = адрес), сессия того же автора, обмен кода, аккаунты с цифрами; токены — только
+         *     зашифрованно (AES-256-GCM, `TOKEN_ENC_KEY`). Итог — переход на `/app/card?social=<площадка>&result=<итог>#social`:
+         *     `ok`, `denied` (отказ автора или не выдана область), `state`, `no_channel`, `too_many`, `limit`, `disabled`,
+         *     `unavailable`, `error`. Без входа — на `/login`.
+         */
+        get: operations["socialCallback"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/social/accounts/{id}/refresh": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Проверить аккаунт ещё раз сейчас
+         * @description Не чаще раза в 10 минут у подтверждённого (429 `rate_limited`). Доступ потерян — `failed` с причиной.
+         */
+        post: operations["refreshSocial"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/social/accounts/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Отвязать аккаунт
+         * @description Последний аккаунт доступа OAuth — токен отзывается у площадки и удаляется.
+         */
+        delete: operations["unlinkSocial"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/media/{id}/{size}.webp": {
         parameters: {
             query?: never;
@@ -1124,28 +1232,77 @@ export interface components {
             /** @description Курсор следующей страницы */
             next: string | null;
         };
-        PlatformInput: {
-            /** @description https://… (http повышается) */
-            url: string;
-            /** Format: int64 */
-            followers: number;
-        };
+        /** @description Подтверждённая соцсеть в анкете — цифры только от площадки */
         Platform: {
+            kind: components["schemas"]["SocialPlatform"];
             /**
-             * @description По домену
+             * @description Telegram: канал или группа
              * @enum {string}
              */
-            kind: "telegram" | "youtube" | "vk" | "tiktok" | "instagram" | "dzen" | "rutube" | "other";
+            type: "profile" | "channel" | "group";
+            handle: string;
+            title: string;
+            /** @description https://… или пусто (закрытая группа) */
             url: string;
-            /** Format: int64 */
+            /**
+             * Format: int64
+             * @description Подписчики канала / участники группы
+             */
             followers: number;
+            /** @description Автор скрыл число (YouTube) */
+            followersHidden: boolean;
+            verified: boolean;
+            /**
+             * Format: date-time
+             * @description Когда цифры обновлены
+             */
+            refreshedAt: string | null;
+        };
+        /** @enum {string} */
+        SocialPlatform: "telegram" | "youtube" | "vk" | "tiktok" | "instagram" | "threads";
+        SocialAccount: {
+            /** Format: int64 */
+            id: number;
+            /** @enum {string} */
+            kind: "profile" | "channel" | "group";
+            handle: string;
+            title: string;
+            url: string;
+            /** @enum {string} */
+            status: "unverified" | "pending" | "verified" | "failed";
+            /** Format: int64 */
+            followers: number | null;
+            followersHidden: boolean;
+            /** Format: int64 */
+            views: number | null;
+            /** Format: int64 */
+            videos: number | null;
+            /** Format: int64 */
+            likes: number | null;
+            /** @description Почему доступ потерян (failed) */
+            failReason: string;
+            /** Format: date-time */
+            verifiedAt: string | null;
+            /** Format: date-time */
+            refreshedAt: string | null;
+        };
+        SocialOverview: {
+            platforms: {
+                platform: components["schemas"]["SocialPlatform"];
+                /** @description false — «Скоро» */
+                available: boolean;
+                /** @enum {string} */
+                method: "bot" | "oauth";
+                /** @enum {string} */
+                status: "unverified" | "pending" | "verified" | "failed";
+                accounts: components["schemas"]["SocialAccount"][];
+            }[];
         };
         CardInput: {
             name: string;
             city: string;
             /** @description slug; своих — до 3 */
             topics: string[];
-            platforms: components["schemas"]["PlatformInput"][];
             blocks: components["schemas"]["Block"][];
             /** @description id фото card_avatar или "" */
             avatar: string;
@@ -2635,6 +2792,143 @@ export interface operations {
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
+        };
+    };
+    getSocial: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Площадки по порядку показа */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SocialOverview"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    startSocial: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Значение из `GET /api/auth/config` (равно cookie `ohvat_csrf`) */
+                "X-CSRF-Token": components["parameters"]["CSRF"];
+            };
+            path: {
+                platform: components["schemas"]["SocialPlatform"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Куда перейти */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        url: string;
+                    };
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            429: components["responses"]["TooMany"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    socialCallback: {
+        parameters: {
+            query?: {
+                state?: string;
+                code?: string;
+                error?: string;
+            };
+            header?: never;
+            path: {
+                platform: components["schemas"]["SocialPlatform"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Переход в анкету с итогом */
+            303: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            404: components["responses"]["NotFound"];
+        };
+    };
+    refreshSocial: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Значение из `GET /api/auth/config` (равно cookie `ohvat_csrf`) */
+                "X-CSRF-Token": components["parameters"]["CSRF"];
+            };
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Аккаунт после проверки */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        account: components["schemas"]["SocialAccount"];
+                    };
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["TooMany"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    unlinkSocial: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Значение из `GET /api/auth/config` (равно cookie `ohvat_csrf`) */
+                "X-CSRF-Token": components["parameters"]["CSRF"];
+            };
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Отвязан */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
         };
     };
     getMedia: {

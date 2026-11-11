@@ -286,6 +286,13 @@ func (s *Server) fail(w http.ResponseWriter, r *http.Request, err error) {
 		writeError(w, http.StatusGone, "login_expired", "Ссылка для входа устарела. Нажмите «Войти через Telegram» ещё раз.")
 	case errors.Is(err, service.ErrBotLoginCancelled):
 		writeError(w, http.StatusGone, "login_cancelled", "Вход отменён в Telegram.")
+	case errors.Is(err, service.ErrSocialDisabled):
+		writeError(w, http.StatusServiceUnavailable, "social_disabled", "Подключение этой площадки появится скоро.")
+	case errors.Is(err, service.ErrSocialTooMany):
+		writeError(w, http.StatusConflict, "social_too_many", "Соцсетей слишком много. Отвяжите ненужные.")
+	case errors.Is(err, service.ErrSocialUnavailable):
+		w.Header().Set("Retry-After", "60")
+		writeJSON(w, http.StatusServiceUnavailable, errorDTO{Error: errorBody{Code: "social_unavailable", Message: "Площадка не ответила. Попробуйте через минуту — проверим и сами.", RetryAfter: 60}})
 	case isNotFound(err):
 		writeError(w, http.StatusNotFound, "not_found", "Не найдено. Обновите страницу.")
 	case errors.Is(err, service.ErrWrongStatus):
@@ -321,6 +328,10 @@ func limitMessage(reason string, sec int) string {
 		return fmt.Sprintf("Новый код можно запросить через %d с.", sec)
 	case "submits_daily":
 		return fmt.Sprintf("На сегодня отправок на проверку достаточно. Попробуйте через %s.", minutes(sec))
+	case "social_hourly":
+		return fmt.Sprintf("Подключений много. Попробуйте через %s.", minutes(sec))
+	case "social_refresh":
+		return fmt.Sprintf("Цифры только что обновлены. Проверить снова можно через %s.", minutes(sec))
 	case "email_hourly":
 		return fmt.Sprintf("На эту почту ушло много писем. Попробуйте через %s или войдите другим способом.", minutes(sec))
 	default:

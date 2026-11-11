@@ -246,14 +246,8 @@ func (r *Listings) SaveCard(ctx context.Context, c domain.CreatorCard) (domain.C
 	if err != nil {
 		return domain.CreatorCard{}, err
 	}
-	plats := make([]platformRow, 0, len(c.Platforms))
-	for _, p := range c.Platforms {
-		plats = append(plats, platformRow{Kind: p.Kind, URL: p.URL, Followers: p.Followers})
-	}
-	pj, err := json.Marshal(plats)
-	if err != nil {
-		return domain.CreatorCard{}, fmt.Errorf("площадки в JSON: %w", err)
-	}
+	// площадки анкеты больше не вводятся (только подтверждённые соцсети — social_accounts); колонка — пустая
+	pj := []byte("[]")
 	var row store.CreatorCard
 	err = r.inTx(ctx, func(q *store.Queries) error {
 		var err error
@@ -375,17 +369,11 @@ func (r *Listings) History(ctx context.Context, subject domain.Subject, id int64
 
 // ===== преобразования =====
 
-// blockRow, platformRow — вид в jsonb (теги JSON — только здесь, домен о хранении не знает).
+// blockRow — вид в jsonb (теги JSON — только здесь, домен о хранении не знает).
 type blockRow struct {
 	Kind  string   `json:"kind"`
 	Title string   `json:"title"`
 	Items []string `json:"items"`
-}
-
-type platformRow struct {
-	Kind      string `json:"kind"`
-	URL       string `json:"url"`
-	Followers int64  `json:"followers"`
 }
 
 func blocksJSON(bs []domain.Block) ([]byte, error) {
@@ -440,18 +428,11 @@ func cardOf(c store.CreatorCard) (domain.CreatorCard, error) {
 	if err != nil {
 		return domain.CreatorCard{}, err
 	}
-	var plats []platformRow
-	if err := json.Unmarshal(c.Platforms, &plats); err != nil {
-		return domain.CreatorCard{}, fmt.Errorf("площадки из JSON: %w", err)
-	}
 	out := domain.CreatorCard{
 		UserID: c.UserID, Status: domain.Status(c.Status), RejectReason: c.RejectReason, Name: c.Name, City: c.City,
-		Topics: nonNil(c.Topics), Platforms: make([]domain.Platform, 0, len(plats)), Blocks: blocks,
+		Topics: nonNil(c.Topics), Platforms: []domain.Platform{}, Blocks: blocks,
 		Avatar: c.Avatar.String, Works: nonNil(c.Works), CreatedAt: c.CreatedAt.Time, UpdatedAt: c.UpdatedAt.Time,
 		SubmittedAt: tsPtr(c.SubmittedAt), PublishedAt: tsPtr(c.PublishedAt),
-	}
-	for _, p := range plats {
-		out.Platforms = append(out.Platforms, domain.Platform{Kind: p.Kind, URL: p.URL, Followers: p.Followers})
 	}
 	return out, nil
 }

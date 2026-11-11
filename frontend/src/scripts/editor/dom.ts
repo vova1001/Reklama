@@ -20,8 +20,17 @@ import check from '../../icons/check.svg?raw';
 import left from '../../icons/arrow-left.svg?raw';
 import right from '../../icons/arrow-right.svg?raw';
 import clock from '../../icons/clock.svg?raw';
+import send from '../../icons/send.svg?raw';
+import youtube from '../../icons/youtube.svg?raw';
+import instagram from '../../icons/instagram.svg?raw';
+import atSign from '../../icons/at-sign.svg?raw';
+import refresh from '../../icons/refresh-cw.svg?raw';
+import badge from '../../icons/badge-check.svg?raw';
 
-const RAW = { grip, x, plus, trash, imagePlus, tag, alert, crop, list, text, link, wallet, eye, video, calendar, users, camera, check, left, right, clock };
+const RAW = {
+  grip, x, plus, trash, imagePlus, tag, alert, crop, list, text, link, wallet, eye, video, calendar, users, camera, check, left, right, clock,
+  send, youtube, instagram, atSign, refresh, badge,
+};
 export type IconName = keyof typeof RAW;
 
 /** Иконка Lucide (линия 1.5, как на сервере) строкой SVG. */
