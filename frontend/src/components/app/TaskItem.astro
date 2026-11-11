@@ -18,9 +18,9 @@ const where = t.nationwide ? 'Вся Россия' : t.city;
   {t.cover && <img class="it-cover" src={t.cover.src} srcset={`${t.cover.thumb} 320w, ${t.cover.src} 800w, ${t.cover.large} 1600w`} sizes="(min-width: 768px) 600px, 100vw" alt="" loading="lazy" decoding="async" width="800" height="450" />}
   <div class="facts">
     {t.rewardKopecks > 0 && <span><Icon name="wallet" size={18} /><b>{rub(t.rewardKopecks)}</b></span>}
-    {goal(t.minViews, t.minLikes) && <span><Icon name="eye" size={18} />{goal(t.minViews, t.minLikes)}</span>}
+    {goal(t.minViews) && <span><Icon name="eye" size={18} />{goal(t.minViews)}</span>}
     {t.formats.length > 0 && <span><Icon name="video" size={18} />{formatsTitle(t.formats)}</span>}
-    {t.publishBy && <span><Icon name="calendar" size={18} />{until(t.publishBy)}</span>}
+    {t.publishBy && <span><Icon name="calendar" size={18} />{until(t.publishBy, t.publishTime)}</span>}
   </div>
   {own && t.status === 'rejected' && t.rejectReason && <p class="it-reason">{t.rejectReason}</p>}
   <slot />

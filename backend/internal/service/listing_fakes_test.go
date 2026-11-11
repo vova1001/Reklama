@@ -96,7 +96,7 @@ func (m *memListings) DeleteTask(_ context.Context, owner, id int64) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	t, ok := m.tasks[id]
-	if !ok || t.OwnerID != owner || !t.Status.Editable() {
+	if !ok || t.OwnerID != owner || (!t.Status.Editable() && t.Status != domain.StatusExpired) {
 		return domain.ErrConflict
 	}
 	delete(m.tasks, id)
@@ -149,6 +149,20 @@ func (m *memListings) PublishedTasks(_ context.Context, f domain.FeedFilter, aft
 		out = out[:limit]
 	}
 	return out, nil
+}
+
+func (m *memListings) ExpireTasks(_ context.Context, now time.Time) ([]int64, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	var ids []int64
+	for _, t := range m.tasks {
+		if t.Status == domain.StatusPublished && t.DeadlineAt != nil && !t.DeadlineAt.After(now) {
+			t.Status = domain.StatusExpired
+			m.log = append(m.log, domain.StatusChange{Subject: domain.SubjectTask, SubjectID: t.ID, From: domain.StatusPublished, To: domain.StatusExpired, Auto: true, At: now})
+			ids = append(ids, t.ID)
+		}
+	}
+	return ids, nil
 }
 
 func (m *memListings) PublishedTask(_ context.Context, id int64) (domain.Task, error) {

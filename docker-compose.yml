@@ -18,6 +18,17 @@ services:
       retries: 20
     restart: unless-stopped
 
+  # Redis: общие лимиты и черновики форм редактора (без него — в памяти и PostgreSQL)
+  redis:
+    image: ${REGISTRY:-docker.io/library}/redis:7-alpine
+    command: ["redis-server", "--maxmemory", "64mb", "--maxmemory-policy", "volatile-lru"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
   backend:
     build:
       context: ./backend
@@ -61,11 +72,14 @@ services:
       RATE_LIMIT_USER_BURST: ${RATE_LIMIT_USER_BURST:-}
       TELEGRAM_WEBHOOK_RPS: ${TELEGRAM_WEBHOOK_RPS:-}
       TELEGRAM_WEBHOOK_BURST: ${TELEGRAM_WEBHOOK_BURST:-}
-      REDIS_URL: ${REDIS_URL:-}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
       MAIL_WORKERS: ${MAIL_WORKERS:-}
       TASKS_MAX_PER_USER: ${TASKS_MAX_PER_USER:-}
       MODERATION_SUBMITS_PER_DAY: ${MODERATION_SUBMITS_PER_DAY:-}
       MODERATION_MODE: ${MODERATION_MODE:-}
+      DRAFT_MAX_KB: ${DRAFT_MAX_KB:-}
+      RATE_LIMIT_DRAFT_RPS: ${RATE_LIMIT_DRAFT_RPS:-}
+      RATE_LIMIT_DRAFT_BURST: ${RATE_LIMIT_DRAFT_BURST:-}
       MEDIA_STORE: ${MEDIA_STORE:-}
       STORAGE_ENDPOINT: ${STORAGE_ENDPOINT:-}
       STORAGE_BUCKET: ${STORAGE_BUCKET:-}
@@ -80,6 +94,8 @@ services:
       RATE_LIMIT_UPLOAD_BURST: ${RATE_LIMIT_UPLOAD_BURST:-}
     depends_on:
       db:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     restart: unless-stopped
 

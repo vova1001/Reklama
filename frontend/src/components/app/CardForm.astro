@@ -15,6 +15,7 @@ const init = {
   // из профиля — только темы, которые есть в списке (иначе их не снять и анкета не сохранится)
   selected: (c ? c.topics : profile?.spheres ?? []).filter((s) => known.has(s)),
   categories, platforms: c ? c.platforms.map((p) => ({ url: p.url, followers: p.followers })) : fromProfile, brand: '',
+  uid: user.id, updatedAt: c?.updatedAt ?? null,
 };
 const json = JSON.stringify(init).replace(/</g, '\\u003c');
 const name = c?.name || profile?.name || user.name;
@@ -24,7 +25,7 @@ const city = c?.city || profile?.city || user.city;
   <script type="application/json" data-init set:html={json} />
   <EditorBar close="/app" state={c ? 'Черновик' : 'Сохранится само'} />
 
-  <main id="main" class="ed-col" tabindex="-1">
+  <div class="ed-col">
     {c?.status === 'rejected' && <p class="banner is-err" role="note"><Icon name="circle-alert" size={20} /><span><b>Отклонено.</b> {c.rejectReason}</span></p>}
 
     <div data-pane="edit">
@@ -70,6 +71,6 @@ const city = c?.city || profile?.city || user.city;
     </div>
 
     <div data-pane="preview" hidden><div class="pv" data-preview></div></div>
-  </main>
+  </div>
 </form>
 <script src="../../scripts/editor.ts"></script>

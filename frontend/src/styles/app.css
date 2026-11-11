@@ -170,6 +170,7 @@ html:has(body.app-body) { background: var(--color-card); scroll-padding: 72px 0 
 .col > * { max-width: 600px; margin-inline: auto; }
 .col.is-wide > * { max-width: 640px; }
 .col.is-grid > * { max-width: 1040px; }
+.col.is-ed > * { max-width: 760px; }
 .col:focus { outline: none; }
 @media (min-width: 768px) { .col { margin-left: var(--rail); padding: 32px 32px 96px; } }
 
@@ -480,10 +481,9 @@ html:has(body.app-body) { background: var(--color-card); scroll-padding: 72px 0 
 .bks, .bis, .plats, .form, .body { grid-template-columns: minmax(0, 1fr); }
 .bk, .bi, .plat-w { min-width: 0; }
 
-/* ===== редактор на весь экран: тонкая панель сверху, широкая колонка по центру ===== */
-.ed-app { min-height: 100svh; }
+/* ===== редактор: тонкая панель формы над колонкой (навигация приложения остаётся) ===== */
 .ebar {
-  position: sticky; top: 0; z-index: 40; background: rgba(255, 255, 255, 0.94);
+  position: sticky; top: 56px; z-index: 30; margin: -20px -16px 0; background: rgba(255, 255, 255, 0.94);
   -webkit-backdrop-filter: saturate(180%) blur(14px); backdrop-filter: saturate(180%) blur(14px); box-shadow: 0 1px 0 var(--color-line);
 }
 .ebar-in {
@@ -500,15 +500,15 @@ html:has(body.app-body) { background: var(--color-card); scroll-padding: 72px 0 
 .ebar-left button { color: var(--color-ink); font-weight: 550; text-decoration: underline; text-decoration-color: var(--color-line-strong); text-underline-offset: 3px; cursor: pointer; border-radius: 4px; }
 @media (hover: hover) { .ebar-left button:hover { color: var(--color-error); text-decoration-color: currentColor; } }
 @media (min-width: 768px) {
-  .ebar-in { grid-template-columns: auto minmax(0, 1fr) auto minmax(0, 1fr) auto; grid-template-areas: 'x state tabs left go'; padding: 8px 20px; min-height: 60px; }
+  .ebar-in { grid-template-columns: auto auto minmax(0, 1fr) auto auto; grid-template-areas: 'x tabs state left go'; padding: 8px 20px; min-height: 60px; }
+  .ebar-left { max-width: 340px; }
   .ebar-in:has(.ebar-left:not([hidden])) .ed-state { display: block; }
   .ebar .ed-state { grid-area: state; }
   .ebar-left { grid-area: left; justify-self: end; text-align: right; }
 }
 @media (max-width: 479px) { .ebar .ed-tabs span { display: none; } .ebar .ed-tabs button { padding: 0 10px; } }
-.ed-col { display: block; max-width: 720px; margin: 0 auto; padding: 8px 16px calc(64px + env(safe-area-inset-bottom)); }
-.ed-col:focus { outline: none; }
-@media (min-width: 768px) { .ed-col { padding: 24px 32px 96px; } }
+.ed-col { display: block; padding: 8px 0 24px; }
+@media (min-width: 768px) { .ebar { top: 0; margin: -32px -32px 0; } .ed-col { padding-top: 20px; } }
 .ed-col .banner { margin: 16px 0 0; }
 .ed .ed-cover { padding-top: 16px; border-top: 0; }
 .ed .ed-name { padding-top: 12px; border-top: 0; }
@@ -602,4 +602,9 @@ html:has(body.app-body) { background: var(--color-card); scroll-padding: 72px 0 
 @media (min-width: 768px) { .cta { bottom: 0; } }
 @media (max-width: 559px) { .cta .btn { flex: 1; } }
 .back-lnk { margin-bottom: 4px; }
-.app.ed-app { --rail: 0px; }
+
+/* срок: дата и время рядом */
+.due { display: grid; grid-template-columns: minmax(0, 1fr) 128px; gap: 8px; max-width: 420px; }
+/* панель редактора — постоянной высоты: «Осталось…» одной строкой (иначе при смене текста поля под ней сдвигаются) */
+.ebar-left { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.ebar .ed-state, .ebar-left { min-height: 20px; line-height: 20px; }

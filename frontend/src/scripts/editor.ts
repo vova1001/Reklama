@@ -1,5 +1,6 @@
-// Редактор задания (бизнес) и анкеты автора на весь экран: черновик сохраняется сам (через ~1 с после правки; при
-// уходе — предупреждение, если не успел). Проверка удобная: ошибка у поля — сразу после ухода с него; «Опубликовать»
+// Редактор задания (бизнес) и анкеты автора: черновик формы сохраняется при каждой правке — сразу на устройство,
+// через ~800 мс на сервер (scripts/editor/drafts.ts); при открытии восстанавливается самое свежее (поля, блоки, порядок,
+// выбранное, фото). Задание/анкета на сервере сохраняются тогда же, если поля уже проходят проверку. Проверка удобная: ошибка у поля — сразу после ухода с него; «Опубликовать»
 // нажимается всегда — если что-то не заполнено, прокручиваем к первому и подсвечиваем; у кнопки — «Осталось: …»
 // (каждое слово ведёт к полю). Тексты ошибок — те же, что у сервера (content/app.ts). Предпросмотр — как увидят.
 import type { components } from '../lib/api.gen';
@@ -11,6 +12,7 @@ import { BlocksEditor, type Block } from './editor/blocks';
 import { CategoryPicker } from './editor/category';
 import { appear, h, ic, vanish } from './editor/dom';
 import { Uploader, type Photo } from './editor/uploader';
+import { DraftSync } from './editor/drafts';
 
 type Task = components['schemas']['Task'];
 type Card = components['schemas']['Card'];
@@ -29,15 +31,81 @@ interface Init {
   categories: { common: Item[]; own: Item[] };
   platforms: { url: string; followers: number }[];
   brand: string;
+  uid: number;
+  updatedAt: string | null;
+}
+
+/** Состояние формы для черновика: как есть, включая то, что ещё не проходит проверку. */
+interface Snap {
+  v: 1;
+  fields: Record<string, string>;
+  nationwide: boolean;
+  formats: string[];
+  access: string;
+  selected: string[];
+  platforms: { url: string; followers: number }[];
+  blocks: Block[];
+  cover: Photo[];
+  photos: Photo[];
 }
 
 const form = $<HTMLFormElement>('[data-editor]');
-if (form) start(form);
+if (form) void start(form);
 
-function start(form: HTMLFormElement) {
+const strs = (v: unknown): string[] => (Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : []);
+const isPhoto = (p: unknown): p is Photo =>
+  !!p && typeof p === 'object' && ['id', 'thumb', 'src', 'large'].every((k) => typeof (p as Record<string, unknown>)[k] === 'string') &&
+  ['thumb', 'src', 'large'].every((k) => (p as Record<string, string>)[k].startsWith('/media/'));
+
+/** Восстановить состояние формы из черновика: поля — в DOM, остальное — в начальные данные частей формы. */
+function restore(form: HTMLFormElement, init: Init, d: Partial<Snap>) {
+  const known = new Set([...init.categories.common, ...init.categories.own].map((c) => c.slug));
+  for (const [k, v] of Object.entries(d.fields ?? {})) {
+    const el = $<HTMLInputElement>(`[data-pane="edit"] input[name="${CSS.escape(k)}"]`, form);
+    if (el && typeof v === 'string') el.value = v.slice(0, el.maxLength > 0 ? el.maxLength : 1000);
+  }
+  const nation = $('[data-nationwide]', form);
+  if (nation && typeof d.nationwide === 'boolean') nation.setAttribute('aria-checked', String(d.nationwide));
+  if (d.formats) {
+    const f = new Set(strs(d.formats));
+    $$('[data-format]', form).forEach((b) => b.setAttribute('aria-pressed', String(f.has(b.dataset.format!))));
+  }
+  if (typeof d.access === 'string' && d.access) {
+    $$<HTMLButtonElement>('[data-access] [role="radio"]', form).forEach((b) => {
+      b.setAttribute('aria-checked', String(b.dataset.v === d.access));
+      b.tabIndex = b.dataset.v === d.access ? 0 : -1;
+    });
+  }
+  if (d.selected) init.selected = strs(d.selected).filter((x) => known.has(x));
+  if (Array.isArray(d.platforms)) {
+    init.platforms = d.platforms
+      .filter((p) => p && typeof p.url === 'string' && typeof p.followers === 'number')
+      .slice(0, 6)
+      .map((p) => ({ url: p.url.slice(0, 300), followers: Math.max(0, Math.floor(p.followers)) }));
+  }
+  if (Array.isArray(d.blocks)) {
+    init.blocks = d.blocks
+      .filter((b) => b && ['text', 'list', 'links'].includes(b.kind) && typeof b.title === 'string')
+      .slice(0, 8)
+      .map((b) => ({ kind: b.kind, title: b.title.slice(0, 60), items: strs(b.items).slice(0, 15) }));
+  }
+  if (Array.isArray(d.cover)) init.cover = d.cover.filter(isPhoto).slice(0, 1);
+  if (Array.isArray(d.photos)) init.photos = d.photos.filter(isPhoto).slice(0, 9);
+}
+
+async function start(form: HTMLFormElement) {
   const init = JSON.parse($('[data-init]', form)!.textContent!) as Init;
   const isTask = init.kind === 'task';
   let id = init.id;
+  const stateEl0 = $('[data-state]', form)!;
+  const sync = new DraftSync<Snap>(init.uid, isTask ? (id === null ? 'task-new' : `task-${id}`) : 'card', (_, text) => (stateEl0.textContent = text));
+  // черновик формы пишется при каждой правке раньше задания/анкеты, поэтому он не старше их — восстановить
+  // (обновили страницу до сохранения, пропала связь, поля ещё не проходят проверку); после отправки он удаляется
+  form.inert = true; // пока восстанавливаем — ввод не потеряется (обычно доли секунды)
+  const draft = await sync.load().finally(() => (form.inert = false));
+  const restored = !!draft;
+  if (restored) restore(form, init, draft!.data);
+  if (draft) stateEl0.textContent = 'Сохранено · только что';
   let dirty = false;
   let saving: Promise<boolean> | null = null;
   let again = false;
@@ -49,12 +117,14 @@ function start(form: HTMLFormElement) {
   const RULES = isTask ? TASK_RULES : CARD_RULES;
   const touched = new Set<string>(); // поля, с которых ушли (или все — после «Опубликовать»)
   let tried = false;
+  let ready = false;
 
   const changed = () => {
+    if (!ready) return;
     dirty = true;
-    stateEl.textContent = 'Изменено';
+    sync.touch(snapshot());
     clearTimeout(timer);
-    timer = window.setTimeout(() => void save(), 1000);
+    timer = window.setTimeout(() => void save(), 800);
     check();
   };
 
@@ -141,6 +211,13 @@ function start(form: HTMLFormElement) {
       changed();
     }),
   );
+  // время срока (по желанию): ЧЧ:ММ, двоеточие ставится само
+  const dueTime = $<HTMLInputElement>('[name="publishTime"]', form);
+  dueTime?.addEventListener('input', () => {
+    const d = dueTime.value.replace(/\D/g, '').slice(0, 4);
+    dueTime.value = d.length > 2 ? `${d.slice(0, 2)}:${d.slice(2)}` : d;
+  });
+  const timeOk = () => !dueTime?.value || /^([01]\d|2[0-3]):[0-5]\d$/.test(dueTime.value);
   const isoDue = () => {
     const m = due?.value.match(/^(\d{2})\.(\d{2})\.(\d{4})$/);
     return m ? `${m[3]}-${m[2]}-${m[1]}` : '';
@@ -206,12 +283,22 @@ function start(form: HTMLFormElement) {
     if (t.matches('.inp, [name]') && !t.closest('[data-blocks], .cb')) changed();
   });
   // ушли с поля — показать его ошибку (поле — ближайший [data-sec])
+  // Ушли нажатием мыши или пальца — ошибку показываем после отпускания: иначе текст ошибки сдвигает страницу
+  // между нажатием и отпусканием, и нажатие (например, на формат) теряется.
+  let pressing = false;
+  document.addEventListener('pointerdown', () => (pressing = true), true);
+  const release = () => {
+    if (!pressing) return;
+    pressing = false;
+    setTimeout(check, 0);
+  };
+  document.addEventListener('pointerup', release, true);
+  document.addEventListener('pointercancel', release, true);
   form.addEventListener('focusout', (e) => {
     const sec = (e.target as HTMLElement).closest<HTMLElement>('[data-sec]');
     if (!sec || sec.contains(e.relatedTarget as Node)) return;
     touched.add(sec.dataset.sec!);
-    if (sec.dataset.sec === 'minViews') touched.add('minViews');
-    check();
+    if (!pressing) check();
   });
   form.addEventListener('submit', (e) => e.preventDefault());
 
@@ -223,14 +310,26 @@ function start(form: HTMLFormElement) {
           nationwide: nation?.getAttribute('aria-checked') === 'true', category: picker.value()[0] ?? '',
           formats: $$<HTMLButtonElement>('[data-format][aria-pressed="true"]', form).map((b) => b.dataset.format!),
           access: $<HTMLButtonElement>('[data-access] [aria-checked="true"]', form)?.dataset.v ?? 'open',
-          minViews: parseNum(val('minViews')), minLikes: parseNum(val('minLikes')),
-          rewardKopecks: parseNum(val('reward')) * 100, publishBy: isoDue(), blocks: blocks.value(),
+          minViews: parseNum(val('minViews')),
+          rewardKopecks: parseNum(val('reward')) * 100, publishBy: isoDue(), publishTime: timeOk() ? val('publishTime') : '', blocks: blocks.value(),
           cover: cover.value()[0] ?? '', photos: photos.value(),
         }
       : {
           name: val('name'), city: val('city'), topics: picker.value(), platforms: platValue().filter((p) => p.url || p.followers),
           blocks: blocks.value(), avatar: cover.value()[0] ?? '', works: photos.value(),
         };
+
+  /** Состояние формы целиком — для черновика. */
+  function snapshot(): Snap {
+    const fields: Record<string, string> = {};
+    $$<HTMLInputElement>('[data-pane="edit"] input[name]', form).forEach((i) => (fields[i.name] = i.value));
+    return {
+      v: 1, fields, nationwide: nation?.getAttribute('aria-checked') === 'true',
+      formats: $$<HTMLButtonElement>('[data-format][aria-pressed="true"]', form).map((b) => b.dataset.format!),
+      access: $<HTMLButtonElement>('[data-access] [aria-checked="true"]', form)?.dataset.v ?? '',
+      selected: picker.value(), platforms: platValue(), blocks: blocks.value(), cover: cover.photos(), photos: photos.photos(),
+    };
+  }
 
   /** Что ещё нужно для публикации (как на сервере): поле → текст ошибки. Порядок — как поля на экране. */
   const problems = (): Map<string, string> => {
@@ -244,11 +343,12 @@ function start(form: HTMLFormElement) {
       if (!p.category) out.set('category', r('category'));
       if (!p.nationwide && (p.city as string).length < 2) out.set('city', r('city'));
       if (!(p.formats as string[]).length) out.set('formats', r('formats'));
-      if (!p.minViews && !p.minLikes) out.set('minViews', r('minViews'));
+      if (!p.minViews) out.set('minViews', r('minViews'));
       if ((p.rewardKopecks as number) < 10000) out.set('reward', r('reward'));
       const d = p.publishBy as string;
       if (!d) out.set('publishBy', due?.value ? 'Дата в формате ДД.ММ.ГГГГ' : r('publishBy'));
-      else if (d <= isoDay(0) || d > isoDay(180)) out.set('publishBy', DUE_RANGE);
+      else if (d <= isoDay(0) || d > isoDay(90)) out.set('publishBy', DUE_RANGE);
+      else if (!timeOk()) out.set('publishBy', 'Время в формате ЧЧ:ММ');
       if (!hasBlocks) out.set('blocks', r('blocks'));
     } else {
       if ((p.name as string).length < 2) out.set('name', r('name'));
@@ -354,7 +454,6 @@ function start(form: HTMLFormElement) {
     }
     if (!dirty && id !== null) return true;
     dirty = false;
-    stateEl.textContent = 'Сохраняю…';
     const body = payload();
     saving = (async () => {
       const r = isTask
@@ -369,11 +468,9 @@ function start(form: HTMLFormElement) {
           return false;
         }
         if (r.status === 0) {
-          stateEl.textContent = 'Нет связи — сохраню позже';
           timer = window.setTimeout(() => void save(), 5000);
           return false;
         }
-        stateEl.textContent = 'Не сохранено — проверьте поля';
         clearErrs(form);
         showErrors(r.error);
         return false;
@@ -382,12 +479,11 @@ function start(form: HTMLFormElement) {
         id = (r.data as Task).id;
         history.replaceState(null, '', `/app/tasks/${id}`);
         $('[data-delete-wrap]', form)?.removeAttribute('hidden');
+        void sync.rename(`task-${id}`);
       }
       clearErrs(form);
       blocks.showErrors({});
       check();
-      const t = new Date();
-      stateEl.textContent = `Черновик сохранён · ${String(t.getHours()).padStart(2, '0')}:${String(t.getMinutes()).padStart(2, '0')}`;
       return true;
     })();
     const ok = await saving;
@@ -399,11 +495,13 @@ function start(form: HTMLFormElement) {
     return ok;
   }
 
+  // уходим — черновик уже на устройстве; отправить на сервер, что успеем. Предупреждаем только о незагруженных фото.
+  window.addEventListener('pagehide', () => {
+    void sync.flush();
+    if (dirty) void save();
+  });
   window.addEventListener('beforeunload', (e) => {
-    if (dirty || saving || cover.busy() || photos.busy()) {
-      void save();
-      e.preventDefault();
-    }
+    if (cover.busy() || photos.busy()) e.preventDefault();
   });
 
   // ===== опубликовать =====
@@ -429,6 +527,7 @@ function start(form: HTMLFormElement) {
       return toast(r.error.message);
     }
     dirty = false;
+    await sync.clear();
     location.assign(isTask ? `/app/tasks/${id}?sent=1` : '/app/card?sent=1');
   });
 
@@ -437,10 +536,10 @@ function start(form: HTMLFormElement) {
     if (!dirty && !saving) return;
     e.preventDefault();
     const href = (e.currentTarget as HTMLAnchorElement).href;
-    if (await save()) {
-      dirty = false;
-      location.assign(href);
-    }
+    await sync.flush(); // введённое — в черновике, даже если задание ещё не проходит проверку
+    await save();
+    dirty = false;
+    location.assign(href);
   });
 
   $('[data-delete]', form)?.addEventListener('click', async (e) => {
@@ -452,6 +551,7 @@ function start(form: HTMLFormElement) {
       const r = await api<void>('DELETE', `/api/me/tasks/${id}`);
       if (!r.ok && !guard(r.status)) return toast(r.error.message);
     }
+    await sync.clear();
     location.assign('/app/tasks');
   });
 
@@ -504,7 +604,7 @@ function start(form: HTMLFormElement) {
   };
 
   function taskPreview() {
-    const t = payload() as unknown as { title: string; city: string; nationwide: boolean; formats: string[]; minViews: number; minLikes: number; rewardKopecks: number; publishBy: string; blocks: Block[] };
+    const t = payload() as unknown as { title: string; city: string; nationwide: boolean; formats: string[]; minViews: number; rewardKopecks: number; publishBy: string; publishTime: string; blocks: Block[] };
     const where = t.nationwide ? 'Вся Россия' : t.city;
     const meta = [where, picker.titles()[0]].filter(Boolean).join(' · ');
     const it = h('article', { class: 'it pv-it' }, h('div', { class: 'it-meta' }, h('span', {}, init.brand ? h('b', {}, init.brand) : null, init.brand && meta ? ' · ' : '', meta)), h('h2', { class: 'it-t' }, t.title || 'Название задания'));
@@ -513,10 +613,10 @@ function start(form: HTMLFormElement) {
     const facts = h('div', { class: 'facts' });
     const fact = (icon: Parameters<typeof ic>[0], strong: string | null, text: string) => facts.append(h('span', { html: ic(icon, 18) }, strong ? h('b', {}, strong) : null, text));
     if (t.rewardKopecks) fact('wallet', rub(t.rewardKopecks), '');
-    const g = goal(t.minViews, t.minLikes);
+    const g = goal(t.minViews);
     if (g) fact('eye', null, g);
     if (t.formats.length) fact('video', null, formatsTitle(t.formats));
-    if (t.publishBy) fact('calendar', null, until(t.publishBy));
+    if (t.publishBy) fact('calendar', null, until(t.publishBy, t.publishTime));
     it.append(facts, bodyOf(t.blocks, photos.photos()));
     return it;
   }
@@ -542,7 +642,10 @@ function start(form: HTMLFormElement) {
   }
 
   check();
-  if (init.id === null && isTask) $<HTMLInputElement>('[name="title"]', form)?.focus({ preventScroll: true });
+  ready = true;
+  form.dataset.ready = '1';
+  if (restored) changed(); // восстановленное — сохранить и в задание/анкету (если проходит проверку)
+  if (init.id === null && isTask && !restored) $<HTMLInputElement>('[name="title"]', form)?.focus({ preventScroll: true });
 }
 
 /** Дата через n дней по местному времени, ГГГГ-ММ-ДД. */

@@ -1,21 +1,13 @@
 ---
-// Редактор на весь экран (создание и правка задания, анкета): без навигации приложения — сверху тонкая панель
-// формы (✕, «Правка / Как увидят», сохранение, «Опубликовать»), по центру — одна широкая колонка.
-import Base from './Base.astro';
-import Overlays from '../components/app/Overlays.astro';
+// Редактор задания и анкеты: та же оболочка приложения (навигация слева, на телефоне — снизу), над колонкой —
+// тонкая панель формы (✕, «Правка / Как увидят», сохранение, «Осталось…», «Опубликовать»), колонка шире обычной.
+import App from './App.astro';
+import type { Page } from '../content/app';
 import type { Mode } from '../lib/auth';
-import '../styles/auth.css';
-import '../styles/app.css';
 
-interface Props { title: string; only: Mode }
-const { title, only } = Astro.props;
-const me = Astro.locals.me!;
-Astro.response.headers.set('Cache-Control', 'private, no-store');
+interface Props { title: string; page: Page; only: Mode }
+const { title, page, only } = Astro.props;
 ---
-<Base title={`${title} — Охват`} description="Редактор Охвата." noindex theme="#FFFFFF" bodyClass="app-body">
-  <div class="app ed-app" data-app data-mode={me.user.mode} data-page="editor" data-page-mode={only}>
-    <a class="skip" href="#main">К содержимому</a>
-    <slot />
-    <Overlays />
-  </div>
-</Base>
+<App title={title} page={page} only={only} wide="editor">
+  <slot />
+</App>

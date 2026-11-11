@@ -168,7 +168,7 @@ func TestTaskShape(t *testing.T) {
 		{"формат", func(in *TaskInput) { in.Formats = []string{"reels", "gif"} }, "formats"},
 		{"тип", func(in *TaskInput) { in.Access = "vip" }, "access"},
 		{"просмотры", func(in *TaskInput) { in.MinViews = -1 }, "minViews"},
-		{"лайки", func(in *TaskInput) { in.MinLikes = 2e9 }, "minLikes"},
+		{"время срока", func(in *TaskInput) { in.PublishTime = "25:00" }, "publishTime"},
 		{"оплата", func(in *TaskInput) { in.RewardKopecks = 2e8 }, "reward"},
 		{"дата", func(in *TaskInput) { in.PublishBy = "20.11.2026" }, "publishBy"},
 		{"сфера не slug", func(in *TaskInput) { in.Category = "Еда" }, "category"},
@@ -224,7 +224,7 @@ func TestTaskShape(t *testing.T) {
 func TestTaskDeadline(t *testing.T) {
 	e := newListingEnv(ListingLimits{})
 	ctx := context.Background()
-	for date, ok := range map[string]bool{"2026-11-10": false, "2026-11-11": true, "2027-05-09": true, "2027-05-10": false} {
+	for date, ok := range map[string]bool{"2026-11-10": false, "2026-11-11": true, "2027-02-08": true, "2027-02-09": false} {
 		in := fullTask()
 		in.PublishBy = date
 		d, err := e.tasks.Create(ctx, biz, in)

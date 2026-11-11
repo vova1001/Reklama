@@ -10,20 +10,19 @@ const { task: t, categories, brand } = Astro.props;
 const init = {
   kind: 'task', id: t?.id ?? null, status: t?.status ?? 'draft', blocks: t ? t.blocks : TASK_BLOCKS, templates: TASK_TEMPLATES,
   cover: t?.cover ? [t.cover] : [], photos: t?.photos ?? [], selected: t?.category ? [t.category] : [],
-  categories, platforms: [], brand,
+  categories, platforms: [], brand, uid: Astro.locals.me!.user.id, updatedAt: t?.updatedAt ?? null,
 };
 const json = JSON.stringify(init).replace(/</g, '\\u003c');
 const due = t?.publishBy ? t.publishBy.split('-').reverse().join('.') : '';
 const rub = t && t.rewardKopecks ? String(Math.round(t.rewardKopecks / 100)) : '';
 const views = t && t.minViews ? String(t.minViews) : '';
-const likes = t && t.minLikes ? String(t.minLikes) : '';
 const access = t?.access ?? 'open';
 ---
 <form class="ed" novalidate autocomplete="off" data-editor="task">
   <script type="application/json" data-init set:html={json} />
   <EditorBar close="/app/tasks" state={t ? 'Черновик' : 'Сохранится само'} />
 
-  <main id="main" class="ed-col" tabindex="-1">
+  <div class="ed-col">
     {t?.status === 'rejected' && <p class="banner is-err" role="note"><Icon name="circle-alert" size={20} /><span><b>Отклонено.</b> {t.rejectReason}</span></p>}
 
     <div data-pane="edit">
@@ -68,38 +67,32 @@ const access = t?.access ?? 'open';
         </div>
       </div>
 
-      <div class="sec" data-sec="minViews">
-        <div class="row2">
-          <div class="field">
-            <label class="lbl" for="t-views">Просмотры от</label>
-            <div class="ifx"><Icon name="eye" size={18} /><input class="inp" id="t-views" name="minViews" inputmode="numeric" maxlength="13" value={views} placeholder="5 000" data-num data-input="minViews" /></div>
-          </div>
-          <div class="field">
-            <label class="lbl" for="t-likes">Лайки от</label>
-            <div class="ifx"><Icon name="heart" size={18} /><input class="inp" id="t-likes" name="minLikes" inputmode="numeric" maxlength="13" value={likes} placeholder="300" data-num data-input="minLikes" /></div>
-          </div>
-        </div>
-        <p class="ferr" data-err="minViews"></p>
-        <p class="ferr" data-err="minLikes"></p>
-      </div>
-
       <div class="sec row2">
+        <div class="field" data-sec="minViews">
+          <label class="lbl" for="t-views">Просмотры от</label>
+          <div class="ifx"><Icon name="eye" size={18} /><input class="inp" id="t-views" name="minViews" inputmode="numeric" maxlength="13" value={views} placeholder="5 000" data-num data-input="minViews" /></div>
+          <p class="ferr" data-err="minViews"></p>
+        </div>
         <div class="field" data-sec="reward">
           <label class="lbl" for="t-reward">Оплата</label>
           <div class="ifx sfx"><Icon name="wallet" size={18} /><input class="inp" id="t-reward" name="reward" inputmode="numeric" maxlength="9" value={rub} placeholder="3 000" data-num data-input="reward" /><span class="sfx-t">₽</span></div>
           <p class="ferr" data-err="reward"></p>
         </div>
-        <div class="field" data-sec="publishBy">
-          <label class="lbl" for="t-due">Срок</label>
+      </div>
+
+      <div class="sec field" data-sec="publishBy">
+        <label class="lbl" for="t-due">Срок публикации <span class="hint">· время — по желанию</span></label>
+        <div class="due">
           <div class="ifx"><Icon name="calendar" size={18} /><input class="inp" id="t-due" name="publishBy" inputmode="numeric" maxlength="10" value={due} placeholder="дд.мм.гггг" data-input="publishBy" /></div>
-          <div class="quick" role="group" aria-label="Быстро">
-            <button type="button" class="chip sm" data-days="3">3 дня</button>
-            <button type="button" class="chip sm" data-days="7">Неделя</button>
-            <button type="button" class="chip sm" data-days="14">2 недели</button>
-            <button type="button" class="chip sm" data-days="30">Месяц</button>
-          </div>
-          <p class="ferr" data-err="publishBy"></p>
+          <div class="ifx due-t"><Icon name="clock" size={18} /><input class="inp" id="t-time" name="publishTime" inputmode="numeric" maxlength="5" value={t?.publishTime ?? ''} placeholder="чч:мм" aria-label="Время (по Москве)" /></div>
         </div>
+        <div class="quick" role="group" aria-label="Быстро">
+          <button type="button" class="chip sm" data-days="3">3 дня</button>
+          <button type="button" class="chip sm" data-days="7">Неделя</button>
+          <button type="button" class="chip sm" data-days="14">2 недели</button>
+          <button type="button" class="chip sm" data-days="30">Месяц</button>
+        </div>
+        <p class="ferr" data-err="publishBy"></p>
       </div>
 
       <div class="sec" data-sec="blocks">
@@ -117,6 +110,6 @@ const access = t?.access ?? 'open';
     </div>
 
     <div data-pane="preview" hidden><div class="pv" data-preview></div></div>
-  </main>
+  </div>
 </form>
 <script src="../../scripts/editor.ts"></script>

@@ -504,8 +504,8 @@ export interface paths {
         /**
          * Отправить на проверку
          * @description Из `draft` или `rejected` в `pending_review` (при `MODERATION_MODE=auto` — сразу `published`). Обязательно:
-         *     название 5–100, город (или «Вся Россия»), сфера, формат, просмотры или лайки, оплата от 100 ₽, срок — от
-         *     завтра до полугода (по Москве), хотя бы один блок с пунктами (заголовок блока — по желанию).
+         *     название 5–100, город (или «Вся Россия»), сфера, формат, просмотры, оплата от 100 ₽, срок — от
+         *     завтра до 90 дней (по Москве), хотя бы один блок с пунктами (заголовок блока — по желанию).
          */
         post: operations["submitTask"];
         delete?: never;
@@ -584,6 +584,33 @@ export interface paths {
         /** Вернуть анкету в черновик (с проверки или снять с публикации) */
         post: operations["withdrawCard"];
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/drafts/{form}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                form: string;
+            };
+            cookie?: never;
+        };
+        /**
+         * Черновик формы редактора
+         * @description Состояние формы как есть (Redis, запасное — PostgreSQL; 7 дней с последнего сохранения).
+         */
+        get: operations["getDraft"];
+        /**
+         * Сохранить черновик формы
+         * @description Тело — JSON-объект до `DRAFT_MAX_KB` (413 `draft_too_large`); частота — `RATE_LIMIT_DRAFT_*` (429).
+         */
+        put: operations["saveDraft"];
+        post?: never;
+        /** Удалить черновик формы */
+        delete: operations["deleteDraft"];
         options?: never;
         head?: never;
         patch?: never;
@@ -959,10 +986,10 @@ export interface components {
             completion: number;
         };
         /**
-         * @description Черновик | на проверке | опубликовано | отклонено (с причиной)
+         * @description Черновик | на проверке | опубликовано | отклонено (с причиной) | завершено (срок публикации прошёл, только задания)
          * @enum {string}
          */
-        Status: "draft" | "pending_review" | "published" | "rejected";
+        Status: "draft" | "pending_review" | "published" | "rejected" | "expired";
         /** @description Динамический блок: text — абзацы, list — пункты, links — ссылки https://… */
         Block: {
             /** @enum {string} */
@@ -992,14 +1019,17 @@ export interface components {
             formats: components["schemas"]["TaskFormat"][];
             /** @enum {string} */
             access: "open" | "approval" | "";
-            /** Format: int64 */
+            /**
+             * Format: int64
+             * @description Условие выполнения — просмотры
+             */
             minViews: number;
             /** Format: int64 */
-            minLikes: number;
-            /** Format: int64 */
             rewardKopecks: number;
-            /** @description ГГГГ-ММ-ДД или "" */
+            /** @description ГГГГ-ММ-ДД или ""; к отправке — от завтра до 90 дней (по Москве) */
             publishBy: string;
+            /** @description ЧЧ:ММ по Москве или "" — до конца дня */
+            publishTime: string;
             blocks: components["schemas"]["Block"][];
             /** @description id фото task_cover или "" */
             cover: string;
@@ -1023,11 +1053,16 @@ export interface components {
             /** Format: int64 */
             minViews: number;
             /** Format: int64 */
-            minLikes: number;
-            /** Format: int64 */
             rewardKopecks: number;
             /** Format: date */
             publishBy: string | null;
+            /** @description ЧЧ:ММ по Москве или "" */
+            publishTime: string;
+            /**
+             * Format: date-time
+             * @description Срок целиком (UTC); прошёл — задание завершается и в ленте не видно
+             */
+            deadlineAt: string | null;
             blocks: components["schemas"]["Block"][];
             cover: components["schemas"]["Photo"] | null;
             photos: components["schemas"]["Photo"][];
@@ -1101,6 +1136,16 @@ export interface components {
             submittedAt: string | null;
             /** Format: date-time */
             publishedAt: string | null;
+        };
+        DraftResult: {
+            draft: {
+                form: string;
+                data: {
+                    [key: string]: unknown;
+                };
+                /** Format: date-time */
+                savedAt: string;
+            } | null;
         };
         CardFeed: {
             cards: components["schemas"]["Card"][];
@@ -2216,6 +2261,104 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
+        };
+    };
+    getDraft: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                form: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Черновик (null — нет) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DraftResult"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    saveDraft: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Значение из `GET /api/auth/config` (равно cookie `ohvat_csrf`) */
+                "X-CSRF-Token": components["parameters"]["CSRF"];
+            };
+            path: {
+                form: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    [key: string]: unknown;
+                };
+            };
+        };
+        responses: {
+            /** @description Сохранено */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** Format: date-time */
+                        savedAt: string;
+                    };
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            /** @description Черновик больше предела */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            429: components["responses"]["TooMany"];
+        };
+    };
+    deleteDraft: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Значение из `GET /api/auth/config` (равно cookie `ohvat_csrf`) */
+                "X-CSRF-Token": components["parameters"]["CSRF"];
+            };
+            path: {
+                form: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Удалено */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
         };
     };
     listCategories: {

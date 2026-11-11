@@ -296,6 +296,8 @@ func (s *Server) fail(w http.ResponseWriter, r *http.Request, err error) {
 		writeError(w, http.StatusUnsupportedMediaType, "image_type", "Подойдёт фото JPEG, PNG, WebP или HEIC.")
 	case errors.Is(err, service.ErrImageTooLarge):
 		writeError(w, http.StatusRequestEntityTooLarge, "image_too_large", "Фото слишком большое: до 10 МБ и 40 Мп.")
+	case errors.Is(err, service.ErrDraftTooLarge):
+		writeError(w, http.StatusRequestEntityTooLarge, "draft_too_large", "Черновик слишком большой — сократите текст.")
 	case errors.Is(err, service.ErrMediaQuota):
 		writeError(w, http.StatusConflict, "media_quota", "Место для фото закончилось. Удалите ненужные.")
 	case errors.Is(err, service.ErrBusy):

@@ -66,6 +66,13 @@ type Faq struct {
 	CreatedAt   pgtype.Timestamptz
 }
 
+type FormDraft struct {
+	UserID  int64
+	Form    string
+	Data    []byte
+	SavedAt pgtype.Timestamptz
+}
+
 type Identity struct {
 	ID         int64
 	UserID     int64
@@ -160,7 +167,6 @@ type Task struct {
 	Formats       []string
 	Access        string
 	MinViews      int64
-	MinLikes      int64
 	RewardKopecks int64
 	PublishBy     pgtype.Date
 	Blocks        []byte
@@ -170,6 +176,8 @@ type Task struct {
 	UpdatedAt     pgtype.Timestamptz
 	SubmittedAt   pgtype.Timestamptz
 	PublishedAt   pgtype.Timestamptz
+	PublishTime   pgtype.Time
+	DeadlineAt    pgtype.Timestamptz
 }
 
 type TelegramChat struct {

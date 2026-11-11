@@ -23,10 +23,10 @@ const (
 	maxLink        = 300   // символов в ссылке
 	maxBlocksText  = 6000  // символов во всех блоках вместе
 	maxPlatforms   = 6     // площадок в анкете
-	maxCount       = 1e9   // просмотров, лайков, подписчиков
+	maxCount       = 1e9   // просмотров, подписчиков
 	maxRewardKop   = 1e8   // оплата — до 1 000 000 ₽
 	minRewardKop   = 10000 // от 100 ₽
-	maxDeadlineDay = 180   // срок публикации — до полугода
+	maxDeadlineDay = 90    // срок публикации — до 90 дней
 )
 
 // Formats — форматы публикации задания (порядок — как в форме).
@@ -142,6 +142,33 @@ func parseDate(ve *ValidationError, field, v string) *time.Time {
 		return nil
 	}
 	return &d
+}
+
+// parseClock — «ЧЧ:ММ» или пусто (время срока по Москве).
+func parseClock(ve *ValidationError, field, v string) string {
+	v = strings.TrimSpace(v)
+	if v == "" {
+		return ""
+	}
+	t, err := time.Parse("15:04", v)
+	if err != nil {
+		ve.add(field, "Время в формате ЧЧ:ММ")
+		return ""
+	}
+	return t.Format("15:04")
+}
+
+// deadline — срок целиком в UTC: дата и время по Москве (без времени — до конца дня).
+func deadline(day *time.Time, hm string) *time.Time {
+	if day == nil {
+		return nil
+	}
+	h, m, s := 23, 59, 59
+	if t, err := time.Parse("15:04", hm); err == nil {
+		h, m, s = t.Hour(), t.Minute(), 0
+	}
+	at := time.Date(day.Year(), day.Month(), day.Day(), h, m, s, 0, msk).UTC()
+	return &at
 }
 
 // today — дата «сегодня» по Москве (00:00 UTC той же календарной даты — так хранится срок).

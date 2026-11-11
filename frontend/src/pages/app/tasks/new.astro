@@ -9,6 +9,6 @@ if (!me) return Astro.redirect('/login', 303);
 if (me.user.mode !== 'business') return Astro.redirect('/app', 303);
 const [categories, { business }] = await Promise.all([fetchCategories(Astro.request), fetchProfiles(Astro.request)]);
 ---
-<Editor title="Новое задание" only="business">
+<Editor title="Новое задание" page="create" only="business">
   <TaskForm task={null} categories={categories} brand={business?.name ?? me.user.name} />
 </Editor>

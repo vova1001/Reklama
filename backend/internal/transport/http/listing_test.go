@@ -168,7 +168,7 @@ func TestTaskEndpoints(t *testing.T) {
 	f := &fakeListings{}
 	s := listSrv(f, Options{})
 	body := `{"title":"Сторис","city":"","nationwide":true,"category":"food","formats":["reels"],"access":"approval",
-		"minViews":5000,"minLikes":0,"rewardKopecks":300000,"publishBy":"2026-11-20",
+		"minViews":5000,"rewardKopecks":300000,"publishBy":"2026-11-20",
 		"blocks":[{"kind":"list","title":"Что показать","items":["Меню"]}],"cover":"","photos":["p1"]}`
 	rec := serve(s, meReq(http.MethodPost, "/api/me/tasks", body))
 	if rec.Code != 201 {
@@ -241,6 +241,7 @@ func TestListingErrors(t *testing.T) {
 		{service.ErrImageType, 415, "image_type"},
 		{service.ErrImageTooLarge, 413, "image_too_large"},
 		{service.ErrMediaQuota, 409, "media_quota"},
+		{service.ErrDraftTooLarge, 413, "draft_too_large"},
 		{service.ErrBusy, 503, "busy"},
 		{context.Canceled, 503, "cancelled"},
 		{errors.New("pg: secret"), 500, "internal"},

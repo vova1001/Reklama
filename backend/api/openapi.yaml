@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: Охват API
-  version: 0.6.0
+  version: 0.7.0
   description: |
     API площадки «Охват»: данные главной, регистрация и вход (почта с кодом, Telegram, Google), приложение после входа:
     один аккаунт — два режима («Бизнес» и «Автор»), профили режимов заполняются, когда понадобятся.
@@ -569,8 +569,8 @@ paths:
       summary: Отправить на проверку
       description: |
         Из `draft` или `rejected` в `pending_review` (при `MODERATION_MODE=auto` — сразу `published`). Обязательно:
-        название 5–100, город (или «Вся Россия»), сфера, формат, просмотры или лайки, оплата от 100 ₽, срок — от
-        завтра до полугода (по Москве), хотя бы один блок с пунктами (заголовок блока — по желанию).
+        название 5–100, город (или «Вся Россия»), сфера, формат, просмотры, оплата от 100 ₽, срок — от
+        завтра до 90 дней (по Москве), хотя бы один блок с пунктами (заголовок блока — по желанию).
       operationId: submitTask
       tags: [tasks]
       security: [{ session: [] }]
@@ -678,6 +678,66 @@ paths:
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
         "409": { $ref: "#/components/responses/Conflict" }
+  /api/me/drafts/{form}:
+    parameters:
+      - { name: form, in: path, required: true, schema: { type: string, pattern: "^(task-new|task-[1-9][0-9]{0,17}|card)$" } }
+    get:
+      summary: Черновик формы редактора
+      description: Состояние формы как есть (Redis, запасное — PostgreSQL; 7 дней с последнего сохранения).
+      operationId: getDraft
+      tags: [drafts]
+      security: [{ session: [] }]
+      responses:
+        "200":
+          description: Черновик (null — нет)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DraftResult" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    put:
+      summary: Сохранить черновик формы
+      description: Тело — JSON-объект до `DRAFT_MAX_KB` (413 `draft_too_large`); частота — `RATE_LIMIT_DRAFT_*` (429).
+      operationId: saveDraft
+      tags: [drafts]
+      security: [{ session: [] }]
+      parameters: [{ $ref: "#/components/parameters/CSRF" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        "200":
+          description: Сохранено
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [savedAt]
+                properties:
+                  savedAt: { type: string, format: date-time }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "413":
+          description: Черновик больше предела
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "429": { $ref: "#/components/responses/TooMany" }
+    delete:
+      summary: Удалить черновик формы
+      operationId: deleteDraft
+      tags: [drafts]
+      security: [{ session: [] }]
+      parameters: [{ $ref: "#/components/parameters/CSRF" }]
+      responses:
+        "204": { description: Удалено }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
   /api/me/categories:
     get:
       summary: Общие категории и свои
@@ -1166,8 +1226,8 @@ components:
         completion: { type: integer, minimum: 0, maximum: 100, description: "Прогресс заполнения для активного режима, %" }
     Status:
       type: string
-      enum: [draft, pending_review, published, rejected]
-      description: "Черновик | на проверке | опубликовано | отклонено (с причиной)"
+      enum: [draft, pending_review, published, rejected, expired]
+      description: "Черновик | на проверке | опубликовано | отклонено (с причиной) | завершено (срок публикации прошёл, только задания)"
     Block:
       type: object
       required: [kind, title, items]
@@ -1190,7 +1250,7 @@ components:
       enum: [reels, shorts, youtube, vk_clips, tiktok, telegram]
     TaskInput:
       type: object
-      required: [title, city, nationwide, category, formats, access, minViews, minLikes, rewardKopecks, publishBy, blocks, cover, photos]
+      required: [title, city, nationwide, category, formats, access, minViews, rewardKopecks, publishBy, publishTime, blocks, cover, photos]
       additionalProperties: false
       description: Черновик может быть неполным; ограничения формы проверяются всегда, обязательность — при отправке.
       properties:
@@ -1200,16 +1260,16 @@ components:
         category: { type: string, description: "slug общей или своей категории; \"\" — не выбрана" }
         formats: { type: array, items: { $ref: "#/components/schemas/TaskFormat" } }
         access: { type: string, enum: [open, approval, ""] }
-        minViews: { type: integer, format: int64, minimum: 0, maximum: 1000000000 }
-        minLikes: { type: integer, format: int64, minimum: 0, maximum: 1000000000 }
+        minViews: { type: integer, format: int64, minimum: 0, maximum: 1000000000, description: Условие выполнения — просмотры }
         rewardKopecks: { type: integer, format: int64, minimum: 0, maximum: 100000000 }
-        publishBy: { type: string, description: "ГГГГ-ММ-ДД или \"\"" }
+        publishBy: { type: string, description: "ГГГГ-ММ-ДД или \"\"; к отправке — от завтра до 90 дней (по Москве)" }
+        publishTime: { type: string, description: "ЧЧ:ММ по Москве или \"\" — до конца дня" }
         blocks: { type: array, maxItems: 8, items: { $ref: "#/components/schemas/Block" } }
         cover: { type: string, description: "id фото task_cover или \"\"" }
         photos: { type: array, maxItems: 6, items: { type: string }, description: id фото task_photo по порядку }
     Task:
       type: object
-      required: [id, status, rejectReason, title, city, nationwide, category, formats, access, minViews, minLikes, rewardKopecks, publishBy, blocks, cover, photos, createdAt, updatedAt, submittedAt, publishedAt]
+      required: [id, status, rejectReason, title, city, nationwide, category, formats, access, minViews, rewardKopecks, publishBy, publishTime, deadlineAt, blocks, cover, photos, createdAt, updatedAt, submittedAt, publishedAt]
       properties:
         id: { type: integer, format: int64 }
         status: { $ref: "#/components/schemas/Status" }
@@ -1222,9 +1282,10 @@ components:
         formats: { type: array, items: { $ref: "#/components/schemas/TaskFormat" } }
         access: { type: string, enum: [open, approval] }
         minViews: { type: integer, format: int64 }
-        minLikes: { type: integer, format: int64 }
         rewardKopecks: { type: integer, format: int64 }
         publishBy: { type: string, format: date, nullable: true }
+        publishTime: { type: string, description: "ЧЧ:ММ по Москве или \"\"" }
+        deadlineAt: { type: string, format: date-time, nullable: true, description: Срок целиком (UTC); прошёл — задание завершается и в ленте не видно }
         blocks: { type: array, items: { $ref: "#/components/schemas/Block" } }
         cover: { nullable: true, allOf: [{ $ref: "#/components/schemas/Photo" }] }
         photos: { type: array, items: { $ref: "#/components/schemas/Photo" } }
@@ -1288,6 +1349,18 @@ components:
         updatedAt: { type: string, format: date-time }
         submittedAt: { type: string, format: date-time, nullable: true }
         publishedAt: { type: string, format: date-time, nullable: true }
+    DraftResult:
+      type: object
+      required: [draft]
+      properties:
+        draft:
+          type: object
+          nullable: true
+          required: [form, data, savedAt]
+          properties:
+            form: { type: string }
+            data: { type: object, additionalProperties: true }
+            savedAt: { type: string, format: date-time }
     CardFeed:
       type: object
       required: [cards, next]

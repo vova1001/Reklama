@@ -3,6 +3,8 @@ package service
 import (
 	"context"
 	"errors"
+	"io"
+	"log/slog"
 	"strings"
 	"testing"
 	"time"
@@ -156,4 +158,48 @@ func TestFeedFilter(t *testing.T) {
 	}()); f["format"] == "" {
 		t.Errorf("формат у анкет: %v", f)
 	}
+}
+
+// Срок с временем по Москве; прошёл — задание завершается и пропадает из ленты.
+func TestTaskExpiry(t *testing.T) {
+	e := newAutoEnv()
+	ctx := context.Background()
+	in := fullTask()
+	in.PublishBy, in.PublishTime = "2026-11-12", "18:30"
+	d, err := e.tasks.Create(ctx, biz, in)
+	if err != nil || d.PublishTime != "18:30" || !d.DeadlineAt.Equal(time.Date(2026, 11, 12, 15, 30, 0, 0, time.UTC)) {
+		t.Fatalf("срок: %v %+v", err, d.DeadlineAt)
+	}
+	in.PublishTime = ""
+	d2, _ := e.tasks.Create(ctx, biz, in)
+	if !d2.DeadlineAt.Equal(time.Date(2026, 11, 12, 20, 59, 59, 0, time.UTC)) {
+		t.Errorf("без времени — до конца дня по Москве: %v", d2.DeadlineAt)
+	}
+	// просмотры обязательны
+	in.MinViews = 0
+	d3, _ := e.tasks.Create(ctx, biz, in)
+	if f := fields(t, func() error { _, err := e.tasks.Submit(ctx, biz, d3.ID); return err }()); f["minViews"] != "Укажите число просмотров" {
+		t.Errorf("просмотры: %v", f)
+	}
+	if _, err := e.tasks.Submit(ctx, biz, d.ID); err != nil {
+		t.Fatal(err)
+	}
+	if n, _ := e.tasks.Expire(ctx); n != 0 {
+		t.Errorf("рано: %d", n)
+	}
+	e.clock.add(55 * time.Hour) // 12 ноября 16:00 UTC — срок 15:30 прошёл
+	if n, err := e.tasks.Expire(ctx); err != nil || n != 1 {
+		t.Fatalf("завершено: %v %d", err, n)
+	}
+	got, _ := e.tasks.Get(ctx, biz, d.ID)
+	if got.Status != domain.StatusExpired {
+		t.Errorf("статус: %v", got.Status)
+	}
+	// владелец может вернуть в черновик и продлить
+	if got, err = e.tasks.Withdraw(ctx, biz, d.ID); err != nil || got.Status != domain.StatusDraft {
+		t.Errorf("в черновик: %v %+v", err, got)
+	}
+	c, cancel := context.WithCancel(ctx)
+	cancel()
+	e.tasks.RunExpiry(c, time.Hour, slog.New(slog.NewTextHandler(io.Discard, nil)))
 }

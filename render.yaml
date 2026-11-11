@@ -91,9 +91,15 @@ services:
         value: "50"
       - key: TELEGRAM_WEBHOOK_BURST
         value: "200"
-      # необязательно: Redis для общих лимитов нескольких серверов (redis:// или rediss://); пусто — в памяти
+      # Redis (Render Key Value ниже, тот же регион): общие лимиты и черновики форм редактора (7 дней);
+      # нет или недоступен — лимиты в памяти, черновики в PostgreSQL
       - key: REDIS_URL
-        sync: false
+        fromService:
+          type: keyvalue
+          name: ohvat-kv
+          property: connectionString
+      - key: DRAFT_MAX_KB
+        value: "64"
       # проверка заданий и анкет: auto — сразу публикуются, manual — ждут модератора
       - key: MODERATION_MODE
         value: auto
@@ -112,3 +118,11 @@ services:
         sync: false
       - key: STORAGE_SECRET_KEY
         sync: false
+
+  # Render Key Value (Redis): лимиты и черновики форм. Только внутренняя сеть Render, тот же регион, что сервис.
+  - type: keyvalue
+    name: ohvat-kv
+    plan: free # [ПЕРЕЕЗД] на своём сервере — redis из docker-compose.prod.yml или REDIS_URL
+    region: frankfurt
+    maxmemoryPolicy: volatile-lru # у черновиков и лимитов есть срок — вытесняются старые, а не новые записи
+    ipAllowList: [] # снаружи недоступен

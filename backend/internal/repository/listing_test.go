@@ -44,9 +44,10 @@ func TestListingsTasks(t *testing.T) {
 		t.Fatalf("%v %+v", err, empty)
 	}
 	day := time.Date(2026, 11, 20, 0, 0, 0, 0, time.UTC)
+	future := time.Now().Add(48 * time.Hour).UTC().Truncate(time.Second)
 	in := domain.Task{
 		OwnerID: u.ID, Title: "Сторис", City: "Казань", Category: "food", Formats: []string{"reels"}, Access: domain.AccessApproval,
-		MinViews: 5000, MinLikes: 100, RewardKopecks: 300000, PublishBy: &day,
+		MinViews: 5000, RewardKopecks: 300000, PublishBy: &day, PublishTime: "18:30", DeadlineAt: &future,
 		Blocks: []domain.Block{{Kind: domain.BlockList, Title: "Что показать", Items: []string{"Интерьер", "Меню"}}},
 		Cover:  "cover00000000000000000", Photos: []string{"photo20000000000000000", "photo10000000000000000"},
 	}
@@ -56,7 +57,7 @@ func TestListingsTasks(t *testing.T) {
 	}
 	got, err := r.OwnTask(ctx, u.ID, tk.ID)
 	if err != nil || got.Title != "Сторис" || !got.PublishBy.Equal(day) || got.Blocks[0].Items[1] != "Меню" ||
-		got.Cover != in.Cover || got.Photos[0] != "photo20000000000000000" || got.Access != domain.AccessApproval {
+		got.PublishTime != "18:30" || !got.DeadlineAt.Equal(future) || got.Cover != in.Cover || got.Photos[0] != "photo20000000000000000" || got.Access != domain.AccessApproval {
 		t.Fatalf("%v %+v", err, got)
 	}
 	if _, err := r.OwnTask(ctx, other.ID, tk.ID); !errors.Is(err, domain.ErrNotFound) {
@@ -153,7 +154,7 @@ func TestListingsTasks(t *testing.T) {
 	}
 
 	// автоматическая проверка: цепочка «→ на проверке → опубликовано» одной транзакцией; «Вся Россия» — любому городу
-	auto, _ := r.CreateTask(ctx, domain.Task{OwnerID: u.ID, Title: "Вся страна", Nationwide: true, Access: "open", Formats: []string{"tiktok"}})
+	auto, _ := r.CreateTask(ctx, domain.Task{OwnerID: u.ID, Title: "Вся страна", Nationwide: true, Access: "open", Formats: []string{"tiktok"}, DeadlineAt: &future})
 	chain := domain.SubmitChain(domain.ModerationAuto, domain.SubjectTask, auto.ID, domain.StatusDraft, u.ID)
 	ap, err := r.SetTaskStatus(ctx, chain...)
 	if err != nil || ap.Status != domain.StatusPublished || ap.SubmittedAt == nil || ap.PublishedAt == nil || ap.RejectReason != "" {
@@ -186,6 +187,28 @@ func TestListingsTasks(t *testing.T) {
 	}
 	if _, err := r.SetTaskStatus(ctx); err == nil {
 		t.Error("пустая цепочка")
+	}
+	// срок прошёл: из ленты и со страницы — сразу; фоновая задача — в «завершено» с журналом
+	past := time.Now().Add(-time.Minute)
+	old, _ := r.CreateTask(ctx, domain.Task{OwnerID: u.ID, Title: "Старое", Access: "open", DeadlineAt: &past})
+	_, _ = r.SetTaskStatus(ctx, domain.SubmitChain(domain.ModerationAuto, domain.SubjectTask, old.ID, domain.StatusDraft, u.ID)...)
+	if _, err := r.PublishedTask(ctx, old.ID); !errors.Is(err, domain.ErrNotFound) {
+		t.Errorf("просроченное на странице: %v", err)
+	}
+	for _, x := range func() []domain.Task { l, _ := r.PublishedTasks(ctx, domain.FeedFilter{}, nil, 50); return l }() {
+		if x.ID == old.ID {
+			t.Error("просроченное в ленте")
+		}
+	}
+	ids, err := r.ExpireTasks(ctx, time.Now())
+	if err != nil || len(ids) != 1 || ids[0] != old.ID {
+		t.Fatalf("завершение: %v %v", err, ids)
+	}
+	if g, _ := r.OwnTask(ctx, u.ID, old.ID); g.Status != domain.StatusExpired {
+		t.Errorf("статус: %v", g.Status)
+	}
+	if h, _ := r.History(ctx, domain.SubjectTask, old.ID); len(h) != 3 || h[2].To != domain.StatusExpired || !h[2].Auto {
+		t.Errorf("журнал: %+v", h)
 	}
 	// снять с публикации
 	if d, err := r.SetTaskStatus(ctx, domain.StatusChange{SubjectID: auto.ID, From: domain.StatusPublished, To: domain.StatusDraft, ActorID: u.ID}); err != nil || d.Status != domain.StatusDraft {

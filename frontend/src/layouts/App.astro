@@ -15,7 +15,7 @@ import '../styles/auth.css';
 import '../styles/app.css';
 
 // only — страница одного режима (редактор задания — бизнес, анкета — автор): при смене режима — в ленту
-interface Props { title: string; page: Page; wide?: boolean | 'grid'; only?: Mode }
+interface Props { title: string; page: Page; wide?: boolean | 'grid' | 'editor'; only?: Mode }
 const { title, page, wide = false, only } = Astro.props;
 const me = Astro.locals.me!;
 Astro.response.headers.set('Cache-Control', 'private, no-store');
@@ -38,7 +38,7 @@ Astro.response.headers.set('Cache-Control', 'private, no-store');
       <AccountMenu me={me} id="menu-bar" />
     </header>
 
-    <main id="main" class={`col ${wide === 'grid' ? 'is-grid' : wide ? 'is-wide' : ''}`} tabindex="-1">
+    <main id="main" class={`col ${wide === 'grid' ? 'is-grid' : wide === 'editor' ? 'is-ed' : wide ? 'is-wide' : ''}`} tabindex="-1">
       <slot />
     </main>
 

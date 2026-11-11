@@ -11,6 +11,7 @@ const (
 	StatusPending   Status = "pending_review"
 	StatusPublished Status = "published"
 	StatusRejected  Status = "rejected"
+	StatusExpired   Status = "expired" // срок публикации прошёл (только задания; переводит система)
 )
 
 // Actor — кто меняет статус (битовая маска: переход может быть разрешён нескольким).
@@ -29,7 +30,8 @@ var transitions = map[Status]map[Status]Actor{
 	StatusDraft:     {StatusPending: ActorOwner},
 	StatusPending:   {StatusPublished: ActorModerator | ActorSystem, StatusRejected: ActorModerator, StatusDraft: ActorOwner},
 	StatusRejected:  {StatusPending: ActorOwner},
-	StatusPublished: {StatusDraft: ActorOwner},
+	StatusPublished: {StatusDraft: ActorOwner, StatusExpired: ActorSystem},
+	StatusExpired:   {StatusDraft: ActorOwner},
 }
 
 // CanTransition — можно ли перевести из from в to.
@@ -95,10 +97,11 @@ type Task struct {
 	Category      string // slug темы; "" — не выбрана (черновик)
 	Formats       []string
 	Access        string
-	MinViews      int64
-	MinLikes      int64
+	MinViews      int64      // условие выполнения — просмотры
 	RewardKopecks int64      // оплата за выполнение
 	PublishBy     *time.Time // срок публикации (дата, 00:00 UTC); nil — не задан
+	PublishTime   string     // время срока по Москве «ЧЧ:ММ»; "" — до конца дня
+	DeadlineAt    *time.Time // срок целиком в UTC (дата + время или 23:59:59 по Москве)
 	Blocks        []Block
 	Cover         string   // media.id обложки (16:9); "" — нет
 	Photos        []string // media.id примеров «что показать», по порядку

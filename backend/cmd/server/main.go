@@ -134,10 +134,21 @@ func run(log *slog.Logger) error {
 	lims := newLimiters(ctx, cfg, log)
 	defer lims.close()
 
+	// черновики форм редактора: Redis (REDIS_URL), при сбое и без него — PostgreSQL
+	draftsPG := repository.NewDraftsPG(pool)
+	var draftStore service.DraftStore = draftsPG
+	if lims.rdb != nil {
+		draftStore = service.FallbackDrafts{Primary: repository.NewDraftsRedis(lims.rdb), Secondary: draftsPG, Log: log}
+		log.Info("черновики форм: Redis, запасное — PostgreSQL")
+	} else {
+		log.Info("черновики форм: PostgreSQL")
+	}
+	drafts := service.NewDrafts(draftStore, service.DraftConfig{MaxBytes: cfg.DraftMaxKB << 10}, nil)
+
 	var hook *tgtransport.Handler
 	opts := httpapi.Options{
 		Origin: cfg.Origin(), SecureCookies: cfg.SecureCookies(),
-		APILimiter: lims.api, AuthLimiter: lims.auth, UserLimiter: lims.user, UploadLimiter: lims.upload,
+		APILimiter: lims.api, AuthLimiter: lims.auth, UserLimiter: lims.user, UploadLimiter: lims.upload, DraftLimiter: lims.draft,
 	}
 	if cfg.BotEnabled() {
 		bot = service.NewBot(service.BotDeps{Auth: auth, Users: authRepo, Chats: tgRepo, Messenger: outbox, Log: log},
@@ -147,7 +158,7 @@ func run(log *slog.Logger) error {
 	}
 	api := httpapi.New(httpapi.Services{
 		Home: service.NewHome(repository.NewHome(pool)), Health: service.NewHealth(repository.NewHealth(pool)),
-		Auth: auth, Profiles: profiles, Tasks: tasks, Cards: cards, Categories: service.NewCategories(catRepo), Media: media,
+		Auth: auth, Profiles: profiles, Tasks: tasks, Cards: cards, Categories: service.NewCategories(catRepo), Media: media, Drafts: drafts,
 	}, opts)
 	srv := &http.Server{
 		Addr:              cfg.HTTPAddr,
@@ -179,6 +190,8 @@ func run(log *slog.Logger) error {
 	}
 	g.Go(func() error { auth.RunCleanup(gctx, 10*time.Minute); return nil })
 	g.Go(func() error { media.RunCleanup(gctx, time.Hour); return nil })
+	g.Go(func() error { tasks.RunExpiry(gctx, 5*time.Minute, log); return nil })
+	g.Go(func() error { drafts.RunCleanup(gctx, draftsPG, time.Hour, log); return nil })
 	for _, m := range lims.memory {
 		g.Go(func() error { m.Run(gctx, time.Minute); return nil })
 	}
@@ -200,9 +213,9 @@ func run(log *slog.Logger) error {
 
 // limiters — ограничители частоты по правилам; memory — бакеты в памяти (их чистит фоновая задача).
 type limiters struct {
-	api, auth, user, webhook, upload ratelimit.Limiter
-	memory                           []*ratelimit.Memory
-	rdb                              *redis.Client
+	api, auth, user, webhook, upload, draft ratelimit.Limiter
+	memory                                  []*ratelimit.Memory
+	rdb                                     *redis.Client
 }
 
 func (l *limiters) close() {
@@ -237,6 +250,7 @@ func newLimiters(ctx context.Context, cfg config.Config, log *slog.Logger) *limi
 	out.user = mk("user:", ratelimit.Rate{RPS: cfg.UserRPS, Burst: cfg.UserBurst})
 	out.webhook = mk("tg:", ratelimit.Rate{RPS: cfg.WebhookRPS, Burst: cfg.WebhookBurst})
 	out.upload = mk("up:", ratelimit.Rate{RPS: cfg.UploadRPS, Burst: cfg.UploadBurst})
+	out.draft = mk("draft:", ratelimit.Rate{RPS: cfg.DraftRPS, Burst: cfg.DraftBurst})
 	return out
 }
 

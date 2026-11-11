@@ -22,7 +22,7 @@ export const HERO = {
 export const STEPS = [
   { icon: 'wallet-cards', title: 'Выберите тариф', text: 'Срок и место в&nbsp;ленте' },
   { icon: 'list-plus', title: 'Опишите задание', text: 'Тема, город и что показать' },
-  { icon: 'target', title: 'Задайте условия', text: 'Просмотры, лайки и сумма' },
+  { icon: 'target', title: 'Задайте условия', text: 'Просмотры, срок и сумма' },
   { icon: 'badge-check', title: 'Автооплата', text: 'Без счетов и напоминаний' },
 ];
 

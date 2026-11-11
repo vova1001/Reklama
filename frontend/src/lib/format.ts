@@ -8,20 +8,15 @@ const MONTHS = ['января', 'февраля', 'марта', 'апреля', 
 export const rub = (kop: number) => `${NUM.format(Math.round(kop / 100))} ₽`;
 /** 12500 → «12 500». */
 export const num = (n: number) => NUM.format(n);
-/** «2026-11-20» → «до 20 ноября». */
-export function until(iso: string | null | undefined): string {
+/** «2026-11-20» (+ «18:30») → «до 20 ноября» («до 20 ноября, 18:30»). */
+export function until(iso: string | null | undefined, time = ''): string {
   if (!iso) return '';
   const [y, m, d] = iso.split('-').map(Number);
   if (!y || !m || !d) return '';
   const year = new Date().getFullYear() === y ? '' : ` ${y}`;
-  return `до ${d} ${MONTHS[m - 1]}${year}`;
+  return `до ${d} ${MONTHS[m - 1]}${year}${time ? `, ${time}` : ''}`;
 }
 /** Названия форматов через запятую. */
 export const formatsTitle = (ids: string[]) => ids.map((f) => FORMATS.find((x) => x.id === f)?.title ?? f).join(', ');
-/** Условия: «от 5 000 просмотров · от 300 лайков». */
-export function goal(views: number, likes: number): string {
-  const p: string[] = [];
-  if (views) p.push(`от ${num(views)} просм.`);
-  if (likes) p.push(`от ${num(likes)} лайков`);
-  return p.join(' · ');
-}
+/** Условие выполнения: «от 5 000 просм.». */
+export const goal = (views: number) => (views ? `от ${num(views)} просм.` : '');

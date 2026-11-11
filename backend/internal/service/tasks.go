@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"time"
 	"unicode/utf8"
 
@@ -29,6 +30,8 @@ type TaskRepository interface {
 	PublishedTasks(ctx context.Context, f domain.FeedFilter, after *domain.FeedCursor, limit int) ([]domain.Task, error)
 	// PublishedTask — опубликованное задание; нет или не опубликовано — domain.ErrNotFound.
 	PublishedTask(ctx context.Context, id int64) (domain.Task, error)
+	// ExpireTasks — опубликованные со сроком не позже now — в «завершено» (с журналом); id завершённых.
+	ExpireTasks(ctx context.Context, now time.Time) ([]int64, error)
 }
 
 // SubmitCounter — сколько раз пользователь отправлял на проверку с момента since и когда впервые.
@@ -76,9 +79,9 @@ type TaskInput struct {
 	Formats       []string
 	Access        string
 	MinViews      int64
-	MinLikes      int64
 	RewardKopecks int64
 	PublishBy     string // ГГГГ-ММ-ДД или ""
+	PublishTime   string // ЧЧ:ММ по Москве или "" (до конца дня)
 	Blocks        []domain.Block
 	Cover         string   // media.id обложки
 	Photos        []string // media.id примеров, по порядку
@@ -171,13 +174,13 @@ func (s *Tasks) Update(ctx context.Context, u domain.User, id int64, in TaskInpu
 	return out, conflictToStatus(err)
 }
 
-// Delete — удалить черновик или отклонённое задание.
+// Delete — удалить черновик, отклонённое или завершённое задание.
 func (s *Tasks) Delete(ctx context.Context, u domain.User, id int64) error {
 	cur, err := s.repo.OwnTask(ctx, u.ID, id)
 	if err != nil {
 		return err
 	}
-	if !cur.Status.Editable() {
+	if !cur.Status.Editable() && cur.Status != domain.StatusExpired {
 		return ErrWrongStatus
 	}
 	return conflictToStatus(s.repo.DeleteTask(ctx, u.ID, id))
@@ -283,7 +286,7 @@ func (s *Tasks) shape(ctx context.Context, userID, id int64, in TaskInput) (doma
 	ve := &ValidationError{}
 	t := domain.Task{
 		Title: squash(in.Title), City: squash(in.City), Nationwide: in.Nationwide, Category: squash(in.Category),
-		Access: in.Access, MinViews: in.MinViews, MinLikes: in.MinLikes, RewardKopecks: in.RewardKopecks,
+		Access: in.Access, MinViews: in.MinViews, RewardKopecks: in.RewardKopecks,
 	}
 	maxLen(ve, "title", t.Title, 100, "Название — до 100 символов")
 	if t.Nationwide {
@@ -302,11 +305,12 @@ func (s *Tasks) shape(ctx context.Context, userID, id int64, in TaskInput) (doma
 		ve.add("access", "Тип — открытое или с одобрением")
 	}
 	checkCount(ve, "minViews", t.MinViews)
-	checkCount(ve, "minLikes", t.MinLikes)
 	if t.RewardKopecks < 0 || t.RewardKopecks > maxRewardKop {
 		ve.add("reward", "Оплата — до 1 000 000 ₽")
 	}
 	t.PublishBy = parseDate(ve, "publishBy", in.PublishBy)
+	t.PublishTime = parseClock(ve, "publishTime", in.PublishTime)
+	t.DeadlineAt = deadline(t.PublishBy, t.PublishTime)
 	t.Blocks = checkBlocks(ve, in.Blocks)
 	cover, err := checkMedia(ctx, s.Media, ve, userID, nonEmpty(in.Cover), mediaSpec{"cover", domain.PurposeTaskCover, 1, domain.SubjectTask, id})
 	if err != nil {
@@ -333,7 +337,7 @@ func (s *Tasks) shape(ctx context.Context, userID, id int64, in TaskInput) (doma
 	return t, nil
 }
 
-// complete — к отправке на проверку: всё обязательное заполнено, срок — от завтра до полугода.
+// complete — к отправке на проверку: всё обязательное заполнено, срок — от завтра до 90 дней (по Москве).
 func (s *Tasks) complete(t domain.Task) error {
 	ve := &ValidationError{}
 	if n := utf8.RuneCountInString(t.Title); n < 5 || n > 100 {
@@ -348,8 +352,8 @@ func (s *Tasks) complete(t domain.Task) error {
 	if len(t.Formats) == 0 {
 		ve.add("formats", "Выберите хотя бы один формат")
 	}
-	if t.MinViews == 0 && t.MinLikes == 0 {
-		ve.add("minViews", "Укажите просмотры или лайки")
+	if t.MinViews <= 0 {
+		ve.add("minViews", "Укажите число просмотров")
 	}
 	if t.RewardKopecks < minRewardKop {
 		ve.add("reward", "Оплата — от 100 ₽")
@@ -359,7 +363,7 @@ func (s *Tasks) complete(t domain.Task) error {
 	case t.PublishBy == nil:
 		ve.add("publishBy", "Укажите срок публикации")
 	case !t.PublishBy.After(day) || t.PublishBy.After(day.AddDate(0, 0, maxDeadlineDay)):
-		ve.add("publishBy", "Срок — от завтра до полугода")
+		ve.add("publishBy", "Срок — от завтра до 90 дней")
 	}
 	if !blocksFilled(t.Blocks) {
 		ve.add("blocks", "Опишите задание: добавьте описание или требования")
@@ -396,4 +400,28 @@ func conflictToStatus(err error) error {
 		return fmt.Errorf("%w: статус сменился", ErrWrongStatus)
 	}
 	return err
+}
+
+// Expire — опубликованные задания с прошедшим сроком — в «завершено»; сколько завершено.
+func (s *Tasks) Expire(ctx context.Context) (int, error) {
+	ids, err := s.repo.ExpireTasks(ctx, s.Clock.Now())
+	return len(ids), err
+}
+
+// RunExpiry — раз в every завершать просроченные, пока не отменён ctx (из ленты они пропадают сразу — по сроку).
+func (s *Tasks) RunExpiry(ctx context.Context, every time.Duration, log *slog.Logger) {
+	t := time.NewTicker(every)
+	defer t.Stop()
+	for {
+		if n, err := s.Expire(ctx); err != nil {
+			log.Error("задания: завершение просроченных", "err", err)
+		} else if n > 0 {
+			log.Info("задания: завершены просроченные", "count", n)
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+		}
+	}
 }

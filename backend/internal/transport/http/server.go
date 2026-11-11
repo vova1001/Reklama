@@ -74,6 +74,14 @@ type CardService interface {
 	Public(ctx context.Context, userID int64) (domain.CreatorCard, error)
 }
 
+// DraftService — черновики форм редактора (состояние формы как есть).
+type DraftService interface {
+	Get(ctx context.Context, u domain.User, form string) (*domain.FormDraft, error)
+	Save(ctx context.Context, u domain.User, form string, data []byte) (time.Time, error)
+	Delete(ctx context.Context, u domain.User, form string) error
+	MaxBytes() int
+}
+
 // CategoryService — справочник и свои категории.
 type CategoryService interface {
 	List(ctx context.Context, u domain.User) (service.CategoryList, error)
@@ -100,6 +108,7 @@ type Services struct {
 	Cards      CardService
 	Categories CategoryService
 	Media      MediaService
+	Drafts     DraftService
 }
 
 // Options — настройки транспорта (из config).
@@ -113,7 +122,9 @@ type Options struct {
 	UserLimiter Limiter
 	// UploadLimiter — загрузки фото по пользователю.
 	UploadLimiter Limiter
-	BotWait       time.Duration // сколько ждать подтверждения в боте в одном запросе (long-poll), 25 с
+	// DraftLimiter — сохранения черновиков форм по пользователю.
+	DraftLimiter Limiter
+	BotWait      time.Duration // сколько ждать подтверждения в боте в одном запросе (long-poll), 25 с
 	// TelegramWebhook — приём обновлений бота (transport/telegram); nil — бот выключен.
 	// Свой секрет вместо CSRF и свой лимит, поэтому вне группы /api.
 	TelegramWebhook http.Handler
@@ -129,6 +140,7 @@ type Server struct {
 	cards      CardService
 	categories CategoryService
 	media      MediaService
+	drafts     DraftService
 	opt        Options
 }
 
@@ -139,7 +151,7 @@ func New(svc Services, opt Options) *Server {
 	}
 	return &Server{
 		home: svc.Home, health: svc.Health, auth: svc.Auth, profiles: svc.Profiles, tasks: svc.Tasks, cards: svc.Cards,
-		categories: svc.Categories, media: svc.Media, opt: opt,
+		categories: svc.Categories, media: svc.Media, drafts: svc.Drafts, opt: opt,
 	}
 }
 
@@ -208,6 +220,10 @@ func (s *Server) Routes() http.Handler {
 
 			r.With(limit(s.opt.UploadLimiter, byUser("upload:"))).Post("/media", s.uploadMedia)
 			r.Delete("/media/{id}", s.deleteMedia)
+
+			r.Get("/drafts/{form}", s.getDraft)
+			r.With(limit(s.opt.DraftLimiter, byUser("draft:"))).Put("/drafts/{form}", s.putDraft)
+			r.Delete("/drafts/{form}", s.deleteDraft)
 		})
 		r.NotFound(func(w http.ResponseWriter, _ *http.Request) {
 			writeError(w, http.StatusNotFound, "not_found", "Такого адреса нет.")

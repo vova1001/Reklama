@@ -6,8 +6,14 @@ import { jsErrors, login, uniq } from './helpers';
 // строк, Alt+↑/↓, шаблоны), фото, предпросмотр, автоматическая проверка (MODERATION_MODE=auto — сразу «Опубликовано»),
 // лента карточками у другого пользователя: наведение — главное поверх фото, нажатие — страница целиком.
 const fixture = (name: string) => new URL(`./fixtures/${name}`, import.meta.url).pathname;
-const saved = (page: Page) => expect(page.locator('[data-state]')).toContainText('Черновик сохранён', { timeout: 10_000 });
+const saved = (page: Page) => expect(page.locator('[data-state]')).toContainText('Сохранено', { timeout: 10_000 });
+/** Задание сохранилось на сервере (не только черновик формы). */
+async function taskSaved(page: Page) {
+  await expect(page).toHaveURL(/\/app\/tasks\/\d+$/, { timeout: 10_000 });
+}
 const vals = (l: ReturnType<Page['locator']>) => l.evaluateAll((els) => els.map((e) => (e as HTMLInputElement).value));
+/** Редактор готов (черновик восстановлен, обработчики на месте). */
+const ready = (page: Page) => expect(page.locator('[data-editor][data-ready]')).toHaveCount(1);
 const tag = () => `${Date.now().toString(36)}${Math.floor(Math.random() * 1e4)}`;
 
 test.beforeEach(async ({ context }) => {
@@ -65,8 +71,9 @@ test('задание: редактор на весь экран, проверк�
   const city = `Казань ${tag()}`;
   await login(page, uniq(info.project.name, 'task'));
   await page.goto('/app/tasks/new');
-  // на весь экран: без навигации приложения, сверху — ✕, «Правка / Как увидят», сохранение, «Опубликовать»
-  await expect(page.locator('.rail, .bn, .mbar')).toHaveCount(0);
+  await ready(page);
+  // навигация приложения остаётся; над колонкой — панель формы: ✕, «Правка / Как увидят», сохранение, «Опубликовать»
+  await expect(page.locator('.rail:visible, .bn:visible')).toHaveCount(1);
   const bar = page.locator('.ebar');
   await expect(bar.getByRole('link', { name: 'Закрыть' })).toBeVisible();
   await expect(bar.getByRole('tab', { name: 'Как увидят' })).toBeVisible();
@@ -88,7 +95,7 @@ test('задание: редактор на весь экран, проверк�
   await page.getByLabel('Название задания').fill('Сторис о новом осеннем меню');
   await expect(page.locator('[data-err="title"]')).toBeHidden();
   await saved(page);
-  await expect(page).toHaveURL(/\/app\/tasks\/\d+$/);
+  await taskSaved(page);
   const id = Number(page.url().split('/').pop());
 
   // ошибка у поля — после ухода с него
@@ -105,8 +112,16 @@ test('задание: редактор на весь экран, проверк�
   await page.getByLabel('Просмотры от').fill('5000');
   await expect(page.getByLabel('Просмотры от')).toHaveValue('5 000');
   await page.getByLabel('Оплата').fill('3000');
+  await expect(page.getByLabel('Лайки от')).toHaveCount(0); // условие — только просмотры
+  // срок обязателен: от завтра до 90 дней; время — по желанию
+  await page.getByLabel('Срок публикации').fill(dateIn(120).ru);
+  await page.getByLabel('Время (по Москве)').focus();
+  await expect(page.locator('[data-err="publishBy"]')).toHaveText('Срок — от завтра до 90 дней');
   await page.getByRole('button', { name: 'Неделя' }).click();
-  await expect(page.getByLabel('Срок')).toHaveValue(dateIn(7).ru);
+  await expect(page.getByLabel('Срок публикации')).toHaveValue(dateIn(7).ru);
+  await page.getByLabel('Время (по Москве)').fill('1830');
+  await expect(page.getByLabel('Время (по Москве)')).toHaveValue('18:30');
+  await expect(page.locator('[data-err="publishBy"]')).toBeHidden();
   await expect(left).toContainText('Осталось: описание');
 
   // блоки: пункт — сразу поле (текст без Enter тоже сохраняется), Enter — следующий, Alt+↑ — выше
@@ -161,6 +176,7 @@ test('задание: редактор на весь экран, проверк�
   await page.locator('[data-photos] input[type=file]').setInputFiles([fixture('photo.jpg'), fixture('portrait.jpg')]);
   await expect(page.locator('[data-photos] .up-t[data-id]')).toHaveCount(2, { timeout: 20_000 });
   await saved(page);
+  await expect.poll(async () => (await (await page.request.get(`/api/me/tasks/${id}`)).json()).photos.length, { timeout: 10_000 }).toBe(2);
 
   const draft = await (await page.request.get(`/api/me/tasks/${id}`)).json();
   expect(draft.status).toBe('draft');
@@ -168,6 +184,9 @@ test('задание: редактор на весь экран, проверк�
   expect(draft.access).toBe('approval');
   expect(draft.rewardKopecks).toBe(300000);
   expect(draft.publishBy).toBe(dateIn(7).iso);
+  expect(draft.publishTime).toBe('18:30');
+  expect(draft.deadlineAt).toBeTruthy();
+  expect(draft.minLikes).toBeUndefined();
   expect(draft.blocks.map((b: { title: string }) => b.title)).toEqual(['Описание', 'Что показать', 'Хештеги']);
   expect(draft.blocks[0].items).toEqual(['Снимите завтрак при утреннем свете']);
   expect(draft.blocks[1].items).toEqual(['Сырники', 'Интерьер']);
@@ -202,6 +221,7 @@ test('задание: редактор на весь экран, проверк�
   const tile = other.locator(`[data-tile="${id}"]`);
   await expect(tile.locator('.tile-t')).toHaveText('Сторис о новом осеннем меню');
   await expect(tile.locator('.tile-m')).toContainText(city);
+  await expect(tile.locator('.tile-m')).toContainText(/до \d+ [а-я]+, 18:30/);
   await expect(tile.locator('.tile-ph img')).toBeVisible();
   await expectTileSummary(other, tile, /3\s000\s₽/, info);
   await other.goto('/app?city=Нетакогогорода');
@@ -212,6 +232,8 @@ test('задание: редактор на весь экран, проверк�
   await other.waitForURL(`**/app/task/${id}`);
   await expect(other.getByRole('heading', { level: 1, name: 'Сторис о новом осеннем меню' })).toBeVisible();
   await expect(other.locator('.terms')).toContainText(/3\s000\s₽/);
+  await expect(other.locator('.terms')).toContainText(/до \d+ [а-я]+, 18:30/);
+  await expect(other.locator('.terms')).not.toContainText('лайк');
   await expect(other.locator('.body-b h3')).toHaveText(['Описание', 'Что показать', 'Хештеги']);
   await other.getByRole('button', { name: 'Откликнуться' }).click();
   await expect(other.locator('[data-toast]')).toContainText('Отклики появятся');
@@ -230,9 +252,11 @@ test('черновик: сохраняется сам, ✕ закрывает, �
   const errors = jsErrors(page);
   await login(page, uniq(info.project.name, 'draft'));
   await page.goto('/app/tasks/new');
+  await ready(page);
   await page.getByLabel('Название задания').fill('Черновик про кофе');
-  await page.getByLabel('Лайки от').fill('300');
+  await page.getByLabel('Просмотры от').fill('300');
   await page.locator('[data-blocks] .bk').first().locator('.bi-in').first().fill('Пока только идея');
+  await taskSaved(page);
   // ✕ — сохраняет, если не успели, и закрывает
   await page.getByRole('link', { name: 'Закрыть' }).click();
   await page.waitForURL('**/app/tasks');
@@ -240,8 +264,9 @@ test('черновик: сохраняется сам, ✕ закрывает, �
   const row = page.locator('.it', { hasText: 'Черновик про кофе' });
   await expect(row.locator('.st')).toHaveText('Черновик');
   await row.getByRole('link', { name: 'Изменить' }).click();
+  await ready(page);
   await expect(page.getByLabel('Название задания')).toHaveValue('Черновик про кофе');
-  await expect(page.getByLabel('Лайки от')).toHaveValue('300');
+  await expect(page.getByLabel('Просмотры от')).toHaveValue('300');
   await expect(page.locator('[data-blocks] .bi-in').first()).toHaveValue('Пока только идея');
   // «Опубликовать» — ошибки у всех незаполненных, курсор — в первом
   await page.getByRole('button', { name: 'Опубликовать' }).click();
@@ -271,7 +296,8 @@ test('анкета автора: из профиля, текст без Enter, �
   // как у заказчика: профиль автора из первого входа — темы и каналы (ссылка и @ник)
   expect((await page.request.put('/api/me/profile/creator', { headers: h, data: { name: 'Алина', city, spheres: ['food', 'beauty'], channels: ['https://t.me/alina', '@alina_ig'] } })).status()).toBe(200);
   await page.goto('/app/card');
-  await expect(page.locator('.rail, .bn')).toHaveCount(0);
+  await ready(page);
+  await expect(page.locator('.rail:visible, .bn:visible')).toHaveCount(1);
   await expect(page.getByLabel('Имя')).toHaveValue('Алина');
   await expect(page.locator('[data-cats] [aria-pressed="true"]')).toHaveCount(2);
   const plats = page.locator('[data-platforms] .plat');
@@ -299,6 +325,7 @@ test('анкета автора: из профиля, текст без Enter, �
   await page.locator('[data-photos] input[type=file]').setInputFiles([fixture('photo.jpg')]);
   await expect(page.locator('[data-cover] .up-t[data-id], [data-photos] .up-t[data-id]')).toHaveCount(2, { timeout: 20_000 });
   await saved(page);
+  await expect.poll(async () => (await (await page.request.get('/api/me/card')).json()).card?.works.length, { timeout: 10_000 }).toBe(1);
   const card = (await (await page.request.get('/api/me/card')).json()).card;
   expect(card.platforms).toEqual([{ kind: 'telegram', url: 'https://t.me/alina', followers: 12000 }]);
   expect(card.blocks[0].items).toEqual(['Снимаю еду и городские места']);
@@ -334,9 +361,69 @@ test('анкета автора: из профиля, текст без Enter, �
   expect(errors).toEqual([]);
 });
 
+// Заполненное не теряется при обновлении: черновик формы — на сервере (Redis / PostgreSQL) и копия на устройстве.
+test('черновик формы: заполнить → обновить → всё на месте; без связи — копия на устройстве', async ({ page }, info) => {
+  const errors = jsErrors(page);
+  await login(page, uniq(info.project.name, 'restore'));
+  await page.goto('/app/tasks/new');
+  await ready(page);
+  // ещё не проходит проверку сервера (название короткое) — но черновик формы сохраняется
+  await page.getByLabel('Название задания').fill('Кофе');
+  await page.locator('[data-cats] [data-slug]').nth(1).click();
+  await page.getByRole('button', { name: 'TikTok' }).click();
+  await page.getByLabel('Просмотры от').fill('7000');
+  const blocks = page.locator('[data-blocks] .bk');
+  await blocks.nth(1).locator('.bi-in').first().fill('Бариста');
+  await page.keyboard.press('Enter');
+  await page.keyboard.type('Латте-арт');
+  await page.keyboard.press('Alt+ArrowUp');
+  await page.locator('.bk-tpl').getByRole('button', { name: 'Сроки' }).click();
+  await page.keyboard.type('До выходных');
+  await saved(page);
+  await expect(page.locator('[data-state]')).toHaveText('Сохранено · только что');
+  const slug = await page.locator('[data-cats] [data-slug]').nth(1).getAttribute('data-slug');
+
+  await page.reload();
+
+  await ready(page);
+  await expect(page.getByLabel('Название задания')).toHaveValue('Кофе');
+  await expect(page.getByLabel('Просмотры от')).toHaveValue('7 000');
+  await expect(page.getByRole('button', { name: 'TikTok' })).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.locator(`[data-cats] [data-slug="${slug}"]`)).toHaveAttribute('aria-pressed', 'true');
+  await expect.poll(() => vals(page.locator('[data-blocks] .bk-title'))).toEqual(['Описание', 'Что показать', 'Сроки']);
+  await expect.poll(() => vals(page.locator('[data-blocks] .bk').nth(1).locator('.bi-in'))).toEqual(['Латте-арт', 'Бариста']);
+  await expect(page.locator('[data-state]')).toContainText('Сохранено');
+
+  // нет связи с сервером черновиков — копия на устройстве; связь вернулась — уходит на сервер
+  await page.route('**/api/me/drafts/**', (r) => (r.request().method() === 'GET' ? r.continue() : r.abort()));
+  await page.route('**/api/me/tasks**', (r) => r.abort());
+  await page.getByLabel('Название задания').fill('Кофе с собой');
+  await expect(page.locator('[data-state]')).toHaveText('Нет связи — сохранено на устройстве', { timeout: 10_000 });
+  await page.unrouteAll({ behavior: 'ignoreErrors' });
+  await page.reload();
+  await ready(page);
+  await expect(page.getByLabel('Название задания')).toHaveValue('Кофе с собой');
+  const form = page.url().match(/\/app\/tasks\/(\d+)/) ? `task-${page.url().split('/').pop()}` : 'task-new';
+  await expect.poll(async () => (await (await page.request.get(`/api/me/drafts/${form}`)).json()).draft?.data.fields.title, { timeout: 10_000 }).toBe('Кофе с собой');
+
+  // анкета — так же
+  await page.request.patch('/api/me/mode', { headers: await csrf(page), data: { mode: 'creator' } });
+  await page.goto('/app/card');
+  await ready(page);
+  await page.getByLabel('Город').fill('Тверь');
+  await page.locator('[data-blocks] .bk').first().locator('.bi-in').first().fill('Снимаю кофейни');
+  await saved(page);
+  await page.reload();
+  await ready(page);
+  await expect(page.getByLabel('Город')).toHaveValue('Тверь');
+  await expect(page.locator('[data-blocks] .bk').first().locator('.bi-in').first()).toHaveValue('Снимаю кофейни');
+  expect(errors).toEqual([]);
+});
+
 test('фото: понятные ошибки типа и размера, отмена загрузки', async ({ page }, info) => {
   await login(page, uniq(info.project.name, 'up'));
   await page.goto('/app/tasks/new');
+  await ready(page);
   const input = page.locator('[data-photos] input[type=file]');
   await input.setInputFiles(fixture('anim.gif'));
   await expect(page.locator('[data-toast]')).toContainText('JPEG, PNG, WebP или HEIC');
@@ -360,7 +447,7 @@ test('сервер проверяет сам: неполное — 400 по по
   await login(page, uniq(info.project.name, 'api'));
   const csrf = (await (await page.request.get('/api/auth/config')).json()).csrfToken;
   const h = { 'X-CSRF-Token': csrf };
-  const base = { title: '', city: '', nationwide: false, category: '', formats: [], access: 'open', minViews: 0, minLikes: 0, rewardKopecks: 0, publishBy: '', blocks: [], cover: '', photos: [] };
+  const base = { title: '', city: '', nationwide: false, category: '', formats: [], access: 'open', minViews: 0, rewardKopecks: 0, publishBy: '', blocks: [], cover: '', photos: [] };
   const created = await page.request.post('/api/me/tasks', { headers: h, data: base });
   expect(created.status()).toBe(201);
   const { id } = await created.json();

@@ -23,7 +23,7 @@ const t = task!;
 const sent = Astro.url.searchParams.get('sent') === '1';
 ---
 {editable ? (
-  <Editor title={t.title || 'Задание'} only="business">
+  <Editor title={t.title || 'Задание'} page="my" only="business">
     <TaskForm task={t} categories={categories} brand={brand} />
   </Editor>
 ) : (
@@ -37,6 +37,7 @@ const sent = Astro.url.searchParams.get('sent') === '1';
           <span class="st" data-s={t.status} data-status-label>{STATUS[t.status]}</span>
         </div>
         {t.status === 'pending_review' && <p class="banner" role="status">{sent ? 'Отправлено. ' : ''}Проверим и опубликуем — обычно в течение дня.</p>}
+        {t.status === 'expired' && <p class="banner" role="status"><Icon name="clock" size={20} />Срок публикации прошёл — задания нет в ленте. Верните в черновик, чтобы продлить.</p>}
         {t.status === 'published' && sent && <p class="banner is-ok" role="status"><Icon name="check" size={20} />Опубликовано — авторы уже видят задание в ленте.</p>}
         <TaskPage task={{ ...t, brand }} />
         <div class="ed-bar is-plain">

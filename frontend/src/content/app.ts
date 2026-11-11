@@ -29,6 +29,7 @@ export const STATUS: Record<string, string> = {
   pending_review: 'На проверке',
   published: 'Опубликовано',
   rejected: 'Отклонено',
+  expired: 'Завершено',
 };
 
 export const FORMATS: { id: string; title: string }[] = [
@@ -72,12 +73,12 @@ export const TASK_RULES: Record<string, { short: string; msg: string }> = {
   category: { short: 'сфера', msg: 'Выберите сферу' },
   city: { short: 'город', msg: 'Укажите город или «Вся Россия»' },
   formats: { short: 'формат', msg: 'Выберите хотя бы один формат' },
-  minViews: { short: 'просмотры или лайки', msg: 'Укажите просмотры или лайки' },
+  minViews: { short: 'просмотры', msg: 'Укажите число просмотров' },
   reward: { short: 'оплата', msg: 'Оплата — от 100 ₽' },
   publishBy: { short: 'срок', msg: 'Укажите срок публикации' },
   blocks: { short: 'описание', msg: 'Опишите задание: добавьте описание или требования' },
 };
-export const DUE_RANGE = 'Срок — от завтра до полугода';
+export const DUE_RANGE = 'Срок — от завтра до 90 дней';
 export const CARD_RULES: Record<string, { short: string; msg: string }> = {
   name: { short: 'имя', msg: 'Имя — от 2 символов' },
   city: { short: 'город', msg: 'Укажите город' },

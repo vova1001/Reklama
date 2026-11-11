@@ -93,6 +93,18 @@ norm (нижний регистр, ё → е, одиночные пробелы)
 - **Редактор:** `layouts/Editor.astro` без навигации приложения: панель `EditorBar` (✕, «Правка / Как увидят»,
   сохранение, «Опубликовать», «Осталось: …»), колонка до 720px; блоки — `scripts/editor/blocks.ts`.
 
+### Черновики форм, только просмотры, срок публикации (задача 10)
+
+- **Черновик формы** (`/api/me/drafts/{task-new|task-<id>|card}`): состояние формы как есть — поля, блоки, порядок,
+  выбранное, фото-ссылки. `service.Drafts` за интерфейсом `DraftStore`: `repository.DraftsRedis` (ключ
+  `ohvat:draft:<user>:<form>`, TTL 7 дней) → при сбое и без `REDIS_URL` — `repository.DraftsPG` (`form_drafts`,
+  очистка раз в час); `service.FallbackDrafts`. Предел — `DRAFT_MAX_KB` (64), частота — `RATE_LIMIT_DRAFT_*`.
+  Фронт (`scripts/editor/drafts.ts`): копия в localStorage сразу, на сервер — через 800 мс; при открытии — самое
+  свежее; нет связи — копия ждёт и уходит при возврате связи; после отправки черновик удаляется.
+- **Условие** — только просмотры (`min_likes` удалён). **Срок** обязателен: дата (+ время по желанию, по Москве),
+  от завтра до 90 дней; `deadline_at` (UTC) считает сервис. Лента и страница — только `deadline_at > now()`;
+  `Tasks.RunExpiry` раз в 5 минут переводит просроченные в `expired` (журнал, «срок публикации прошёл»).
+
 ### Контракт
 
 `backend/api/openapi.yaml`: `GET /api/home`, `GET /healthz`; вход — `GET /api/auth/config`, `POST /api/auth/email/start`,

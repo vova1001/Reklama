@@ -76,9 +76,12 @@ type Config struct {
 	RedisURL     string        // REDIS_URL — общие лимиты для нескольких серверов; пусто — лимиты в памяти процесса
 	MailWorkers  int           // MAIL_WORKERS, 2
 
-	TasksMax      int    // TASKS_MAX_PER_USER — заданий на пользователя, 50
-	SubmitsPerDay int    // MODERATION_SUBMITS_PER_DAY — отправок на проверку в сутки, 10
-	Moderation    string // MODERATION_MODE: auto (сразу публикуется) | manual (ждёт модератора), auto
+	TasksMax      int     // TASKS_MAX_PER_USER — заданий на пользователя, 50
+	SubmitsPerDay int     // MODERATION_SUBMITS_PER_DAY — отправок на проверку в сутки, 10
+	DraftMaxKB    int     // DRAFT_MAX_KB — состояние формы редактора, 64
+	DraftRPS      float64 // RATE_LIMIT_DRAFT_RPS — сохранений черновика в секунду на пользователя, 2
+	DraftBurst    int     // RATE_LIMIT_DRAFT_BURST, 30
+	Moderation    string  // MODERATION_MODE: auto (сразу публикуется) | manual (ждёт модератора), auto
 
 	MediaStore      string  // MEDIA_STORE: postgres | s3 (postgres)
 	StorageEndpoint string  // STORAGE_ENDPOINT — https://… (R2, Яндекс Object Storage, MinIO)
@@ -306,6 +309,9 @@ func load(get func(string) string) (Config, error) {
 	c.WebhookBurst = num("TELEGRAM_WEBHOOK_BURST", 200)
 	c.TasksMax = num("TASKS_MAX_PER_USER", 50)
 	c.SubmitsPerDay = num("MODERATION_SUBMITS_PER_DAY", 10)
+	c.DraftMaxKB = num("DRAFT_MAX_KB", 64)
+	c.DraftRPS = rate("RATE_LIMIT_DRAFT_RPS", 2)
+	c.DraftBurst = num("RATE_LIMIT_DRAFT_BURST", 30)
 	c.Moderation = strings.ToLower(strings.TrimSpace(get("MODERATION_MODE")))
 	switch c.Moderation {
 	case "":

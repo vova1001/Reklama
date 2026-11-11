@@ -26,9 +26,9 @@ type taskIn struct {
 	Formats       []string   `json:"formats"`
 	Access        string     `json:"access"`
 	MinViews      int64      `json:"minViews"`
-	MinLikes      int64      `json:"minLikes"`
 	RewardKopecks int64      `json:"rewardKopecks"`
 	PublishBy     string     `json:"publishBy"`
+	PublishTime   string     `json:"publishTime"`
 	Blocks        []blockDTO `json:"blocks"`
 	Cover         string     `json:"cover"`
 	Photos        []string   `json:"photos"`
@@ -68,9 +68,10 @@ type taskDTO struct {
 	Formats       []string   `json:"formats"`
 	Access        string     `json:"access"`
 	MinViews      int64      `json:"minViews"`
-	MinLikes      int64      `json:"minLikes"`
 	RewardKopecks int64      `json:"rewardKopecks"`
 	PublishBy     *string    `json:"publishBy"`
+	PublishTime   string     `json:"publishTime"`
+	DeadlineAt    *time.Time `json:"deadlineAt"`
 	Blocks        []blockDTO `json:"blocks"`
 	Cover         *photoDTO  `json:"cover"`
 	Photos        []photoDTO `json:"photos"`
@@ -182,8 +183,8 @@ func toBlocksDTO(bs []domain.Block) []blockDTO {
 func (in taskIn) toService() service.TaskInput {
 	return service.TaskInput{
 		Title: in.Title, City: in.City, Nationwide: in.Nationwide, Category: in.Category, Formats: in.Formats,
-		Access: in.Access, MinViews: in.MinViews, MinLikes: in.MinLikes, RewardKopecks: in.RewardKopecks,
-		PublishBy: in.PublishBy, Blocks: blocksIn(in.Blocks), Cover: in.Cover, Photos: in.Photos,
+		Access: in.Access, MinViews: in.MinViews, RewardKopecks: in.RewardKopecks,
+		PublishBy: in.PublishBy, PublishTime: in.PublishTime, Blocks: blocksIn(in.Blocks), Cover: in.Cover, Photos: in.Photos,
 	}
 }
 
@@ -219,7 +220,7 @@ func toTaskDTO(t domain.Task) taskDTO {
 	return taskDTO{
 		ID: t.ID, Status: string(t.Status), RejectReason: t.RejectReason, Title: t.Title, City: t.City, Nationwide: t.Nationwide,
 		Category: t.Category, CategoryTitle: t.CategoryTitle, Formats: nonNilStr(t.Formats), Access: t.Access,
-		MinViews: t.MinViews, MinLikes: t.MinLikes, RewardKopecks: t.RewardKopecks, PublishBy: by, Blocks: toBlocksDTO(t.Blocks),
+		MinViews: t.MinViews, RewardKopecks: t.RewardKopecks, PublishBy: by, PublishTime: t.PublishTime, DeadlineAt: utcPtr(t.DeadlineAt), Blocks: toBlocksDTO(t.Blocks),
 		Cover: photo(t.Cover), Photos: photos(t.Photos), Brand: t.Brand,
 		CreatedAt: t.CreatedAt.UTC(), UpdatedAt: t.UpdatedAt.UTC(), SubmittedAt: utcPtr(t.SubmittedAt), PublishedAt: utcPtr(t.PublishedAt),
 	}

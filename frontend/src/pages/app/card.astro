@@ -21,7 +21,7 @@ const sent = Astro.url.searchParams.get('sent') === '1';
 const c = card!;
 ---
 {editable ? (
-  <Editor title="Анкета" only="creator">
+  <Editor title="Анкета" page="create" only="creator">
     <CardForm card={card} profile={creator} user={me.user} categories={categories} />
   </Editor>
 ) : (

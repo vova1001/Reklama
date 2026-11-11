@@ -49,8 +49,8 @@ func (r *Listings) CreateTask(ctx context.Context, t domain.Task) (domain.Task, 
 		var err error
 		row, err = q.CreateTask(ctx, store.CreateTaskParams{
 			OwnerID: t.OwnerID, Title: t.Title, City: t.City, Nationwide: t.Nationwide, Category: text(t.Category),
-			Formats: nonNil(t.Formats), Access: t.Access, MinViews: t.MinViews, MinLikes: t.MinLikes,
-			RewardKopecks: t.RewardKopecks, PublishBy: date(t.PublishBy), Blocks: blocks,
+			Formats: nonNil(t.Formats), Access: t.Access, MinViews: t.MinViews,
+			RewardKopecks: t.RewardKopecks, PublishBy: date(t.PublishBy), PublishTime: clockTime(t.PublishTime), DeadlineAt: tsOpt(t.DeadlineAt), Blocks: blocks,
 			Cover: text(t.Cover), Photos: nonNil(t.Photos),
 		})
 		if err != nil {
@@ -117,8 +117,8 @@ func (r *Listings) UpdateTask(ctx context.Context, t domain.Task) (domain.Task, 
 		var err error
 		row, err = q.UpdateOwnTask(ctx, store.UpdateOwnTaskParams{
 			ID: t.ID, OwnerID: t.OwnerID, Title: t.Title, City: t.City, Nationwide: t.Nationwide, Category: text(t.Category),
-			Formats: nonNil(t.Formats), Access: t.Access, MinViews: t.MinViews, MinLikes: t.MinLikes,
-			RewardKopecks: t.RewardKopecks, PublishBy: date(t.PublishBy), Blocks: blocks,
+			Formats: nonNil(t.Formats), Access: t.Access, MinViews: t.MinViews,
+			RewardKopecks: t.RewardKopecks, PublishBy: date(t.PublishBy), PublishTime: clockTime(t.PublishTime), DeadlineAt: tsOpt(t.DeadlineAt), Blocks: blocks,
 			Cover: text(t.Cover), Photos: nonNil(t.Photos),
 		})
 		if err != nil {
@@ -218,7 +218,7 @@ func publishedTaskOf(row store.GetPublishedTaskRow) (domain.Task, error) {
 	t, err := taskOf(store.Task{
 		ID: row.ID, OwnerID: row.OwnerID, Status: row.Status, RejectReason: row.RejectReason, Title: row.Title,
 		City: row.City, Nationwide: row.Nationwide, Category: row.Category, Formats: row.Formats, Access: row.Access,
-		MinViews: row.MinViews, MinLikes: row.MinLikes, RewardKopecks: row.RewardKopecks, PublishBy: row.PublishBy,
+		MinViews: row.MinViews, RewardKopecks: row.RewardKopecks, PublishBy: row.PublishBy, PublishTime: row.PublishTime, DeadlineAt: row.DeadlineAt,
 		Blocks: row.Blocks, Cover: row.Cover, Photos: row.Photos, CreatedAt: row.CreatedAt, UpdatedAt: row.UpdatedAt,
 		SubmittedAt: row.SubmittedAt, PublishedAt: row.PublishedAt,
 	})
@@ -420,9 +420,13 @@ func taskOf(t store.Task) (domain.Task, error) {
 	out := domain.Task{
 		ID: t.ID, OwnerID: t.OwnerID, Status: domain.Status(t.Status), RejectReason: t.RejectReason, Title: t.Title,
 		City: t.City, Nationwide: t.Nationwide, Category: t.Category.String, Formats: nonNil(t.Formats), Access: t.Access,
-		MinViews: t.MinViews, MinLikes: t.MinLikes, RewardKopecks: t.RewardKopecks, Blocks: blocks,
+		MinViews: t.MinViews, RewardKopecks: t.RewardKopecks, Blocks: blocks,
 		Cover: t.Cover.String, Photos: nonNil(t.Photos), CreatedAt: t.CreatedAt.Time, UpdatedAt: t.UpdatedAt.Time,
-		SubmittedAt: tsPtr(t.SubmittedAt), PublishedAt: tsPtr(t.PublishedAt),
+		SubmittedAt: tsPtr(t.SubmittedAt), PublishedAt: tsPtr(t.PublishedAt), DeadlineAt: tsPtr(t.DeadlineAt),
+	}
+	if t.PublishTime.Valid {
+		m := t.PublishTime.Microseconds / 60e6
+		out.PublishTime = fmt.Sprintf("%02d:%02d", m/60, m%60)
 	}
 	if t.PublishBy.Valid {
 		d := t.PublishBy.Time.UTC()
@@ -510,4 +514,26 @@ func tsPtr(t pgtype.Timestamptz) *time.Time {
 	}
 	v := t.Time
 	return &v
+}
+
+// clockTime — «ЧЧ:ММ» → time в базе ("" — NULL).
+func clockTime(hm string) pgtype.Time {
+	var h, m int64
+	if _, err := fmt.Sscanf(hm, "%d:%d", &h, &m); err != nil || hm == "" {
+		return pgtype.Time{}
+	}
+	return pgtype.Time{Microseconds: (h*60 + m) * 60e6, Valid: true}
+}
+
+func tsOpt(t *time.Time) pgtype.Timestamptz {
+	if t == nil {
+		return pgtype.Timestamptz{}
+	}
+	return ts(*t)
+}
+
+// ExpireTasks — опубликованные со сроком не позже now — в «завершено» (с журналом); id завершённых.
+func (r *Listings) ExpireTasks(ctx context.Context, now time.Time) ([]int64, error) {
+	ids, err := r.q.ExpireTasks(ctx, ts(now))
+	return ids, dbErr("завершение просроченных заданий", err)
 }

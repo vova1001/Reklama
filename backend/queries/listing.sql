@@ -3,10 +3,10 @@
 -- ===== задания =====
 
 -- name: CreateTask :one
-INSERT INTO tasks (owner_id, title, city, nationwide, category, formats, access, min_views, min_likes,
-                   reward_kopecks, publish_by, blocks, cover, photos)
-VALUES (@owner_id, @title, @city, @nationwide, sqlc.narg(category), @formats, @access, @min_views, @min_likes,
-        @reward_kopecks, sqlc.narg(publish_by), @blocks, sqlc.narg(cover), @photos)
+INSERT INTO tasks (owner_id, title, city, nationwide, category, formats, access, min_views,
+                   reward_kopecks, publish_by, publish_time, deadline_at, blocks, cover, photos)
+VALUES (@owner_id, @title, @city, @nationwide, sqlc.narg(category), @formats, @access, @min_views,
+        @reward_kopecks, sqlc.narg(publish_by), sqlc.narg(publish_time), sqlc.narg(deadline_at), @blocks, sqlc.narg(cover), @photos)
 RETURNING *;
 
 -- name: GetOwnTask :one
@@ -22,13 +22,13 @@ SELECT count(*)::int FROM tasks WHERE owner_id = @owner_id;
 -- name: UpdateOwnTask :one
 UPDATE tasks
 SET title = @title, city = @city, nationwide = @nationwide, category = sqlc.narg(category), formats = @formats,
-    access = @access, min_views = @min_views, min_likes = @min_likes, reward_kopecks = @reward_kopecks,
-    publish_by = sqlc.narg(publish_by), blocks = @blocks, cover = sqlc.narg(cover), photos = @photos, updated_at = now()
+    access = @access, min_views = @min_views, reward_kopecks = @reward_kopecks,
+    publish_by = sqlc.narg(publish_by), publish_time = sqlc.narg(publish_time), deadline_at = sqlc.narg(deadline_at), blocks = @blocks, cover = sqlc.narg(cover), photos = @photos, updated_at = now()
 WHERE id = @id AND owner_id = @owner_id AND status IN ('draft', 'rejected')
 RETURNING *;
 
 -- name: DeleteOwnTask :execrows
-DELETE FROM tasks WHERE id = @id AND owner_id = @owner_id AND status IN ('draft', 'rejected');
+DELETE FROM tasks WHERE id = @id AND owner_id = @owner_id AND status IN ('draft', 'rejected', 'expired');
 
 -- Смена статуса — только из ожидаемого (from): параллельная смена даёт 0 строк.
 -- name: SetTaskStatus :one
@@ -50,7 +50,7 @@ FROM tasks t
 JOIN users u ON u.id = t.owner_id
 LEFT JOIN business_profiles b ON b.user_id = t.owner_id
 LEFT JOIN categories c ON c.slug = t.category
-WHERE t.status = 'published'
+WHERE t.status = 'published' AND t.deadline_at > now()
   AND (sqlc.narg(before_at)::timestamptz IS NULL OR (t.published_at, t.id) < (sqlc.narg(before_at)::timestamptz, @before_id::bigint))
   AND (@category::text = '' OR t.category = @category::text)
   AND (@city::text = '' OR t.nationwide OR lower(t.city) = lower(@city::text))
@@ -64,7 +64,19 @@ FROM tasks t
 JOIN users u ON u.id = t.owner_id
 LEFT JOIN business_profiles b ON b.user_id = t.owner_id
 LEFT JOIN categories c ON c.slug = t.category
-WHERE t.id = @id AND t.status = 'published';
+WHERE t.id = @id AND t.status = 'published' AND t.deadline_at > now();
+
+-- Срок публикации прошёл — «завершено» (система) с записью в журнал; одним запросом.
+-- name: ExpireTasks :many
+WITH done AS (
+    UPDATE tasks SET status = 'expired', updated_at = now()
+    WHERE status = 'published' AND deadline_at <= @now
+    RETURNING id
+), logged AS (
+    INSERT INTO moderation_log (subject, subject_id, from_status, to_status, reason, actor_id, auto)
+    SELECT 'task', id, 'published', 'expired', 'срок публикации прошёл', NULL, true FROM done
+)
+SELECT id FROM done;
 
 -- ===== анкеты авторов =====
 
