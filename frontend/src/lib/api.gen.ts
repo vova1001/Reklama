@@ -368,6 +368,288 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/tasks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Лента опубликованных заданий
+         * @description Новые сверху. Курсор `next` из ответа — в параметр `cursor` следующего запроса.
+         */
+        get: operations["getFeed"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/tasks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Мои задания (все статусы) */
+        get: operations["listMyTasks"];
+        put?: never;
+        /** Новый черновик задания */
+        post: operations["createTask"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/tasks/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["TaskID"];
+            };
+            cookie?: never;
+        };
+        /** Моё задание */
+        get: operations["getMyTask"];
+        /** Сохранить черновик (или правку отклонённого) */
+        put: operations["updateTask"];
+        post?: never;
+        /** Удалить черновик или отклонённое */
+        delete: operations["deleteTask"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/tasks/{id}/submit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["TaskID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Отправить на проверку
+         * @description Из `draft` или `rejected` в `pending_review`. Обязательно: название 5–100, город (или «Вся Россия»), сфера,
+         *     формат, просмотры или лайки, оплата от 100 ₽, срок — от завтра до полугода (по Москве), хотя бы один
+         *     блок с пунктами.
+         */
+        post: operations["submitTask"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/tasks/{id}/withdraw": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["TaskID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Вернуть с проверки в черновик */
+        post: operations["withdrawTask"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/card": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Моя анкета автора */
+        get: operations["getCard"];
+        /** Сохранить черновик анкеты */
+        put: operations["saveCard"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/card/submit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Отправить анкету на проверку
+         * @description Обязательно — имя, город, 1–5 тем (своих — до 3), площадки с подписчиками, хотя бы один блок с пунктами.
+         */
+        post: operations["submitCard"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/card/withdraw": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Вернуть анкету с проверки в черновик */
+        post: operations["withdrawCard"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/categories": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Общие категории и свои */
+        get: operations["listCategories"];
+        put?: never;
+        /**
+         * Своя категория
+         * @description 2–40 символов, без ссылок и брани. Если такая уже есть (без учёта регистра, «ё» и пробелов) — общая или
+         *     своя — вернётся она (`created: false`, 200). Новая — «на проверке» (201): сразу доступна автору в его
+         *     задании и анкете, после модерации может стать общей. Своих на проверке — до 10, в одной анкете — до 3.
+         */
+        post: operations["createCategory"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/categories/similar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Похожие категории (подсказки при вводе)
+         * @description До 6 — общие и свои на проверке; совпадение, начало, вхождение, опечатка в 1–2 буквы.
+         */
+        get: operations["similarCategories"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/media": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Загрузить фото
+         * @description `multipart/form-data`: `purpose`, `file`, необязательно `crop` — «x,y,w,h» в долях кадра (после поворота
+         *     по EXIF). Тип — по содержимому: JPEG, PNG, WebP, HEIC (SVG, GIF и анимация — нет); до `MEDIA_MAX_MB`
+         *     (10 МБ) и 40 Мп. Сервер удаляет метаданные (EXIF, геометки), поворачивает по EXIF, обрезает под
+         *     пропорции назначения (аватар 1:1, обложка 16:9; без `crop` — по центру) и хранит WebP 320/800/1600.
+         *     Неприкреплённое к заданию, анкете или профилю удаляется через сутки.
+         */
+        post: operations["uploadMedia"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/media/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Удалить своё неприкреплённое фото */
+        delete: operations["deleteMedia"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/avatar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Аватар профиля
+         * @description Из загруженного фото назначения `avatar`; `mediaId: null` — убрать.
+         */
+        put: operations["setAvatar"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/media/{id}/{size}.webp": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Файл фото
+         * @description Аватар профиля и фото опубликованных заданий и анкет — всем (`public, max-age=31536000, immutable`);
+         *     остальное — только владельцу (`private`), чужое закрытое — 404. ETag — id и размер (304 по If-None-Match).
+         */
+        get: operations["getMedia"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -612,6 +894,171 @@ export interface components {
             /** @description Прогресс заполнения для активного режима, % */
             completion: number;
         };
+        /**
+         * @description Черновик | на проверке | опубликовано | отклонено (с причиной)
+         * @enum {string}
+         */
+        Status: "draft" | "pending_review" | "published" | "rejected";
+        /** @description Динамический блок: text — абзацы, list — пункты, links — ссылки https://… */
+        Block: {
+            /** @enum {string} */
+            kind: "text" | "list" | "links";
+            title: string;
+            items: string[];
+        };
+        Photo: {
+            id: string;
+            /** @description 320 px */
+            thumb: string;
+            /** @description 800 px */
+            src: string;
+            /** @description 1600 px */
+            large: string;
+        };
+        /** @enum {string} */
+        TaskFormat: "reels" | "shorts" | "youtube" | "vk_clips" | "tiktok" | "telegram";
+        /** @description Черновик может быть неполным; ограничения формы проверяются всегда, обязательность — при отправке. */
+        TaskInput: {
+            title: string;
+            city: string;
+            /** @description «Вся Россия» */
+            nationwide: boolean;
+            /** @description slug общей или своей категории; "" — не выбрана */
+            category: string;
+            formats: components["schemas"]["TaskFormat"][];
+            /** @enum {string} */
+            access: "open" | "approval" | "";
+            /** Format: int64 */
+            minViews: number;
+            /** Format: int64 */
+            minLikes: number;
+            /** Format: int64 */
+            rewardKopecks: number;
+            /** @description ГГГГ-ММ-ДД или "" */
+            publishBy: string;
+            blocks: components["schemas"]["Block"][];
+            /** @description id фото task_cover или "" */
+            cover: string;
+            /** @description id фото task_photo по порядку */
+            photos: string[];
+        };
+        Task: {
+            /** Format: int64 */
+            id: number;
+            status: components["schemas"]["Status"];
+            rejectReason: string;
+            title: string;
+            city: string;
+            nationwide: boolean;
+            category: string;
+            /** @description Только в ленте */
+            categoryTitle?: string;
+            formats: components["schemas"]["TaskFormat"][];
+            /** @enum {string} */
+            access: "open" | "approval";
+            /** Format: int64 */
+            minViews: number;
+            /** Format: int64 */
+            minLikes: number;
+            /** Format: int64 */
+            rewardKopecks: number;
+            /** Format: date */
+            publishBy: string | null;
+            blocks: components["schemas"]["Block"][];
+            cover: components["schemas"]["Photo"] | null;
+            photos: components["schemas"]["Photo"][];
+            /** @description Название бизнеса (только в ленте) */
+            brand?: string;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+            /** Format: date-time */
+            submittedAt: string | null;
+            /** Format: date-time */
+            publishedAt: string | null;
+        };
+        TaskList: {
+            tasks: components["schemas"]["Task"][];
+        };
+        Feed: {
+            tasks: components["schemas"]["Task"][];
+            /** @description Курсор следующей страницы */
+            next: string | null;
+        };
+        PlatformInput: {
+            /** @description https://… (http повышается) */
+            url: string;
+            /** Format: int64 */
+            followers: number;
+        };
+        Platform: {
+            /**
+             * @description По домену
+             * @enum {string}
+             */
+            kind: "telegram" | "youtube" | "vk" | "tiktok" | "instagram" | "dzen" | "rutube" | "other";
+            url: string;
+            /** Format: int64 */
+            followers: number;
+        };
+        CardInput: {
+            name: string;
+            city: string;
+            /** @description slug; своих — до 3 */
+            topics: string[];
+            platforms: components["schemas"]["PlatformInput"][];
+            blocks: components["schemas"]["Block"][];
+            /** @description id фото card_avatar или "" */
+            avatar: string;
+            /** @description id фото card_work по порядку */
+            works: string[];
+        };
+        Card: {
+            status: components["schemas"]["Status"];
+            rejectReason: string;
+            name: string;
+            city: string;
+            topics: string[];
+            platforms: components["schemas"]["Platform"][];
+            blocks: components["schemas"]["Block"][];
+            avatar: components["schemas"]["Photo"] | null;
+            works: components["schemas"]["Photo"][];
+            /** Format: date-time */
+            updatedAt: string;
+            /** Format: date-time */
+            submittedAt: string | null;
+        };
+        CardResult: {
+            card: components["schemas"]["Card"] | null;
+        };
+        CategoryItem: {
+            slug: string;
+            title: string;
+            icon: string;
+            /** @enum {string} */
+            status: "approved" | "pending_review" | "rejected";
+            /** @description Своя (ещё не общая) */
+            own: boolean;
+        };
+        CategoryList: {
+            common: components["schemas"]["CategoryItem"][];
+            own: components["schemas"]["CategoryItem"][];
+        };
+        CategoryCreated: {
+            category: components["schemas"]["CategoryItem"];
+            created: boolean;
+        };
+        /**
+         * @description Аватар 1:1 | обложка задания 16:9 | пример к заданию | аватар анкеты 1:1 | пример работы
+         * @enum {string}
+         */
+        MediaPurpose: "avatar" | "task_cover" | "task_photo" | "card_avatar" | "card_work";
+        Media: components["schemas"]["Photo"] & {
+            purpose: components["schemas"]["MediaPurpose"];
+            width: number;
+            height: number;
+        };
     };
     responses: {
         /** @description Вошли — cookie сессии установлена */
@@ -663,6 +1110,24 @@ export interface components {
                 "application/json": components["schemas"]["Error"];
             };
         };
+        /** @description not_found — нет или чужое */
+        NotFound: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description wrong_status — статус уже другой | tasks_limit | media_quota */
+        Conflict: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["Error"];
+            };
+        };
         /** @description provider_disabled | mail_unavailable */
         Unavailable: {
             headers: {
@@ -676,6 +1141,7 @@ export interface components {
     parameters: {
         /** @description Значение из `GET /api/auth/config` (равно cookie `ohvat_csrf`) */
         CSRF: string;
+        TaskID: number;
     };
     requestBodies: never;
     headers: never;
@@ -1259,6 +1725,586 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             429: components["responses"]["TooMany"];
+        };
+    };
+    getFeed: {
+        parameters: {
+            query?: {
+                cursor?: string;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Страница ленты */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Feed"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            429: components["responses"]["TooMany"];
+        };
+    };
+    listMyTasks: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Задания, недавно изменённые сверху (до 100) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskList"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    createTask: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Значение из `GET /api/auth/config` (равно cookie `ohvat_csrf`) */
+                "X-CSRF-Token": components["parameters"]["CSRF"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TaskInput"];
+            };
+        };
+        responses: {
+            /** @description Черновик создан */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Task"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+            429: components["responses"]["TooMany"];
+        };
+    };
+    getMyTask: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["TaskID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Задание */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Task"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    updateTask: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Значение из `GET /api/auth/config` (равно cookie `ohvat_csrf`) */
+                "X-CSRF-Token": components["parameters"]["CSRF"];
+            };
+            path: {
+                id: components["parameters"]["TaskID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TaskInput"];
+            };
+        };
+        responses: {
+            /** @description Сохранено */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Task"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    deleteTask: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Значение из `GET /api/auth/config` (равно cookie `ohvat_csrf`) */
+                "X-CSRF-Token": components["parameters"]["CSRF"];
+            };
+            path: {
+                id: components["parameters"]["TaskID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Удалено */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    submitTask: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Значение из `GET /api/auth/config` (равно cookie `ohvat_csrf`) */
+                "X-CSRF-Token": components["parameters"]["CSRF"];
+            };
+            path: {
+                id: components["parameters"]["TaskID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description На проверке */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Task"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            429: components["responses"]["TooMany"];
+        };
+    };
+    withdrawTask: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Значение из `GET /api/auth/config` (равно cookie `ohvat_csrf`) */
+                "X-CSRF-Token": components["parameters"]["CSRF"];
+            };
+            path: {
+                id: components["parameters"]["TaskID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Черновик */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Task"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    getCard: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Анкета (null — ещё нет) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CardResult"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    saveCard: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Значение из `GET /api/auth/config` (равно cookie `ohvat_csrf`) */
+                "X-CSRF-Token": components["parameters"]["CSRF"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CardInput"];
+            };
+        };
+        responses: {
+            /** @description Сохранено */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CardResult"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    submitCard: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Значение из `GET /api/auth/config` (равно cookie `ohvat_csrf`) */
+                "X-CSRF-Token": components["parameters"]["CSRF"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description На проверке */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CardResult"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            429: components["responses"]["TooMany"];
+        };
+    };
+    withdrawCard: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Значение из `GET /api/auth/config` (равно cookie `ohvat_csrf`) */
+                "X-CSRF-Token": components["parameters"]["CSRF"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Черновик */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CardResult"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    listCategories: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Общий справочник и свои категории пользователя (на проверке и отклонённые) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CategoryList"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    createCategory: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Значение из `GET /api/auth/config` (равно cookie `ohvat_csrf`) */
+                "X-CSRF-Token": components["parameters"]["CSRF"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    title: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Такая уже есть */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CategoryCreated"];
+                };
+            };
+            /** @description Создана, на проверке */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CategoryCreated"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    similarCategories: {
+        parameters: {
+            query: {
+                q: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Подсказки */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["CategoryItem"][];
+                    };
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    uploadMedia: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Значение из `GET /api/auth/config` (равно cookie `ohvat_csrf`) */
+                "X-CSRF-Token": components["parameters"]["CSRF"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": {
+                    purpose: components["schemas"]["MediaPurpose"];
+                    /** @example 0.1,0,0.8,0.9 */
+                    crop?: string;
+                    /** Format: binary */
+                    file: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Загружено */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Media"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+            /** @description image_too_large — больше 10 МБ или 40 Мп */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description image_type — не JPEG/PNG/WebP/HEIC */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            429: components["responses"]["TooMany"];
+            /** @description busy — очередь обработки полна (Retry-After) */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    deleteMedia: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Значение из `GET /api/auth/config` (равно cookie `ohvat_csrf`) */
+                "X-CSRF-Token": components["parameters"]["CSRF"];
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Удалено */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    setAvatar: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Значение из `GET /api/auth/config` (равно cookie `ohvat_csrf`) */
+                "X-CSRF-Token": components["parameters"]["CSRF"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    mediaId: string | null;
+                };
+            };
+        };
+        responses: {
+            /** @description Адрес аватара ("" — убран) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        avatarUrl: string;
+                    };
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    getMedia: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                size: 320 | 800 | 1600;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description WebP */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "image/webp": string;
+                };
+            };
+            /** @description Не изменилось */
+            304: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Нет или нет доступа */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
         };
     };
 }

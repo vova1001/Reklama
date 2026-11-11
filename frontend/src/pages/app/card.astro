@@ -1,0 +1,65 @@
+---
+// Анкета автора: черновик и отклонённая — правка; на проверке и опубликованная — как увидит бизнес и статус.
+import App from '../../layouts/App.astro';
+import Icon from '../../components/Icon.astro';
+import CardForm from '../../components/app/CardForm.astro';
+import TaskBody from '../../components/app/TaskBody.astro';
+import { PLATFORM_TITLE, STATUS } from '../../content/app';
+import { num } from '../../lib/format';
+import { fetchCard, fetchCategories, fetchProfiles } from '../../lib/auth';
+
+const me = Astro.locals.me;
+if (!me) return Astro.redirect('/login', 303);
+if (me.user.mode !== 'creator') return Astro.redirect('/app', 303);
+const card = await fetchCard(Astro.request);
+if (card === undefined) return new Response('API недоступно', { status: 503 });
+const editable = !card || card.status === 'draft' || card.status === 'rejected';
+const [categories, { creator }] = await Promise.all([fetchCategories(Astro.request), fetchProfiles(Astro.request)]);
+const titleOf = (slug: string) => [...categories.common, ...categories.own].find((c) => c.slug === slug)?.title ?? slug;
+const sent = Astro.url.searchParams.get('sent') === '1';
+const host = (u: string) => { try { return new URL(u).hostname.replace(/^www\./, ''); } catch { return u; } };
+---
+<App title="Анкета" page="create" only="creator">
+  {editable ? (
+    <CardForm card={card} profile={creator} user={me.user} categories={categories} />
+  ) : (
+    <div data-view-card>
+      <div class="head">
+        <h1>Анкета</h1>
+        <span class="st" data-s={card!.status} data-status-label>{STATUS[card!.status]}</span>
+      </div>
+      {card!.status === 'pending_review' && <p class="banner" role="status">{sent ? 'Отправлено. ' : ''}Проверим и покажем бизнесу — обычно в течение дня.</p>}
+      <article class="pv-card list">
+        <div class="pv-who">
+          {card!.avatar ? <img class="pv-ava" src={card!.avatar.thumb} alt="" /> : <span class="pv-ava"></span>}
+          <div><p class="it-t">{card!.name}</p><p class="it-meta">{card!.city}</p></div>
+        </div>
+        <div class="chips pv-tags">{card!.topics.map((t) => <span class="chip is-static">{titleOf(t)}</span>)}</div>
+        <ul class="rows">
+          {card!.platforms.map((p) => (
+            <li><Icon name="link" size={20} /><div><p class="row-t">{PLATFORM_TITLE[p.kind] ?? 'Сайт'}</p><a class="row-s" href={p.url} target="_blank" rel="noopener nofollow">{host(p.url)}</a></div><span class="row-v">{num(p.followers)} подписч.</span></li>
+          ))}
+        </ul>
+        <TaskBody blocks={card!.blocks} photos={card!.works} />
+      </article>
+      {card!.status === 'pending_review' && (
+        <div class="ed-bar is-plain">
+          <p class="ed-state">Нужно поправить?</p>
+          <button class="btn pill-ghost" type="button" data-withdraw-card><Icon name="undo-2" size={18} />В черновик</button>
+        </div>
+      )}
+    </div>
+  )}
+</App>
+<script>
+  import { api, busy } from '../../lib/client';
+  import { guard, toast } from '../../lib/ui';
+  document.querySelector<HTMLButtonElement>('[data-withdraw-card]')?.addEventListener('click', async (e) => {
+    const b = e.currentTarget as HTMLButtonElement;
+    busy(b, true);
+    const r = await api('POST', '/api/me/card/withdraw');
+    if (r.ok) return location.reload();
+    busy(b, false);
+    if (!guard(r.status)) toast(r.error.message);
+  });
+</script>

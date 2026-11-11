@@ -150,7 +150,9 @@ func crop(img image.Image, aspect float64, c *service.CropRect) image.Image {
 	if r == b {
 		return img
 	}
-	if si, ok := img.(interface{ SubImage(image.Rectangle) image.Image }); ok {
+	if si, ok := img.(interface {
+		SubImage(image.Rectangle) image.Image
+	}); ok {
 		return si.SubImage(r)
 	}
 	out := image.NewNRGBA(image.Rect(0, 0, r.Dx(), r.Dy()))

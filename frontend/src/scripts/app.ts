@@ -1,34 +1,14 @@
-// Приложение после входа: меню аватара, переключение режима, поиск-заглушка, формы профиля, выход и выход везде.
-// Без библиотек; все запросы — с CSRF-токеном, ошибки — рядом с полем.
+// Оболочка приложения: режим «Бизнес / Автор», меню аккаунта, выход, строка-напоминание, профиль (вкладки и формы).
+// Без библиотек; запросы — с CSRF-токеном, ошибки — рядом с полем.
 import type { components } from '../lib/api.gen';
 import { $, $$, api, busy, clearErrs, showFields, setErr } from '../lib/client';
+import { confirmDialog, guard, toast } from '../lib/ui';
 
 type Me = components['schemas']['Me'];
 type Mode = components['schemas']['Mode'];
 
 const app = $('[data-app]');
-const STEP_TITLES: Record<Mode, string> = { business: 'Профиль бизнеса', creator: 'Профиль автора' };
 const MODE_TITLE: Record<Mode, string> = { business: 'Бизнес', creator: 'Автор' };
-
-// ===== сообщения =====
-let toastTimer = 0;
-function toast(msg: string) {
-  const el = $('[data-toast]');
-  if (!el) return;
-  el.textContent = msg;
-  el.classList.add('is-on');
-  clearTimeout(toastTimer);
-  toastTimer = window.setTimeout(() => el.classList.remove('is-on'), 3200);
-}
-
-/** Не вошёл (сессия истекла или вышли на другом устройстве) — на страницу входа. */
-function guard(status: number): boolean {
-  if (status === 401) {
-    location.assign('/login');
-    return true;
-  }
-  return false;
-}
 
 // ===== режим =====
 function applyMode(mode: Mode) {
@@ -39,39 +19,16 @@ function applyMode(mode: Mode) {
     b.setAttribute('aria-checked', String(on));
     b.tabIndex = on ? 0 : -1;
   });
-  $$<HTMLButtonElement>('[data-set-mode]').forEach((b) => b.setAttribute('aria-checked', String(b.dataset.setMode === mode)));
-  const t = $('[data-step="profile"] [data-step-title]');
-  if (t) t.textContent = STEP_TITLES[mode];
-  const a = $<HTMLAnchorElement>('[data-step="profile"] a');
-  if (a) a.href = `/app/profile?tab=${mode}`;
 }
 
-/** Прогресс и подсказки по ответу /api/me. */
 function applyMe(me: Me) {
-  const num = $('[data-progress-num]');
-  if (num) num.textContent = `${me.completion}%`;
-  const bar = $('[data-progress-bar]');
-  if (bar) {
-    bar.setAttribute('aria-valuenow', String(me.completion));
-    const fill = $<HTMLElement>('span', bar);
-    if (fill) fill.style.width = `${me.completion}%`;
-  }
-  for (const st of me.checklist) {
-    const li = $(`[data-step="${st.key}"]`);
-    if (!li) continue;
-    li.dataset.done = String(st.done);
-    const s = $('[data-step-state]', li);
-    if (s) s.textContent = st.done ? 'готово' : 'не заполнено';
-  }
-  if (app) {
-    app.dataset.businessFilled = String(me.profiles.business);
-    app.dataset.creatorFilled = String(me.profiles.creator);
-  }
+  if (!app) return;
+  app.dataset.businessFilled = String(me.profiles.business);
+  app.dataset.creatorFilled = String(me.profiles.creator);
   (['business', 'creator'] as Mode[]).forEach((m) => {
     const n = $(`[data-nudge="${m}"]`);
     if (n && (me.profiles[m] || dismissed(m))) n.hidden = true;
-    const dot = $(`[data-filled="${m}"]`);
-    dot?.classList.toggle('is-on', me.profiles[m]);
+    $(`[data-filled="${m}"]`)?.classList.toggle('is-on', me.profiles[m]);
   });
 }
 
@@ -83,14 +40,18 @@ async function setMode(mode: Mode) {
   applyMode(mode); // сразу — ответ сервера подтвердит
   const r = await api<Me>('PATCH', '/api/me/mode', { mode });
   switching = false;
-  if (r.ok) {
-    applyMe(r.data);
-    toast(`Режим: ${MODE_TITLE[mode]}`);
+  if (!r.ok) {
+    if (guard(r.status)) return;
+    applyMode(prev);
+    toast(r.error.message);
     return;
   }
-  if (guard(r.status)) return;
-  applyMode(prev);
-  toast(r.error.message);
+  applyMe(r.data);
+  // страница одного режима (редактор задания, анкета) в другом не нужна — в ленту
+  const only = app.dataset.pageMode;
+  if (only && only !== mode) return location.assign('/app');
+  if (app.dataset.page === 'feed') return location.reload();
+  toast(`Режим: ${MODE_TITLE[mode]}`);
 }
 
 function initModeSwitch() {
@@ -111,67 +72,46 @@ function initModeSwitch() {
   });
 }
 
-// ===== меню аватара =====
-function initMenu() {
-  const btn = $<HTMLButtonElement>('[data-menu-btn]');
-  const menu = $('[data-menu]');
-  if (!btn || !menu) return;
-  const items = () => $$<HTMLElement>('[role^="menuitem"]', menu);
-  const open = (focusFirst = true) => {
-    menu.hidden = false;
-    btn.setAttribute('aria-expanded', 'true');
-    if (focusFirst) items()[0]?.focus();
-  };
-  const close = (focusBtn = true) => {
-    if (menu.hidden) return;
-    menu.hidden = true;
-    btn.setAttribute('aria-expanded', 'false');
-    if (focusBtn) btn.focus();
-  };
-  btn.addEventListener('click', () => (menu.hidden ? open() : close()));
-  btn.addEventListener('keydown', (e) => {
-    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
-      e.preventDefault();
-      open();
-      if (e.key === 'ArrowUp') items().at(-1)?.focus();
-    }
-  });
-  menu.addEventListener('keydown', (e) => {
-    const list = items();
-    const i = list.indexOf(document.activeElement as HTMLElement);
-    const to = { ArrowDown: i + 1, ArrowUp: i - 1, Home: 0, End: list.length - 1 }[e.key];
-    if (to !== undefined) {
-      e.preventDefault();
-      list[(to + list.length) % list.length].focus();
-    } else if (e.key === 'Escape') {
-      e.preventDefault();
-      close();
-    } else if (e.key === 'Tab') {
-      close(false);
-    }
-  });
-  document.addEventListener('pointerdown', (e) => {
-    if (!menu.hidden && !menu.contains(e.target as Node) && !btn.contains(e.target as Node)) close(false);
-  });
-  $$<HTMLButtonElement>('[data-set-mode]', menu).forEach((b) =>
-    b.addEventListener('click', () => {
-      close();
-      void setMode(b.dataset.setMode as Mode);
-    }),
-  );
-}
-
-// ===== подтверждение =====
-function confirmDialog(title: string, text: string, ok: string): Promise<boolean> {
-  const dlg = $<HTMLDialogElement>('[data-confirm]');
-  if (!dlg || typeof dlg.showModal !== 'function') return Promise.resolve(true);
-  $('[data-confirm-title]', dlg)!.textContent = title;
-  $('[data-confirm-text]', dlg)!.textContent = text;
-  $('[data-confirm-ok]', dlg)!.textContent = ok;
-  dlg.returnValue = '';
-  dlg.showModal();
-  return new Promise((resolve) => {
-    dlg.addEventListener('close', () => resolve(dlg.returnValue === 'ok'), { once: true });
+// ===== меню аккаунта (в левой колонке и в шапке телефона) =====
+function initMenus() {
+  $$<HTMLButtonElement>('[data-menu-btn]').forEach((btn) => {
+    const menu = $(`#${btn.getAttribute('aria-controls')}`);
+    if (!menu) return;
+    const up = !!btn.closest('.is-up');
+    const items = () => $$<HTMLElement>('[role^="menuitem"]', menu);
+    const open = () => {
+      menu.hidden = false;
+      btn.setAttribute('aria-expanded', 'true');
+      (up ? items().at(-1) : items()[0])?.focus();
+    };
+    const close = (focusBtn = true) => {
+      if (menu.hidden) return;
+      menu.hidden = true;
+      btn.setAttribute('aria-expanded', 'false');
+      if (focusBtn) btn.focus();
+    };
+    btn.addEventListener('click', () => (menu.hidden ? open() : close()));
+    btn.addEventListener('keydown', (e) => {
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        e.preventDefault();
+        open();
+      }
+    });
+    menu.addEventListener('keydown', (e) => {
+      const list = items();
+      const i = list.indexOf(document.activeElement as HTMLElement);
+      const to = { ArrowDown: i + 1, ArrowUp: i - 1, Home: 0, End: list.length - 1 }[e.key];
+      if (to !== undefined) {
+        e.preventDefault();
+        list[(to + list.length) % list.length].focus();
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        close();
+      } else if (e.key === 'Tab') close(false);
+    });
+    document.addEventListener('pointerdown', (e) => {
+      if (!menu.hidden && !menu.contains(e.target as Node) && !btn.contains(e.target as Node)) close(false);
+    });
   });
 }
 
@@ -188,7 +128,7 @@ function initLogout() {
   );
   const all = $<HTMLButtonElement>('[data-logout-all]');
   all?.addEventListener('click', async () => {
-    const ok = await confirmDialog('Выйти со всех устройств?', 'Все сеансы завершатся, включая этот. Войти снова можно любым способом.', 'Выйти везде');
+    const ok = await confirmDialog('Выйти со всех устройств?', 'Все сеансы завершатся, включая этот.', 'Выйти везде');
     if (!ok) return all.focus();
     busy(all, true);
     const r = await api<{ sessions: number }>('POST', '/api/me/logout-all');
@@ -198,25 +138,7 @@ function initLogout() {
   });
 }
 
-// ===== поиск (заглушка) =====
-function initSearch() {
-  $$<HTMLFormElement>('[data-search]').forEach((f) =>
-    f.addEventListener('submit', (e) => {
-      e.preventDefault();
-      toast('Поиск появится вместе с настоящими заданиями — совсем скоро.');
-    }),
-  );
-  const focusSearch = () => {
-    if (location.hash !== '#q') return;
-    const q = $<HTMLInputElement>('#q');
-    if (q && q.offsetParent !== null) q.focus();
-    else $<HTMLInputElement>('#q-bar')?.focus();
-  };
-  focusSearch();
-  window.addEventListener('hashchange', focusSearch);
-}
-
-// ===== лента: подсказки и примеры =====
+// ===== строка-напоминание =====
 const NUDGE_KEY = (m: string) => `ohvat:nudge:${m}`;
 function dismissed(m: string): boolean {
   try {
@@ -225,7 +147,7 @@ function dismissed(m: string): boolean {
     return false;
   }
 }
-function initFeed() {
+function initNudge() {
   $$('[data-nudge]').forEach((n) => {
     const m = n.dataset.nudge!;
     if (dismissed(m)) n.hidden = true;
@@ -238,16 +160,6 @@ function initFeed() {
       }
     });
   });
-  $$<HTMLButtonElement>('[data-respond]').forEach((b) =>
-    b.addEventListener('click', () => {
-      const note = $('[data-respond-note]', b.parentElement!);
-      if (!note) return;
-      const needProfile = app?.dataset.creatorFilled !== 'true';
-      note.textContent = needProfile
-        ? 'Это пример. Чтобы откликаться на настоящие задания, заполните профиль автора.'
-        : 'Это пример задания. Настоящие задания появятся здесь, как только бизнес их разместит.';
-    }),
-  );
 }
 
 // ===== профиль: вкладки и формы =====
@@ -283,7 +195,7 @@ function initChips(form: HTMLElement) {
     c.addEventListener('click', () => {
       const on = c.getAttribute('aria-pressed') === 'true';
       if (!on && chips.filter((x) => x.getAttribute('aria-pressed') === 'true').length >= 5) {
-        setErr(form, 'spheres', 'Можно выбрать до 5');
+        setErr(form, 'spheres', 'До 5');
         return;
       }
       setErr(form, 'spheres', '');
@@ -332,7 +244,6 @@ function initChannels(form: HTMLElement) {
 
 type FormKind = 'basics' | 'business' | 'creator';
 const ENDPOINT: Record<FormKind, string> = { basics: '/api/me/profile', business: '/api/me/profile/business', creator: '/api/me/profile/creator' };
-const SAVED: Record<FormKind, string> = { basics: 'Сохранено', business: 'Профиль бизнеса сохранён', creator: 'Профиль автора сохранён' };
 
 function initForms() {
   $$<HTMLFormElement>('[data-form]').forEach((form) => {
@@ -356,18 +267,18 @@ function initForms() {
           bad = true;
         }
       };
-      need(name.length < 2, 'name', kind === 'business' ? 'Название — от 2 символов' : 'Как вас называть — от 2 символов');
+      need(name.length < 2, 'name', 'От 2 символов');
       need(city.length < 2, 'city', 'Укажите город');
       if (kind !== 'basics') {
         body.spheres = spheres();
-        need((body.spheres as string[]).length === 0, 'spheres', kind === 'business' ? 'Выберите хотя бы одну сферу' : 'Выберите хотя бы одну тему');
+        need((body.spheres as string[]).length === 0, 'spheres', 'Выберите хотя бы одну');
       }
       if (kind === 'creator') {
         body.channels = channels();
-        need((body.channels as string[]).length === 0, 'channels', 'Добавьте хотя бы одну ссылку на канал');
+        need((body.channels as string[]).length === 0, 'channels', 'Добавьте ссылку');
       }
       if (bad) {
-        ($('[aria-invalid="true"]', form) ?? $('[data-err]:not(:empty)', form)?.previousElementSibling as HTMLElement | null)?.focus();
+        ($('[aria-invalid="true"]', form) ?? ($('[data-err]:not(:empty)', form)?.previousElementSibling as HTMLElement | null))?.focus();
         return;
       }
       busy(btn, true);
@@ -378,9 +289,7 @@ function initForms() {
         showFields(form, r.error);
         return;
       }
-      if (saved) saved.textContent = SAVED[kind];
-      toast(SAVED[kind]);
-      // общие данные — подсказка для пустых полей профилей режимов (имя автора и город)
+      if (saved) saved.textContent = 'Сохранено';
       if (kind === 'basics') {
         const fill = (sel: string, v: string) => {
           const i = $<HTMLInputElement>(sel);
@@ -398,10 +307,9 @@ function initForms() {
 
 if (app) {
   initModeSwitch();
-  initMenu();
+  initMenus();
   initLogout();
-  initSearch();
-  initFeed();
+  initNudge();
   initTabs();
   initForms();
 }

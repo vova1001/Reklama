@@ -1,0 +1,25 @@
+---
+// Аватар с меню: имя и почта, Профиль, Настройки, Выйти. up — меню открывается вверх (в левой колонке).
+import Icon from '../Icon.astro';
+import Avatar from '../Avatar.astro';
+import type { Me } from '../../lib/auth';
+interface Props { me: Me; id: string; up?: boolean }
+const { me, id, up = false } = Astro.props;
+const u = me.user;
+---
+<div class={`acc ${up ? 'is-up' : ''}`}>
+  <button class="acc-btn" type="button" aria-haspopup="menu" aria-expanded="false" aria-controls={id} aria-label="Аккаунт" data-menu-btn data-tip="Аккаунт">
+    <Avatar user={u} size={32} />
+    <span class="acc-name">{u.name || 'Профиль'}</span>
+  </button>
+  <div class="mm" id={id} role="menu" aria-label="Аккаунт" hidden data-menu>
+    <div class="mm-head" role="none">
+      <p class="mm-name">{u.name || 'Без имени'}</p>
+      <p class="mm-mail">{u.email ?? 'Почта не указана'}</p>
+    </div>
+    <a class="mm-it" role="menuitem" href="/app/profile" tabindex="-1"><Icon name="user-round" size={20} />Профиль</a>
+    <a class="mm-it" role="menuitem" href="/app/settings" tabindex="-1"><Icon name="settings-2" size={20} />Настройки</a>
+    <hr class="mm-sep" />
+    <button class="mm-it mm-out" type="button" role="menuitem" tabindex="-1" data-logout><Icon name="log-out" size={20} />Выйти</button>
+  </div>
+</div>

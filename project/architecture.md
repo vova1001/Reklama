@@ -1,6 +1,6 @@
 # Архитектура «Охват»
 
-Этап: главная, регистрация и вход (задачи `handoff/01`–`05`).
+Этап: главная, вход, приложение с режимами, задания и анкеты с модерацией, фото (задачи `handoff/01`–`08`).
 
 ## Схема
 
@@ -42,20 +42,50 @@ Render — один контейнер (nginx + Astro + Go), свой серве
 | `plan_features` | plan_id → plans (каскад), position, text | PK (plan_id, position) |
 | `faq` | question, answer, position, is_published | position, где is_published |
 | `users` | name, email (подтверждённая, NULL), avatar_url, city, active_mode (`business`/`creator`, по умолчанию business), onboarded_at (общие данные сохранялись), last_login_at | уник. email, где не NULL |
+| `tasks` | owner_id → users, status (`draft`/`pending_review`/`published`/`rejected`), reject_reason, title, city, nationwide, category → categories.slug, formats[], access (`open`/`approval`), min_views, min_likes, reward_kopecks, publish_by (date), blocks (jsonb), cover → media, photos[], submitted_at, published_at | (owner_id, updated_at); лента (published_at, id) где published; очередь проверки где pending |
+| `creator_cards` | user_id → users (PK), status, reject_reason, name, city, topics[], platforms (jsonb: kind, url, followers), blocks (jsonb), avatar → media, works[] | опубликованные; очередь проверки |
+| `moderation_log` | subject (`task`/`creator_card`/`category`), subject_id, from/to status, reason, actor_id, created_at — каждая смена статуса | (subject, subject_id); отправки за сутки по actor_id |
+| `media` | id (128 случайных бит), owner_id, purpose, width, height, bytes, subject/subject_id (к чему прикреплено; NULL — сирота), touched_at | владелец; сироты; прикреплённые |
+| `media_blobs` | key, content_type, data (bytea) — хранилище файлов при `MEDIA_STORE=postgres` | PK |
 | `business_profiles` | user_id → users (PK, каскад), name, city, spheres[] — 1:1, строки нет, пока профиль не заполнен | PK |
 | `creator_profiles` | user_id → users (PK, каскад), name, city, spheres[], channels[] — 1:1, nullable | PK |
 | `identities` | user_id → users (каскад), provider (`email`/`telegram`/`google`), subject, email | уник. (provider, subject); user_id |
 | `login_codes` | email, code_hash (HMAC), ip, attempts, expires_at, consumed_at; строки живут сутки — по ним лимиты | (email, created_at), (ip, created_at), created_at |
 | `sessions` | user_id → users (каскад), token_hash (SHA-256, уник.), expires_at | user_id, expires_at |
 
+`categories` (задача 08): + status (`approved` — общая, `pending_review` — своя на проверке, `rejected`), author_id,
+norm (нижний регистр, ё → е, одиночные пробелы); уникальность norm среди общих и среди своих одного автора.
+
 Деньги — целые копейки; время — `timestamptz` (UTC). Объём данных главной — десятки строк, нагрузка минимальна.
+
+### Задания, анкеты, модерация, фото (задача 08)
+
+- **Статусы:** `draft → pending_review → published | rejected`; владелец: отправить (из черновика и отклонённого),
+  вернуть с проверки в черновик; модератор: опубликовать или отклонить с причиной. Таблица переходов — в `domain`,
+  смена — `UPDATE … WHERE status = <ожидаемый>` + запись в `moderation_log` в одной транзакции (без гонок).
+- **Проверка на сервере в два уровня:** «форма» при каждом сохранении (длины, числа, перечни, ссылки https, до 8 блоков
+  × 15 пунктов, 6000 знаков, свои фото нужного назначения) и «полнота» при отправке. Ошибки — по полям (`blocks.N`).
+- **Лимиты:** заданий на пользователя (`TASKS_MAX_PER_USER`), отправок на проверку в сутки (`MODERATION_SUBMITS_PER_DAY`,
+  по журналу), загрузок фото по пользователю (Limiter), квота фото (число и байты), своих категорий на проверке — 10,
+  в анкете — до 3.
+- **Модерация без админки:** `service.Moderation` за интерфейсом `service.Moderator` (`Decide`, `History`) — админка
+  подключит его своим транспортом. Свои категории после одобрения становятся общими (на главной — в конце списка).
+- **Фото:** `POST /api/me/media` (multipart, до 10 МБ) → тип по содержимому (JPEG, PNG, WebP, HEIC; GIF, SVG,
+  анимация — нет) → лимит пикселей до декодирования → уменьшение, поворот по EXIF, обрезка под назначение → WebP
+  320/800/1600 без метаданных. Обработка — `gateway/imaging.Pool` (воркеры, очередь, контекст; переполнено — 503 busy).
+  Хранилище — интерфейс `service.BlobStore`: `gateway/storage.Postgres` или `S3` (AWS Signature V4, R2/Яндекс/MinIO) —
+  выбор переменной `MEDIA_STORE`. Отдача — `GET /media/{id}/{size}.webp`: аватар и опубликованное — всем с долгим
+  кэшем, остальное — только владельцу (чужое закрытое — 404); ETag. Неприкреплённые удаляются через сутки (фоново).
 
 ### Контракт
 
 `backend/api/openapi.yaml`: `GET /api/home`, `GET /healthz`; вход — `GET /api/auth/config`, `POST /api/auth/email/start`,
 `POST /api/auth/email/verify`, `POST /api/auth/telegram`, `GET /api/auth/google/start`, `GET /api/auth/google/callback`,
 `POST /api/auth/logout`; приложение — `GET /api/me`, `PATCH /api/me/mode`, `PUT /api/me/profile` (общие данные),
-`GET/PUT /api/me/profile/business`, `GET/PUT /api/me/profile/creator`, `POST /api/me/logout-all`.
+`GET/PUT /api/me/profile/business`, `GET/PUT /api/me/profile/creator`, `POST /api/me/logout-all`; задачи 08 —
+`GET /api/tasks` (лента), `GET/POST /api/me/tasks`, `GET/PUT/DELETE /api/me/tasks/{id}`, `POST …/submit`, `POST …/withdraw`,
+`GET/PUT /api/me/card`, `POST /api/me/card/submit|withdraw`, `GET/POST /api/me/categories`, `GET /api/me/categories/similar`,
+`POST /api/me/media`, `DELETE /api/me/media/{id}`, `PUT /api/me/avatar`, `GET /media/{id}/{size}.webp`.
 Типы фронта генерируются из контракта (`npm run gen:api` → `frontend/src/lib/api.gen.ts`).
 
 ## Фронтенд (Astro 7 SSR + Tailwind 4 + TypeScript)

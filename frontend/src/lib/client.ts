@@ -3,13 +3,14 @@ import type { components } from './api.gen';
 
 export type ApiError = components['schemas']['Error']['error'];
 export type Res<T> = { ok: true; status: number; data: T } | { ok: false; status: number; error: ApiError };
-type Method = 'GET' | 'POST' | 'PUT' | 'PATCH';
+type Method = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
 
 const NET_ERROR: ApiError = { code: 'network', message: 'Нет связи с сервером. Проверьте интернет и попробуйте ещё раз.' };
 
 // ===== API =====
 let csrf = '';
-async function csrfToken(force = false): Promise<string> {
+/** CSRF-токен для запросов вне api() (загрузка файлов через XHR); force — получить заново. */
+export async function csrfToken(force = false): Promise<string> {
   if (csrf && !force) return csrf;
   const res = await fetch('/api/auth/config', { credentials: 'same-origin', signal: AbortSignal.timeout(10_000) });
   if (!res.ok) throw new Error(String(res.status));

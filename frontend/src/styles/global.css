@@ -5,30 +5,27 @@
 
 /* ===== токены (имена = токены макета) ===== */
 @theme static {
-  /* светлая лестница: фон зоны → белая карточка → тёплая вложенная панель */
-  --color-bg: #e9e7e1;
-  --color-card: #ffffff;
-  --color-panel: #f3f1ec;
-  --color-dark: #1b1b1a;
-  --color-dark-card: #2b2b29;
-  --color-ink: #1b1b1a;
-  --color-on-dark: #edece8;
-  --color-gray: #605f5a;
-  --color-gray-dark: #9a9994;
-  --color-emerald: #0f7553;
-  --color-line: #dcd9d2;
-  --color-line-dark: rgba(237, 236, 232, 0.16);
+  /* почти монохром: белый, три серых, графит + один акцент — изумруд (project/design/tokens.md) */
+  --color-card: #ffffff; /* поверхность: приложение, карточки главной */
+  --color-bg: #f4f4f3; /* холст главной и входа; заливка полей */
+  --color-panel: #f4f4f3; /* поле ввода, вложенное, наведение пункта */
+  --color-sunken: #eaeae8; /* дорожка сегмента и прогресса */
+  --color-line: #e6e6e4; /* разделители и рамки — тонкие */
+  --color-line-strong: #d2d2cf; /* рамка при наведении, пустой кружок */
+  --color-ink: #161616; /* графит: текст и главная кнопка */
+  --color-gray: #636361; /* второстепенный текст (6.0 на белом, 5.0 на дорожке) */
+  --color-placeholder: #6e6e6b; /* подсказка в поле (4.6 на заливке поля) */
+  --color-dark: #161616;
+  --color-dark-card: #242424;
+  --color-on-dark: #ededeb;
+  --color-gray-dark: #9c9c99;
+  --color-line-dark: rgba(237, 237, 235, 0.16);
+  --color-emerald: #0f7553; /* единственный акцент: активное, главное действие, «опубликовано» */
+  --color-emerald-hover: #0c6145;
+  --color-emerald-ink: #0b5e43; /* изумрудный текст на мягкой подложке */
+  --color-emerald-soft: #e7f1ec;
   --color-tint: rgba(15, 117, 83, 0.1);
-  /* приложение и вход — те же токены плюс состояния (project/design/tokens.md) */
-  --color-sunken: #e2dfd8; /* дорожка сегмента и прогресса, «утопленное» */
-  --color-line-strong: #c4bfb3; /* рамка при наведении, разделитель меню */
-  --color-placeholder: #6e6d67; /* подсказка в поле (4.6:1 на панели) */
-  --color-emerald-hover: #0c6145; /* заливка кнопки при наведении (белый текст 7.5:1) */
-  --color-emerald-ink: #0b5e43; /* изумрудный текст на мягкой изумрудной подложке (6.7:1) */
-  --color-emerald-soft: #e3f0ea; /* мягкая изумрудная подложка: подсказки, активный пункт */
-  --color-warn: #8a5300; /* «пример», предупреждение (5.6:1 на своей подложке) */
-  --color-warn-soft: #fbf0da;
-  --color-error: #b3261e;
+  --color-error: #b3261e; /* ошибки, «отклонено», «Выйти» */
   --font-sans: 'Inter', system-ui, sans-serif;
   --radius-card: 28px;
   --radius-photo: 28px;
@@ -50,8 +47,8 @@
   --pill: 100vw; /* ширина «пилюли» шапки: на телефоне — экран минус поля */
   --pill-h: 56px;
   --ease-pill: cubic-bezier(0.32, 0.72, 0, 1);
-  --k: 27, 27, 26; /* ink для rgba */
-  --l: 237, 236, 232; /* on-dark для rgba */
+  --k: 22, 22, 22; /* ink для rgba */
+  --l: 237, 237, 235; /* on-dark для rgba */
 }
 @media (min-width: 768px) {
   :root { --pad: 32px; --gap: 112px; --head: 48px; --sheet: 36px; --bar: 72px; --pill: 440px; }
@@ -144,7 +141,7 @@ h2 { font-size: clamp(34px, 4.4vw + 18px, 60px); line-height: 1.03; letter-spaci
   .btn:hover { transform: translateY(-2px); }
   .btn:hover .ic { transform: translateX(3px); }
   .b-l:hover { background: #fff; box-shadow: 0 10px 28px -10px rgba(0, 0, 0, 0.45); }
-  .b-d:hover { background: #2d2d2b; box-shadow: 0 12px 28px -12px rgba(var(--k), 0.55); }
+  .b-d:hover { background: #2a2a2a; box-shadow: 0 12px 28px -12px rgba(var(--k), 0.55); }
   .b-ol:hover { background: rgba(var(--l), 0.06); box-shadow: inset 0 0 0 1px rgba(var(--l), 0.42); }
   .b-od:hover { background: var(--color-card); box-shadow: inset 0 0 0 1px rgba(var(--k), 0.28), 0 10px 24px -14px rgba(var(--k), 0.35); }
 }
@@ -174,7 +171,7 @@ h2 { font-size: clamp(34px, 4.4vw + 18px, 60px); line-height: 1.03; letter-spaci
   padding-inline: max(var(--pad), (100% - var(--wrap)) / 2);
   display: flex; align-items: center; justify-content: space-between; gap: 16px;
   border-radius: 0;
-  background: rgba(27, 27, 26, 0.72);
+  background: rgba(22, 22, 22, 0.72);
   -webkit-backdrop-filter: saturate(180%) blur(20px); backdrop-filter: saturate(180%) blur(20px);
   box-shadow: inset 0 -1px 0 rgba(var(--l), 0.08);
   color: var(--color-on-dark);
@@ -186,7 +183,7 @@ h2 { font-size: clamp(34px, 4.4vw + 18px, 60px); line-height: 1.03; letter-spaci
 .bar.is-pill .shell {
   width: min(var(--pill), 100% - 24px); height: var(--pill-h);
   padding-inline: 12px 8px; border-radius: 999px;
-  background: rgba(27, 27, 26, 0.86);
+  background: rgba(22, 22, 22, 0.86);
   box-shadow: inset 0 0 0 1px rgba(var(--l), 0.12), 0 18px 40px -18px rgba(0, 0, 0, 0.55), 0 2px 6px -2px rgba(0, 0, 0, 0.3);
 }
 .logo b { display: inline-block; overflow: hidden; max-width: 4.2em; transition: max-width 0.7s var(--ease-pill), opacity 0.45s ease; }
@@ -243,7 +240,7 @@ h2 { font-size: clamp(34px, 4.4vw + 18px, 60px); line-height: 1.03; letter-spaci
 /* мобильное меню: под шапкой; при «пилюле» — тоже скруглённая панель */
 .menu {
   position: fixed; left: 0; right: 0; top: var(--bar); z-index: 49;
-  background: rgba(27, 27, 26, 0.92);
+  background: rgba(22, 22, 22, 0.92);
   -webkit-backdrop-filter: saturate(180%) blur(20px); backdrop-filter: saturate(180%) blur(20px);
   box-shadow: inset 0 -1px 0 rgba(var(--l), 0.08);
   color: var(--color-on-dark);
@@ -261,7 +258,7 @@ h2 { font-size: clamp(34px, 4.4vw + 18px, 60px); line-height: 1.03; letter-spaci
 .zn {
   position: fixed; z-index: 48; left: 50%; bottom: calc(16px + env(safe-area-inset-bottom));
   display: flex; gap: 2px; padding: 4px; border-radius: 999px;
-  background: rgba(27, 27, 26, 0.86);
+  background: rgba(22, 22, 22, 0.86);
   -webkit-backdrop-filter: saturate(180%) blur(20px); backdrop-filter: saturate(180%) blur(20px);
   box-shadow: inset 0 0 0 1px rgba(var(--l), 0.12), 0 14px 30px -16px rgba(0, 0, 0, 0.5);
   opacity: 0; visibility: hidden; transform: translate(-50%, 14px) scale(0.96);

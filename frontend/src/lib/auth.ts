@@ -7,6 +7,10 @@ export type Mode = components['schemas']['Mode'];
 export type AuthConfig = components['schemas']['AuthConfig'];
 export type BusinessProfile = components['schemas']['BusinessProfile'];
 export type CreatorProfile = components['schemas']['CreatorProfile'];
+export type Task = components['schemas']['Task'];
+export type Card = components['schemas']['Card'];
+export type CategoryItem = components['schemas']['CategoryItem'];
+export type Feed = components['schemas']['Feed'];
 
 const BACKEND_URL = process.env.BACKEND_URL ?? 'http://localhost:8080';
 export const SESSION_COOKIE = 'ohvat_session';
@@ -44,6 +48,33 @@ export async function fetchProfiles(req: Request): Promise<{ business: BusinessP
     getJSON<{ profile: CreatorProfile | null }>('/api/me/profile/creator', h),
   ]);
   return { business: b?.profile ?? null, creator: c?.profile ?? null };
+}
+
+/** Лента опубликованных заданий (null — API недоступно). */
+export function fetchFeed(req: Request, cursor = ''): Promise<Feed | null> {
+  return getJSON<Feed>(`/api/tasks${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ''}`, visitorHeaders(req));
+}
+
+/** Мои задания (null — API недоступно). */
+export async function fetchMyTasks(req: Request): Promise<Task[] | null> {
+  const r = await getJSON<{ tasks: Task[] }>('/api/me/tasks', visitorHeaders(req));
+  return r?.tasks ?? null;
+}
+
+/** Моё задание; null — нет, чужое или API недоступно. */
+export function fetchTask(req: Request, id: number): Promise<Task | null> {
+  return getJSON<Task>(`/api/me/tasks/${id}`, visitorHeaders(req));
+}
+
+/** Моя анкета автора: undefined — API недоступно, null — ещё нет. */
+export async function fetchCard(req: Request): Promise<Card | null | undefined> {
+  const r = await getJSON<{ card: Card | null }>('/api/me/card', visitorHeaders(req));
+  return r === null ? undefined : r.card;
+}
+
+/** Общие категории и свои (пусто — API недоступно). */
+export async function fetchCategories(req: Request): Promise<{ common: CategoryItem[]; own: CategoryItem[] }> {
+  return (await getJSON<{ common: CategoryItem[]; own: CategoryItem[] }>('/api/me/categories', visitorHeaders(req))) ?? { common: [], own: [] };
 }
 
 let cfgCache: { at: number; data: AuthConfig } | null = null;

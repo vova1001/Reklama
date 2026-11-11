@@ -1,0 +1,58 @@
+---
+// Задание: черновик и отклонённое — правка; на проверке и опубликованное — как увидят авторы и статус.
+import App from '../../../layouts/App.astro';
+import Icon from '../../../components/Icon.astro';
+import TaskForm from '../../../components/app/TaskForm.astro';
+import TaskItem from '../../../components/app/TaskItem.astro';
+import { STATUS } from '../../../content/app';
+import { fetchCategories, fetchProfiles, fetchTask } from '../../../lib/auth';
+
+const me = Astro.locals.me;
+if (!me) return Astro.redirect('/login', 303);
+const id = Number(Astro.params.id);
+const task = Number.isSafeInteger(id) && id > 0 ? await fetchTask(Astro.request, id) : null;
+if (!task) Astro.response.status = 404;
+const editable = !!task && (task.status === 'draft' || task.status === 'rejected');
+const [categories, { business }] = editable
+  ? await Promise.all([fetchCategories(Astro.request), fetchProfiles(Astro.request)])
+  : [{ common: [], own: [] }, await fetchProfiles(Astro.request)];
+const brand = business?.name ?? me.user.name;
+const t = task!;
+const sent = Astro.url.searchParams.get('sent') === '1';
+---
+<App title={task?.title || 'Задание'} page="my" only="business">
+  {!task ? (
+    <div class="empty"><Icon name="inbox" size={32} /><h2>Задание не найдено</h2><p>Возможно, его удалили.</p><a class="btn pill-ghost" href="/app/tasks">Мои задания</a></div>
+  ) : editable ? (
+    <TaskForm task={task} categories={categories} brand={brand} />
+  ) : (
+    <div data-view-task>
+      <div class="head">
+        <a class="btn pill-text back-lnk" href="/app/tasks"><Icon name="arrow-left" size={18} />Мои задания</a>
+        <span class="st" data-s={t.status} data-status-label>{STATUS[t.status]}</span>
+      </div>
+      {t.status === 'pending_review' && (
+        <p class="banner" role="status">{sent ? 'Отправлено. ' : ''}Проверим и опубликуем — обычно в течение дня.</p>
+      )}
+      <div class="list"><TaskItem task={t} brand={brand} full /></div>
+      {t.status === 'pending_review' && (
+        <div class="ed-bar is-plain">
+          <p class="ed-state">Нужно поправить?</p>
+          <button class="btn pill-ghost" type="button" data-withdraw={t.id}><Icon name="undo-2" size={18} />В черновик</button>
+        </div>
+      )}
+    </div>
+  )}
+</App>
+<script>
+  import { api, busy } from '../../../lib/client';
+  import { guard, toast } from '../../../lib/ui';
+  document.querySelector<HTMLButtonElement>('[data-withdraw]')?.addEventListener('click', async (e) => {
+    const b = e.currentTarget as HTMLButtonElement;
+    busy(b, true);
+    const r = await api('POST', `/api/me/tasks/${b.dataset.withdraw}/withdraw`);
+    if (r.ok) return location.reload();
+    busy(b, false);
+    if (!guard(r.status)) toast(r.error.message);
+  });
+</script>

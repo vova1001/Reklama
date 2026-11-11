@@ -1,0 +1,14 @@
+---
+// Новое задание: форма сразу, черновик создаётся с первой правкой.
+import App from '../../../layouts/App.astro';
+import TaskForm from '../../../components/app/TaskForm.astro';
+import { fetchCategories, fetchProfiles } from '../../../lib/auth';
+
+const me = Astro.locals.me;
+if (!me) return Astro.redirect('/login', 303);
+if (me.user.mode !== 'business') return Astro.redirect('/app', 303);
+const [categories, { business }] = await Promise.all([fetchCategories(Astro.request), fetchProfiles(Astro.request)]);
+---
+<App title="Новое задание" page="create" only="business">
+  <TaskForm task={null} categories={categories} brand={business?.name ?? me.user.name} />
+</App>

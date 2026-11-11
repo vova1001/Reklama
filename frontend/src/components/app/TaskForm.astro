@@ -1,0 +1,130 @@
+---
+// Форма задания одной страницей: обложка, название, сфера, город, формат, кто берёт, условия, оплата и срок,
+// блоки подробностей, фото. Подписи — короткие, пояснения — в плейсхолдерах. Логика — scripts/editor.ts.
+import Icon from '../Icon.astro';
+import { FORMATS, TASK_BLOCKS } from '../../content/app';
+import type { CategoryItem, Task } from '../../lib/auth';
+interface Props { task: Task | null; categories: { common: CategoryItem[]; own: CategoryItem[] }; brand: string }
+const { task: t, categories, brand } = Astro.props;
+const init = {
+  kind: 'task', id: t?.id ?? null, status: t?.status ?? 'draft', blocks: t ? t.blocks : TASK_BLOCKS,
+  cover: t?.cover ? [t.cover] : [], photos: t?.photos ?? [], selected: t?.category ? [t.category] : [],
+  categories, platforms: [], brand,
+};
+const json = JSON.stringify(init).replace(/</g, '\\u003c');
+const due = t?.publishBy ? t.publishBy.split('-').reverse().join('.') : '';
+const rub = t && t.rewardKopecks ? String(Math.round(t.rewardKopecks / 100)) : '';
+const views = t && t.minViews ? String(t.minViews) : '';
+const likes = t && t.minLikes ? String(t.minLikes) : '';
+const access = t?.access ?? 'open';
+---
+<form class="ed" novalidate autocomplete="off" data-editor="task">
+  <script type="application/json" data-init set:html={json} />
+  <div class="head">
+    <h1>{t ? 'Задание' : 'Новое задание'}</h1>
+    <div class="tabs ed-tabs" role="tablist" aria-label="Вид">
+      <button type="button" role="tab" aria-selected="true" data-view="edit">Правка</button>
+      <button type="button" role="tab" aria-selected="false" tabindex="-1" data-view="preview"><Icon name="eye" size={18} />Как увидят</button>
+    </div>
+  </div>
+  {t?.status === 'rejected' && <p class="banner is-err" role="note"><Icon name="circle-alert" size={20} /><span><b>Отклонено.</b> {t.rejectReason}</span></p>}
+
+  <div data-pane="edit">
+    <div class="sec">
+      <span class="lbl">Обложка <span class="hint">· 16:9</span></span>
+      <div data-cover></div>
+      <p class="ferr" data-err="cover"></p>
+    </div>
+
+    <div class="sec field">
+      <label class="lbl" for="t-title">Название</label>
+      <div class="cnt-w"><input class="inp" id="t-title" name="title" maxlength="100" value={t?.title ?? ''} placeholder="Сторис о новом осеннем меню" data-input="title" data-count /><span class="cnt" data-count-for="title"></span></div>
+      <p class="ferr" data-err="title"></p>
+    </div>
+
+    <div class="sec">
+      <span class="lbl" id="cat-l">Сфера</span>
+      <div data-cats data-input="category"></div>
+      <p class="ferr" data-err="category"></p>
+    </div>
+
+    <div class="sec field">
+      <label class="lbl" for="t-city">Город</label>
+      <div class="city">
+        <input class="inp" id="t-city" name="city" maxlength="80" value={t?.city ?? ''} placeholder="Казань" data-ph="Казань" autocomplete="address-level2" data-input="city" />
+        <button class="sw" type="button" role="switch" aria-checked={t?.nationwide ? 'true' : 'false'} data-nationwide><span class="sw-k" aria-hidden="true"></span>Вся Россия</button>
+      </div>
+      <p class="ferr" data-err="city"></p>
+    </div>
+
+    <div class="sec">
+      <span class="lbl" id="fmt-l">Формат</span>
+      <div class="chips" role="group" aria-labelledby="fmt-l" data-input="formats">
+        {FORMATS.map((f) => <button class="chip" type="button" aria-pressed={t?.formats.includes(f.id as never) ? 'true' : 'false'} data-toggle data-format={f.id}>{f.title}</button>)}
+      </div>
+      <p class="ferr" data-err="formats"></p>
+    </div>
+
+    <div class="sec">
+      <span class="lbl" id="acc-l">Кто берёт</span>
+      <div class="mseg" role="radiogroup" aria-labelledby="acc-l" data-access>
+        <button type="button" role="radio" aria-checked={access === 'open' ? 'true' : 'false'} tabindex={access === 'open' ? 0 : -1} data-v="open"><Icon name="zap" size={18} />Любой автор</button>
+        <button type="button" role="radio" aria-checked={access === 'approval' ? 'true' : 'false'} tabindex={access === 'approval' ? 0 : -1} data-v="approval"><Icon name="user-round-check" size={18} />С одобрением</button>
+      </div>
+    </div>
+
+    <div class="sec row2">
+      <div class="field">
+        <label class="lbl" for="t-views">Просмотры от</label>
+        <div class="ifx"><Icon name="eye" size={18} /><input class="inp" id="t-views" name="minViews" inputmode="numeric" maxlength="13" value={views} placeholder="5 000" data-num data-input="minViews" /></div>
+        <p class="ferr" data-err="minViews"></p>
+      </div>
+      <div class="field">
+        <label class="lbl" for="t-likes">Лайки от</label>
+        <div class="ifx"><Icon name="heart" size={18} /><input class="inp" id="t-likes" name="minLikes" inputmode="numeric" maxlength="13" value={likes} placeholder="300" data-num data-input="minLikes" /></div>
+        <p class="ferr" data-err="minLikes"></p>
+      </div>
+    </div>
+
+    <div class="sec row2">
+      <div class="field">
+        <label class="lbl" for="t-reward">Оплата</label>
+        <div class="ifx sfx"><Icon name="wallet" size={18} /><input class="inp" id="t-reward" name="reward" inputmode="numeric" maxlength="9" value={rub} placeholder="3 000" data-num data-input="reward" /><span class="sfx-t">₽</span></div>
+        <p class="ferr" data-err="reward"></p>
+      </div>
+      <div class="field">
+        <label class="lbl" for="t-due">Срок</label>
+        <div class="ifx"><Icon name="calendar" size={18} /><input class="inp" id="t-due" name="publishBy" inputmode="numeric" maxlength="10" value={due} placeholder="дд.мм.гггг" data-input="publishBy" /></div>
+        <div class="quick" role="group" aria-label="Быстро">
+          <button type="button" class="chip sm" data-days="3">3 дня</button>
+          <button type="button" class="chip sm" data-days="7">Неделя</button>
+          <button type="button" class="chip sm" data-days="14">2 недели</button>
+          <button type="button" class="chip sm" data-days="30">Месяц</button>
+        </div>
+        <p class="ferr" data-err="publishBy"></p>
+      </div>
+    </div>
+
+    <div class="sec">
+      <span class="lbl">Подробности</span>
+      <div data-blocks></div>
+      <p class="ferr" data-err="blocks"></p>
+    </div>
+
+    <div class="sec">
+      <span class="lbl">Фото <span class="hint">· что показать, до 6</span></span>
+      <div data-photos></div>
+      <p class="ferr" data-err="photos"></p>
+    </div>
+  </div>
+
+  <div data-pane="preview" hidden><p class="sub">Так задание увидят авторы</p><div class="pv" data-preview></div></div>
+
+  <div class="ed-bar">
+    <p class="ed-state" data-state aria-live="polite">{t ? 'Черновик' : 'Сохранится само'}</p>
+    <button class="btn pill-text" type="button" data-delete hidden={!t}><Icon name="trash-2" size={18} />Удалить</button>
+    <button class="btn pill-emerald" type="button" data-submit aria-disabled="true">На проверку</button>
+    <span class="sr-only" id="submit-why"></span>
+  </div>
+</form>
+<script src="../../scripts/editor.ts"></script>

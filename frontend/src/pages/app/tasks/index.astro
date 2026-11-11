@@ -1,0 +1,61 @@
+---
+// Мои задания (бизнес): все статусы, фильтр, действия — изменить, удалить черновик, вернуть с проверки.
+import App from '../../../layouts/App.astro';
+import Icon from '../../../components/Icon.astro';
+import TaskItem from '../../../components/app/TaskItem.astro';
+import { STATUS } from '../../../content/app';
+import { fetchMyTasks } from '../../../lib/auth';
+
+const me = Astro.locals.me;
+if (!me) return Astro.redirect('/login', 303);
+const tasks = await fetchMyTasks(Astro.request);
+const q = Astro.url.searchParams.get('status') ?? '';
+const filters = ['', 'draft', 'pending_review', 'published', 'rejected'];
+const count = (s: string) => (tasks ?? []).filter((t) => !s || t.status === s).length;
+const current = filters.includes(q) ? q : '';
+---
+<App title="Мои задания" page="my" only="business">
+  <div class="head">
+    <h1>Мои задания</h1>
+    <a class="btn pill-emerald" href="/app/tasks/new"><Icon name="plus" size={20} />Создать</a>
+  </div>
+  {!tasks ? (
+    <div class="empty"><Icon name="circle-alert" size={32} /><h2>Не загрузилось</h2><p>Обновите страницу через минуту.</p></div>
+  ) : tasks.length === 0 ? (
+    <div class="empty" data-empty>
+      <Icon name="inbox" size={32} />
+      <h2>Заданий нет</h2>
+      <p>Черновик сохраняется сам, пока вы заполняете.</p>
+      <a class="btn pill-emerald" href="/app/tasks/new"><Icon name="plus" size={20} />Создать задание</a>
+    </div>
+  ) : (
+    <>
+      <div class="filt" role="group" aria-label="Статус" data-filter>
+        {filters.map((f) => (
+          <button type="button" aria-pressed={current === f ? 'true' : 'false'} data-f={f} hidden={f !== '' && count(f) === 0}>
+            {f ? STATUS[f] : 'Все'}<sup>{count(f)}</sup>
+          </button>
+        ))}
+      </div>
+      <div class="list" data-my>
+        {tasks.map((t) => (
+          <TaskItem task={t} own>
+            {t.status !== 'published' && (
+              <div class="it-act">
+                {t.status === 'pending_review' ? (
+                  <button class="btn pill-text" type="button" data-withdraw={t.id}><Icon name="undo-2" size={18} />В черновик</button>
+                ) : (
+                  <>
+                    <a class="btn pill-text" href={`/app/tasks/${t.id}`}><Icon name="pencil" size={18} />Изменить</a>
+                    <button class="btn pill-text" type="button" data-delete={t.id}><Icon name="trash-2" size={18} />Удалить</button>
+                  </>
+                )}
+              </div>
+            )}
+          </TaskItem>
+        ))}
+      </div>
+    </>
+  )}
+</App>
+<script src="../../../scripts/my-tasks.ts"></script>

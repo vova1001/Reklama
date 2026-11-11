@@ -1,7 +1,7 @@
 ---
 import '../styles/global.css';
 interface Props { title: string; description: string; noindex?: boolean; theme?: string; bodyClass?: string }
-const { title, description, noindex = false, theme = '#1B1B1A', bodyClass } = Astro.props;
+const { title, description, noindex = false, theme = '#161616', bodyClass } = Astro.props;
 const site = process.env.PUBLIC_URL ?? 'http://localhost:8000';
 const url = new URL(Astro.url.pathname, site).toString();
 ---

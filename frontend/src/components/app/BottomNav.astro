@@ -1,19 +1,10 @@
 ---
-// Нижняя навигация на телефоне: лента, поиск, профиль, настройки.
-import Icon from '../Icon.astro';
-interface Props { page: string }
+// Нижняя навигация на телефоне — те же пункты, что в левой колонке.
+import Nav from './Nav.astro';
+import type { Page } from '../../content/app';
+interface Props { page: Page }
 const { page } = Astro.props;
-const ITEMS = [
-  { id: 'feed', title: 'Лента', href: '/app', icon: 'house' },
-  { id: 'search', title: 'Поиск', href: '/app#q', icon: 'search' },
-  { id: 'profile', title: 'Профиль', href: '/app/profile', icon: 'user-round' },
-  { id: 'settings', title: 'Настройки', href: '/app/settings', icon: 'settings-2' },
-];
 ---
 <nav class="bn" aria-label="Разделы">
-  {ITEMS.map((i) => (
-    <a class="bn-it" href={i.href} aria-current={page === i.id ? 'page' : undefined} data-bn={i.id}>
-      <Icon name={i.icon} size={22} /><span>{i.title}</span>
-    </a>
-  ))}
+  <Nav page={page} variant="bottom" />
 </nav>

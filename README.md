@@ -52,3 +52,9 @@ project/    бриф, ТЗ, макет, задачи (handoff/), architecture.md
 Все — переменные окружения, образец — `.env.example` (без значений). Паролей и ключей в репозитории нет.
 Лимиты запросов (`RATE_LIMIT_*`, `TELEGRAM_WEBHOOK_*`) считаются в памяти процесса; для нескольких серверов задайте
 `REDIS_URL` — лимиты станут общими (при сбое Redis временно считаются в памяти, сайт работает).
+
+Фото из приложения (аватар, обложки, примеры работ) по умолчанию хранятся в PostgreSQL (`MEDIA_STORE=postgres` —
+подходит для хостинга без диска). Переход на S3-совместимое хранилище (Cloudflare R2, Яндекс Object Storage, MinIO) —
+`MEDIA_STORE=s3` и `STORAGE_ENDPOINT`, `STORAGE_BUCKET`, `STORAGE_REGION`, `STORAGE_ACCESS_KEY`, `STORAGE_SECRET_KEY`,
+без правки кода; уже загруженные файлы — перенести копией ключей `media/…` из таблицы `media_blobs` в корзину.
+Лимиты фото и заданий — `MEDIA_*`, `RATE_LIMIT_UPLOAD_*`, `TASKS_MAX_PER_USER`, `MODERATION_SUBMITS_PER_DAY`.

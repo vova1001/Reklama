@@ -1,19 +1,15 @@
 ---
-// Мягкая подсказка «заполните профиль режима» — не блокирует; скрывается крестиком (запоминается в браузере).
+// Тонкая строка вверху ленты: профиль режима не заполнен. Закрывается (запоминается до конца сеанса).
 import Icon from '../Icon.astro';
 import { NUDGE } from '../../content/app';
 import type { Me, Mode } from '../../lib/auth';
-interface Props { me: Me; mode: Mode }
-const { me, mode } = Astro.props;
-const n = NUDGE[mode];
-const filled = me.profiles[mode];
+interface Props { me: Me }
+const { me } = Astro.props;
+const modes: Mode[] = ['business', 'creator'];
 ---
-<div class="nudge" data-for-mode={mode} data-nudge={mode} hidden={filled} role="note">
-  <span class="nudge-ic" aria-hidden="true"><Icon name="user-round-pen" size={22} /></span>
-  <div class="nudge-tx">
-    <p class="nudge-t">{n.title}</p>
-    <p>{n.text}</p>
+{modes.map((m) => (
+  <div class="nudge" data-for-mode={m} data-nudge={m} hidden={me.profiles[m]} role="note">
+    <a href={`/app/profile?tab=${m}`}><span>{NUDGE[m]}</span><b>Заполнить<Icon name="arrow-right" size={16} /></b></a>
+    <button class="nudge-x" type="button" aria-label="Скрыть" data-nudge-close><Icon name="x" size={16} /></button>
   </div>
-  <a class="btn pill-emerald nudge-go" href={`/app/profile?tab=${mode}`}>{n.cta}</a>
-  <button class="nudge-x" type="button" aria-label="Скрыть подсказку" data-nudge-close><Icon name="x" size={18} /></button>
-</div>
+))}

@@ -124,7 +124,7 @@ test('вход по почте → сразу приложение → выхо�
   expect(sess?.sameSite).toBe('Lax');
 
   await page.goto('/app');
-  await page.getByRole('button', { name: 'Меню профиля' }).click();
+  await page.locator('[data-menu-btn]:visible').first().click();
   await page.getByRole('menuitem', { name: 'Выйти' }).click();
   await page.waitForURL((u) => u.pathname === '/');
   await expect(page.locator('.bar .login')).toHaveCount(1);

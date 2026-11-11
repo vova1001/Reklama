@@ -1,0 +1,462 @@
+// Редактор задания (бизнес) и анкеты автора: черновик сохраняется сам (через ~1 с после правки, при уходе со
+// страницы — предупреждение, если не успел), «На проверку» недоступна, пока не заполнено обязательное — причина
+// по наведению и фокусу; предпросмотр — как увидят другие. Ошибки сервера — у полей.
+import type { components } from '../lib/api.gen';
+import { $, $$, api, busy, clearErrs, setErr } from '../lib/client';
+import { confirmDialog, fmtNum, guard, parseNum, toast } from '../lib/ui';
+import { PLATFORM_TITLE } from '../content/app';
+import { formatsTitle, goal, num, rub, until } from '../lib/format';
+import { BlocksEditor, type Block } from './editor/blocks';
+import { CategoryPicker } from './editor/category';
+import { appear, h, ic, vanish } from './editor/dom';
+import { Uploader, type Photo } from './editor/uploader';
+
+type Task = components['schemas']['Task'];
+type Card = components['schemas']['Card'];
+type Item = components['schemas']['CategoryItem'];
+type ApiError = components['schemas']['Error']['error'];
+
+interface Init {
+  kind: 'task' | 'card';
+  id: number | null;
+  status: string;
+  blocks: Block[];
+  cover: Photo[];
+  photos: Photo[];
+  selected: string[];
+  categories: { common: Item[]; own: Item[] };
+  platforms: { url: string; followers: number }[];
+  brand: string;
+}
+
+const form = $<HTMLFormElement>('[data-editor]');
+if (form) start(form);
+
+function start(form: HTMLFormElement) {
+  const init = JSON.parse($('[data-init]', form)!.textContent!) as Init;
+  const isTask = init.kind === 'task';
+  let id = init.id;
+  let dirty = false;
+  let saving: Promise<boolean> | null = null;
+  let again = false;
+  let timer = 0;
+  const stateEl = $('[data-state]', form)!;
+  const submit = $<HTMLButtonElement>('[data-submit]', form)!;
+
+  const changed = () => {
+    dirty = true;
+    stateEl.textContent = 'Изменено';
+    clearTimeout(timer);
+    timer = window.setTimeout(() => void save(), 1000);
+    check();
+  };
+
+  // ===== части формы =====
+  const blocks = new BlocksEditor($('[data-blocks]', form)!, init.blocks, changed);
+  const picker = new CategoryPicker($('[data-cats]', form)!, init.categories.common, init.categories.own, init.selected, {
+    multi: !isTask, max: isTask ? 1 : 5, maxCustom: 3, label: isTask ? 'Сфера' : 'Темы', onChange: changed,
+  });
+  const onBusy = (b: boolean) => (b ? (stateEl.textContent = 'Загружаю фото…') : check());
+  const cover = new Uploader($('[data-cover]', form)!, init.cover, {
+    purpose: isTask ? 'task_cover' : 'card_avatar', max: 1, aspect: isTask ? 16 / 9 : 1, round: !isTask,
+    label: isTask ? 'Обложка' : 'Фото', onChange: changed, onBusy,
+  });
+  const photos = new Uploader($('[data-photos]', form)!, init.photos, {
+    purpose: isTask ? 'task_photo' : 'card_work', max: isTask ? 6 : 9, label: 'Добавить', onChange: changed, onBusy,
+  });
+  const val = (n: string) => $<HTMLInputElement>(`[name="${n}"]`, form)?.value.trim() ?? '';
+
+  // числа — с пробелами по разрядам (курсор остаётся на месте)
+  $$<HTMLInputElement>('[data-num]', form).forEach((i) => {
+    if (i.value) i.value = fmtNum(parseNum(i.value));
+    i.addEventListener('input', () => {
+      const pos = i.selectionStart ?? i.value.length;
+      const digitsBefore = i.value.slice(0, pos).replace(/\D/g, '').length;
+      const n = parseNum(i.value);
+      i.value = n ? fmtNum(n) : '';
+      let p = 0;
+      for (let seen = 0; p < i.value.length && seen < digitsBefore; p++) if (/\d/.test(i.value[p])) seen++;
+      i.setSelectionRange(p, p);
+    });
+  });
+
+  // пилюли-переключатели (форматы), сегмент (кто берёт), «Вся Россия»
+  $$<HTMLButtonElement>('[data-toggle]', form).forEach((b) =>
+    b.addEventListener('click', () => {
+      b.setAttribute('aria-pressed', String(b.getAttribute('aria-pressed') !== 'true'));
+      changed();
+    }),
+  );
+  $$<HTMLButtonElement>('[data-access] [role="radio"]', form).forEach((b, i, all) => {
+    const pick = (x: HTMLButtonElement) => {
+      all.forEach((y) => {
+        y.setAttribute('aria-checked', String(y === x));
+        y.tabIndex = y === x ? 0 : -1;
+      });
+      changed();
+    };
+    b.addEventListener('click', () => pick(b));
+    b.addEventListener('keydown', (e) => {
+      if (!['ArrowLeft', 'ArrowRight'].includes(e.key)) return;
+      e.preventDefault();
+      const n = all[(i + (e.key === 'ArrowRight' ? 1 : -1) + all.length) % all.length];
+      n.focus();
+      pick(n);
+    });
+  });
+  const nation = $<HTMLButtonElement>('[data-nationwide]', form);
+  const city = $<HTMLInputElement>('[name="city"]', form)!;
+  const syncNation = () => {
+    const on = nation?.getAttribute('aria-checked') === 'true';
+    city.disabled = on;
+    city.placeholder = on ? 'Вся Россия' : city.dataset.ph ?? '';
+  };
+  nation?.addEventListener('click', () => {
+    nation.setAttribute('aria-checked', String(nation.getAttribute('aria-checked') !== 'true'));
+    syncNation();
+    changed();
+  });
+  syncNation();
+
+  // срок: ДД.ММ.ГГГГ с точками сами, быстрые варианты
+  const due = $<HTMLInputElement>('[name="publishBy"]', form);
+  due?.addEventListener('input', () => {
+    const d = due.value.replace(/\D/g, '').slice(0, 8);
+    due.value = [d.slice(0, 2), d.slice(2, 4), d.slice(4)].filter(Boolean).join('.');
+  });
+  $$<HTMLButtonElement>('[data-days]', form).forEach((b) =>
+    b.addEventListener('click', () => {
+      const t = new Date();
+      t.setDate(t.getDate() + Number(b.dataset.days));
+      due!.value = `${String(t.getDate()).padStart(2, '0')}.${String(t.getMonth() + 1).padStart(2, '0')}.${t.getFullYear()}`;
+      changed();
+    }),
+  );
+  const isoDue = () => {
+    const m = due?.value.match(/^(\d{2})\.(\d{2})\.(\d{4})$/);
+    return m ? `${m[3]}-${m[2]}-${m[1]}` : '';
+  };
+
+  // площадки автора: ссылка + подписчики, добавить и убрать
+  const plats = $('[data-platforms]', form);
+  const addPlat = $<HTMLButtonElement>('[data-add-platform]', form);
+  const platRow = (p = { url: '', followers: 0 }) => {
+    const url = h('input', { class: 'inp', type: 'url', inputmode: 'url', maxlength: '300', placeholder: 'youtube.com/@канал', 'aria-label': 'Ссылка на площадку' });
+    url.value = p.url.replace(/^https:\/\//, '');
+    const fol = h('input', { class: 'inp', type: 'text', inputmode: 'numeric', maxlength: '13', placeholder: 'Подписчики', 'aria-label': 'Подписчики', 'data-num': '' });
+    fol.value = p.followers ? fmtNum(p.followers) : '';
+    fol.addEventListener('input', () => {
+      const n = parseNum(fol.value);
+      fol.value = n ? fmtNum(n) : '';
+    });
+    const rm = h('button', { class: 'ibtn', type: 'button', 'aria-label': 'Убрать площадку', html: ic('x', 18) });
+    const row = h('div', { class: 'plat' }, h('span', { class: 'plat-ic', html: ic('link', 18) }), url, fol, rm);
+    const err = h('p', { class: 'ferr', 'data-err-plat': '' });
+    const wrap = h('div', { class: 'plat-w' }, row, err);
+    rm.addEventListener('click', () => void vanish(wrap).then(() => {
+      syncPlats();
+      changed();
+      addPlat?.focus();
+    }));
+    return wrap;
+  };
+  const syncPlats = () => {
+    if (addPlat && plats) addPlat.hidden = plats.children.length >= 6;
+  };
+  if (plats) {
+    (init.platforms.length ? init.platforms : [{ url: '', followers: 0 }]).forEach((p) => plats.append(platRow(p)));
+    addPlat?.addEventListener('click', () => {
+      const r = platRow();
+      plats.append(r);
+      appear(r);
+      $<HTMLInputElement>('input', r)!.focus();
+      syncPlats();
+    });
+    syncPlats();
+  }
+  const platValue = () =>
+    plats ? $$<HTMLElement>('.plat', plats).map((r) => ({ url: $$<HTMLInputElement>('input', r)[0].value.trim(), followers: parseNum($$<HTMLInputElement>('input', r)[1].value) })) : [];
+
+  // счётчик у длинного поля (название — только когда близко к пределу)
+  $$<HTMLInputElement>('[data-count]', form).forEach((i) => {
+    const out = $(`[data-count-for="${i.name}"]`, form)!;
+    const max = Number(i.maxLength);
+    const upd = () => (out.textContent = i.value.length > max * 0.8 ? `${i.value.length}/${max}` : '');
+    i.addEventListener('input', upd);
+    upd();
+  });
+
+  form.addEventListener('input', (e) => {
+    const t = e.target as HTMLElement;
+    if (t.matches('.inp, [name]') && !t.closest('[data-blocks], .cb')) {
+      setErr(form, (t as HTMLInputElement).name, '');
+      changed();
+    }
+  });
+  form.addEventListener('submit', (e) => e.preventDefault());
+
+  // ===== данные =====
+  const payload = () =>
+    isTask
+      ? {
+          title: val('title'), city: nation?.getAttribute('aria-checked') === 'true' ? '' : val('city'),
+          nationwide: nation?.getAttribute('aria-checked') === 'true', category: picker.value()[0] ?? '',
+          formats: $$<HTMLButtonElement>('[data-format][aria-pressed="true"]', form).map((b) => b.dataset.format!),
+          access: $<HTMLButtonElement>('[data-access] [aria-checked="true"]', form)?.dataset.v ?? 'open',
+          minViews: parseNum(val('minViews')), minLikes: parseNum(val('minLikes')),
+          rewardKopecks: parseNum(val('reward')) * 100, publishBy: isoDue(), blocks: blocks.value(),
+          cover: cover.value()[0] ?? '', photos: photos.value(),
+        }
+      : {
+          name: val('name'), city: val('city'), topics: picker.value(), platforms: platValue().filter((p) => p.url || p.followers),
+          blocks: blocks.value(), avatar: cover.value()[0] ?? '', works: photos.value(),
+        };
+
+  /** Что ещё нужно для отправки на проверку (как на сервере): [поле, текст]. */
+  const missing = (): [string, string][] => {
+    const p = payload() as Record<string, unknown>;
+    const out: [string, string][] = [];
+    const hasBlocks = (p.blocks as Block[]).some((b) => b.items.length);
+    if (isTask) {
+      if ((p.title as string).length < 5) out.push(['title', 'Добавьте название']);
+      if (!p.nationwide && (p.city as string).length < 2) out.push(['city', 'Укажите город или «Вся Россия»']);
+      if (!p.category) out.push(['category', 'Выберите сферу']);
+      if (!(p.formats as string[]).length) out.push(['formats', 'Выберите формат']);
+      if (!p.minViews && !p.minLikes) out.push(['minViews', 'Укажите просмотры или лайки']);
+      if ((p.rewardKopecks as number) < 10000) out.push(['reward', 'Оплата — от 100 ₽']);
+      const d = p.publishBy as string;
+      const tomorrow = new Date();
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      const min = tomorrow.toISOString().slice(0, 10);
+      if (!d || d < min) out.push(['publishBy', 'Срок — от завтра']);
+      if (!hasBlocks) out.push(['blocks', 'Опишите задание']);
+    } else {
+      if ((p.name as string).length < 2) out.push(['name', 'Укажите имя']);
+      if ((p.city as string).length < 2) out.push(['city', 'Укажите город']);
+      if (!(p.topics as string[]).length) out.push(['topics', 'Выберите тему']);
+      const ps = p.platforms as { url: string; followers: number }[];
+      if (!ps.length) out.push(['platforms', 'Добавьте площадку']);
+      else if (ps.some((x) => !x.followers)) out.push(['platforms', 'Укажите подписчиков']);
+      if (!hasBlocks) out.push(['blocks', 'Расскажите о себе']);
+    }
+    return out;
+  };
+
+  function check() {
+    const m = missing();
+    const uploading = cover.busy() || photos.busy();
+    const reason = uploading ? 'Дождитесь загрузки фото' : m[0]?.[1] ?? '';
+    submit.setAttribute('aria-disabled', String(!!reason));
+    if (reason) {
+      submit.dataset.tip = reason;
+      submit.setAttribute('data-tip-show', '');
+      submit.setAttribute('aria-describedby', 'submit-why');
+    } else {
+      submit.removeAttribute('data-tip-show');
+      submit.removeAttribute('aria-describedby');
+    }
+    $('#submit-why', form)!.textContent = reason;
+  }
+
+  const showErrors = (e: ApiError) => {
+    const f = e.fields ?? {};
+    for (const [k, v] of Object.entries(f)) {
+      if (k.startsWith('blocks.')) continue;
+      if (k.startsWith('platforms.')) {
+        const el = $$('[data-err-plat]', form)[Number(k.split('.')[1])];
+        if (el) el.textContent = v;
+        continue;
+      }
+      setErr(form, k === 'reward' ? 'reward' : k, v);
+    }
+    blocks.showErrors(f);
+    if (!Object.keys(f).length) toast(e.message);
+  };
+
+  // ===== сохранение =====
+  async function save(): Promise<boolean> {
+    clearTimeout(timer);
+    if (saving) {
+      again = true;
+      return saving;
+    }
+    if (!dirty && id !== null) return true;
+    dirty = false;
+    stateEl.textContent = 'Сохраняю…';
+    const body = payload();
+    saving = (async () => {
+      const r = isTask
+        ? await api<Task>(id === null ? 'POST' : 'PUT', id === null ? '/api/me/tasks' : `/api/me/tasks/${id}`, body)
+        : await api<{ card: Card }>('PUT', '/api/me/card', body);
+      if (!r.ok) {
+        dirty = true;
+        if (guard(r.status)) return false;
+        if (r.status === 409) {
+          toast(r.error.message);
+          setTimeout(() => location.reload(), 1500);
+          return false;
+        }
+        if (r.status === 0) {
+          stateEl.textContent = 'Нет связи — сохраню позже';
+          timer = window.setTimeout(() => void save(), 5000);
+          return false;
+        }
+        stateEl.textContent = 'Не сохранено — проверьте поля';
+        clearErrs(form);
+        showErrors(r.error);
+        return false;
+      }
+      if (isTask && id === null) {
+        id = (r.data as Task).id;
+        history.replaceState(null, '', `/app/tasks/${id}`);
+        $('[data-delete]', form)?.removeAttribute('hidden');
+      }
+      clearErrs(form);
+      blocks.showErrors({});
+      const t = new Date();
+      stateEl.textContent = `Черновик сохранён · ${String(t.getHours()).padStart(2, '0')}:${String(t.getMinutes()).padStart(2, '0')}`;
+      return true;
+    })();
+    const ok = await saving;
+    saving = null;
+    if (again) {
+      again = false;
+      return save();
+    }
+    return ok;
+  }
+
+  window.addEventListener('beforeunload', (e) => {
+    if (dirty || saving || cover.busy() || photos.busy()) {
+      void save();
+      e.preventDefault();
+    }
+  });
+
+  // ===== на проверку =====
+  submit.addEventListener('click', async () => {
+    const m = missing();
+    if (m.length || submit.getAttribute('aria-disabled') === 'true') {
+      clearErrs(form);
+      for (const [f, msg] of m) setErr(form, f, msg);
+      const first = m[0]?.[0];
+      const target = first === 'blocks' ? null : $<HTMLElement>(`[data-input="${first}"], [name="${first}"]`, form);
+      if (first === 'blocks') blocks.focus();
+      else (target ?? $(`[data-err="${first}"]`, form)?.closest('.sec')?.querySelector<HTMLElement>('button, input'))?.focus();
+      return;
+    }
+    busy(submit, true);
+    const saved = await save();
+    if (!saved) return busy(submit, false);
+    const r = isTask ? await api<Task>('POST', `/api/me/tasks/${id}/submit`) : await api<{ card: Card }>('POST', '/api/me/card/submit');
+    if (!r.ok) {
+      busy(submit, false);
+      if (guard(r.status)) return;
+      if (r.status === 400) return showErrors(r.error);
+      return toast(r.error.message);
+    }
+    dirty = false;
+    location.assign(isTask ? `/app/tasks/${id}?sent=1` : '/app/card?sent=1');
+  });
+
+  $('[data-delete]', form)?.addEventListener('click', async (e) => {
+    const b = e.currentTarget as HTMLButtonElement;
+    if (!(await confirmDialog('Удалить черновик?', 'Задание и его фото удалятся.', 'Удалить'))) return b.focus();
+    clearTimeout(timer);
+    dirty = false;
+    if (id !== null) {
+      const r = await api<void>('DELETE', `/api/me/tasks/${id}`);
+      if (!r.ok && !guard(r.status)) return toast(r.error.message);
+    }
+    location.assign('/app/tasks');
+  });
+
+  // ===== предпросмотр =====
+  const tabs = $$<HTMLButtonElement>('[data-view]', form);
+  tabs.forEach((t, i) => {
+    const pick = (x: HTMLButtonElement) => {
+      tabs.forEach((y) => {
+        y.setAttribute('aria-selected', String(y === x));
+        y.tabIndex = y === x ? 0 : -1;
+      });
+      const pv = x.dataset.view === 'preview';
+      $('[data-pane="edit"]', form)!.hidden = pv;
+      $('[data-pane="preview"]', form)!.hidden = !pv;
+      if (pv) renderPreview();
+    };
+    t.addEventListener('click', () => pick(t));
+    t.addEventListener('keydown', (e) => {
+      if (!['ArrowLeft', 'ArrowRight'].includes(e.key)) return;
+      e.preventDefault();
+      const n = tabs[(i + 1) % tabs.length];
+      n.focus();
+      pick(n);
+    });
+  });
+
+  function renderPreview() {
+    const box = $('[data-preview]', form)!;
+    box.replaceChildren(isTask ? taskPreview() : cardPreview());
+  }
+
+  const bodyOf = (bs: Block[], ph: Photo[]) => {
+    const body = h('div', { class: 'body' });
+    for (const b of bs.filter((x) => x.items.length)) {
+      const sec = h('section', { class: 'body-b' }, h('h3', {}, b.title || 'Без заголовка'));
+      if (b.kind === 'text') b.items.forEach((p) => sec.append(h('p', {}, p)));
+      else {
+        const ul = h('ul', { class: `k-${b.kind}` });
+        b.items.forEach((i) => ul.append(h('li', {}, b.kind === 'links' ? h('a', { href: i.startsWith('http') ? i : `https://${i}`, target: '_blank', rel: 'nofollow noopener noreferrer' }, i.replace(/^https?:\/\//, '')) : i)));
+        sec.append(ul);
+      }
+      body.append(sec);
+    }
+    if (ph.length) {
+      const g = h('div', { class: 'body-ph' });
+      ph.forEach((p) => g.append(h('img', { src: p.thumb, alt: '', loading: 'lazy' })));
+      body.append(g);
+    }
+    return body;
+  };
+
+  function taskPreview() {
+    const t = payload() as unknown as { title: string; city: string; nationwide: boolean; formats: string[]; minViews: number; minLikes: number; rewardKopecks: number; publishBy: string; blocks: Block[] };
+    const where = t.nationwide ? 'Вся Россия' : t.city;
+    const meta = [where, picker.titles()[0]].filter(Boolean).join(' · ');
+    const it = h('article', { class: 'it pv-it' }, h('div', { class: 'it-meta' }, h('span', {}, init.brand ? h('b', {}, init.brand) : null, init.brand && meta ? ' · ' : '', meta)), h('h2', { class: 'it-t' }, t.title || 'Название задания'));
+    const c = cover.photos()[0];
+    if (c) it.append(h('img', { class: 'it-cover', src: c.src, alt: '' }));
+    const facts = h('div', { class: 'facts' });
+    const fact = (icon: Parameters<typeof ic>[0], strong: string | null, text: string) => facts.append(h('span', { html: ic(icon, 18) }, strong ? h('b', {}, strong) : null, text));
+    if (t.rewardKopecks) fact('wallet', rub(t.rewardKopecks), '');
+    const g = goal(t.minViews, t.minLikes);
+    if (g) fact('eye', null, g);
+    if (t.formats.length) fact('video', null, formatsTitle(t.formats));
+    if (t.publishBy) fact('calendar', null, until(t.publishBy));
+    it.append(facts, bodyOf(t.blocks, photos.photos()));
+    return it;
+  }
+
+  function cardPreview() {
+    const p = payload() as unknown as { name: string; city: string; platforms: { url: string; followers: number }[]; blocks: Block[] };
+    const a = cover.photos()[0];
+    const head = h('div', { class: 'pv-who' }, a ? h('img', { class: 'pv-ava', src: a.thumb, alt: '' }) : h('span', { class: 'pv-ava' }), h('div', {}, h('p', { class: 'it-t' }, p.name || 'Ваше имя'), h('p', { class: 'it-meta' }, p.city)));
+    const tops = h('div', { class: 'chips pv-tags' });
+    picker.titles().forEach((x) => tops.append(h('span', { class: 'chip is-static' }, x)));
+    const pl = h('ul', { class: 'rows' });
+    p.platforms.forEach((x) => {
+      let host = x.url;
+      try {
+        host = new URL(x.url.includes('://') ? x.url : `https://${x.url}`).hostname.replace(/^www\./, '');
+      } catch {
+        /* показать как есть */
+      }
+      const kind = Object.entries({ telegram: /t\.me|telegram/, youtube: /youtu/, vk: /vk\.(com|ru)|vkvideo/, tiktok: /tiktok/, instagram: /instagram/, dzen: /dzen/, rutube: /rutube/ }).find(([, re]) => re.test(host))?.[0] ?? 'other';
+      pl.append(h('li', { html: ic('link', 20) }, h('div', {}, h('p', { class: 'row-t' }, PLATFORM_TITLE[kind]), h('p', { class: 'row-s' }, host)), h('span', { class: 'row-v' }, x.followers ? `${num(x.followers)} подписч.` : '')));
+    });
+    return h('article', { class: 'pv-card' }, head, tops, pl, bodyOf(p.blocks, photos.photos()));
+  }
+
+  check();
+  if (new URLSearchParams(location.search).get('new') === '1') $<HTMLInputElement>('[name="title"]', form)?.focus();
+}

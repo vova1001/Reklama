@@ -1,85 +1,77 @@
 ---
-// Лента приложения. Автор — задания по темам (пока примеры), бизнес — «Создать задание» и как будет выглядеть
-// своё задание (пример). Обе ленты в разметке, видна лента включённого режима.
+// Лента. Автор — опубликованные задания (новые сверху, «Показать ещё»). Бизнес — свои задания на проверке и
+// опубликованные, черновики — строкой со ссылкой, «Создать». Без выдуманных данных: пусто — так и говорим.
 import App from '../../layouts/App.astro';
 import Icon from '../../components/Icon.astro';
 import Nudge from '../../components/app/Nudge.astro';
-import Search from '../../components/app/Search.astro';
-import Side from '../../components/app/Side.astro';
-import { DEMO_OWN_TASK, DEMO_TASKS, FEED } from '../../content/app';
-import { shortName } from '../../lib/auth';
+import TaskItem from '../../components/app/TaskItem.astro';
+import { fetchFeed, fetchMyTasks } from '../../lib/auth';
 
 const me = Astro.locals.me;
 if (!me) return Astro.redirect('/login', 303);
-const hello = me.user.name ? `Здравствуйте, ${shortName(me.user)}` : 'Здравствуйте';
+const mode = me.user.mode;
+const cursor = Astro.url.searchParams.get('cursor') ?? '';
+const feed = mode === 'creator' ? await fetchFeed(Astro.request, cursor) : null;
+const mine = mode === 'business' ? await fetchMyTasks(Astro.request) : null;
+const active = (mine ?? []).filter((t) => t.status === 'pending_review' || t.status === 'published');
+const drafts = (mine ?? []).filter((t) => t.status === 'draft' || t.status === 'rejected').length;
+const failed = (mode === 'creator' && !feed) || (mode === 'business' && !mine);
 ---
 <App title="Лента" page="feed">
-  <Search id="q" class="feed-search" />
-  <p class="hello">{hello}</p>
+  <Nudge me={me} />
 
-  <!-- ===== автор ===== -->
-  <section class="lenta" data-for-mode="creator" aria-labelledby="feed-c">
-    <div class="feed-head">
-      <h1 id="feed-c">{FEED.creator.title}</h1>
-      <p class="muted">{FEED.creator.sub}</p>
-    </div>
-    <Nudge me={me} mode="creator" />
-    <ul class="tasks">
-      {DEMO_TASKS.map((t) => (
-        <li class="card task" data-demo>
-          <div class="task-top">
-            <span class="task-ic" aria-hidden="true"><Icon name={t.icon} size={22} /></span>
-            <div class="task-who">
-              <p class="task-brand">{t.brand}</p>
-              <p class="task-meta"><Icon name="map-pin" size={16} />{t.city} · {t.sphere}</p>
-            </div>
-            <span class="pill-badge warn">Пример</span>
-          </div>
-          <h2 class="task-t">{t.title}</h2>
-          <dl class="task-facts">
-            <div><dt>Оплата</dt><dd>{t.budget}</dd></div>
-            <div><dt>Результат</dt><dd>{t.goal}</dd></div>
-            <div><dt>Формат</dt><dd>{t.format}</dd></div>
-            <div><dt>Срок</dt><dd>{t.due}</dd></div>
-          </dl>
-          <div class="task-act">
-            <button class="btn pill-dark" type="button" data-respond>Откликнуться</button>
-            <p class="task-note" role="status" data-respond-note></p>
-          </div>
-        </li>
-      ))}
-    </ul>
-  </section>
-
-  <!-- ===== бизнес ===== -->
-  <section class="lenta" data-for-mode="business" aria-labelledby="feed-b">
-    <div class="feed-head">
-      <h1 id="feed-b">{FEED.business.title}</h1>
-      <p class="muted">{FEED.business.sub}</p>
-    </div>
-    <Nudge me={me} mode="business" />
-    <div class="card empty">
-      <span class="empty-ic" aria-hidden="true"><Icon name="list-plus" size={28} /></span>
-      <h2>Заданий пока нет</h2>
-      <p class="muted">Опишите, что снять, задайте условия — оплата только за результат.</p>
-      <a class="btn pill-emerald" href="/tasks/new" data-create-task><Icon name="plus" size={20} />Создать задание</a>
-    </div>
-    <p class="feed-lbl">Так будет выглядеть ваше задание</p>
-    <div class="card task own" data-demo>
-      <div class="task-top">
-        <span class="task-ic" aria-hidden="true"><Icon name="coffee" size={22} /></span>
-        <div class="task-who">
-          <h2 class="task-t">{DEMO_OWN_TASK.title}</h2>
-          <p class="task-meta">{DEMO_OWN_TASK.budget} · {DEMO_OWN_TASK.goal}</p>
+  {mode === 'creator' ? (
+    <section aria-labelledby="feed-t">
+      <div class="head"><h1 id="feed-t">Задания</h1></div>
+      {failed ? (
+        <div class="empty"><Icon name="circle-alert" size={32} /><h2>Лента не загрузилась</h2><p>Обновите страницу через минуту.</p></div>
+      ) : feed!.tasks.length === 0 ? (
+        <div class="empty" data-empty>
+          <Icon name="inbox" size={32} />
+          <h2>Заданий пока нет</h2>
+          <p>Появятся, как только бизнес их опубликует.</p>
+          <a class="btn pill-dark" href="/app/card"><Icon name="id-card" size={20} />Заполнить анкету</a>
         </div>
-        <span class="pill-badge warn">Пример</span>
+      ) : (
+        <>
+          <div class="list" data-feed>{feed!.tasks.map((t) => <TaskItem task={t} />)}</div>
+          {feed!.next && <div class="more"><a class="btn pill-ghost" href={`/app?cursor=${encodeURIComponent(feed!.next)}`}>Показать ещё</a></div>}
+        </>
+      )}
+    </section>
+  ) : (
+    <section aria-labelledby="feed-t">
+      <div class="head">
+        <h1 id="feed-t">Ваши задания</h1>
+        {active.length > 0 && <a class="btn pill-emerald" href="/app/tasks/new"><Icon name="plus" size={20} />Создать</a>}
       </div>
-      <div class="own-row">
-        <span class="pill-badge ok"><span class="live" aria-hidden="true"></span>{DEMO_OWN_TASK.status}</span>
-        <span class="own-n"><Icon name="users" size={18} />Откликов: {DEMO_OWN_TASK.responses}</span>
-      </div>
-    </div>
-  </section>
-
-  <Side slot="aside" me={me} />
+      {drafts > 0 && (
+        <div class="nudge line-gap"><a href="/app/tasks?status=draft"><span>Черновики: {drafts}</span><b>Открыть<Icon name="arrow-right" size={16} /></b></a></div>
+      )}
+      {failed ? (
+        <div class="empty"><Icon name="circle-alert" size={32} /><h2>Не загрузилось</h2><p>Обновите страницу через минуту.</p></div>
+      ) : active.length === 0 ? (
+        <div class="empty" data-empty>
+          <Icon name="square-plus" size={32} />
+          <h2>Создайте первое задание</h2>
+          <p>Что снять, где и за сколько — оплата за результат.</p>
+          <a class="btn pill-emerald" href="/app/tasks/new" data-create-task><Icon name="plus" size={20} />Создать задание</a>
+        </div>
+      ) : (
+        <div class="list">{active.map((t) => <TaskItem task={t} own />)}</div>
+      )}
+    </section>
+  )}
 </App>
+<script>
+  // «Подробнее» в ленте — раскрыть блоки и фото задания
+  document.querySelectorAll<HTMLButtonElement>('[data-expand]').forEach((b) =>
+    b.addEventListener('click', () => {
+      const box = document.getElementById(b.getAttribute('aria-controls')!)!;
+      const open = b.getAttribute('aria-expanded') !== 'true';
+      b.setAttribute('aria-expanded', String(open));
+      box.hidden = !open;
+      b.firstChild!.textContent = open ? 'Свернуть' : 'Подробнее';
+    }),
+  );
+</script>

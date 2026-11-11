@@ -1,0 +1,82 @@
+---
+// Анкета автора одной страницей: фото, имя и город, темы, площадки (ссылка и подписчики), блоки, примеры работ.
+// Начальные значения — из профиля автора. Логика — scripts/editor.ts.
+import Icon from '../Icon.astro';
+import { CARD_BLOCKS } from '../../content/app';
+import type { Card, CategoryItem, CreatorProfile, User } from '../../lib/auth';
+interface Props { card: Card | null; profile: CreatorProfile | null; user: User; categories: { common: CategoryItem[]; own: CategoryItem[] } }
+const { card: c, profile, user, categories } = Astro.props;
+const fromProfile = (profile?.channels ?? []).filter((x) => x.startsWith('https://')).map((url) => ({ url, followers: 0 }));
+const init = {
+  kind: 'card', id: null, status: c?.status ?? 'draft', blocks: c ? c.blocks : CARD_BLOCKS,
+  cover: c?.avatar ? [c.avatar] : [], photos: c?.works ?? [], selected: c ? c.topics : profile?.spheres ?? [],
+  categories, platforms: c ? c.platforms.map((p) => ({ url: p.url, followers: p.followers })) : fromProfile, brand: '',
+};
+const json = JSON.stringify(init).replace(/</g, '\\u003c');
+const name = c?.name || profile?.name || user.name;
+const city = c?.city || profile?.city || user.city;
+---
+<form class="ed" novalidate autocomplete="off" data-editor="card">
+  <script type="application/json" data-init set:html={json} />
+  <div class="head">
+    <h1>Анкета</h1>
+    <div class="tabs ed-tabs" role="tablist" aria-label="Вид">
+      <button type="button" role="tab" aria-selected="true" data-view="edit">Правка</button>
+      <button type="button" role="tab" aria-selected="false" tabindex="-1" data-view="preview"><Icon name="eye" size={18} />Как увидят</button>
+    </div>
+  </div>
+  {c?.status === 'rejected' && <p class="banner is-err" role="note"><Icon name="circle-alert" size={20} /><span><b>Отклонено.</b> {c.rejectReason}</span></p>}
+
+  <div data-pane="edit">
+    <div class="sec who-ed">
+      <div data-cover></div>
+      <div class="row2 grow">
+        <div class="field">
+          <label class="lbl" for="c-name">Имя</label>
+          <input class="inp" id="c-name" name="name" maxlength="80" value={name} placeholder="Алина" autocomplete="nickname" data-input="name" />
+          <p class="ferr" data-err="name"></p>
+        </div>
+        <div class="field">
+          <label class="lbl" for="c-city">Город</label>
+          <input class="inp" id="c-city" name="city" maxlength="80" value={city} placeholder="Казань" autocomplete="address-level2" data-input="city" />
+          <p class="ferr" data-err="city"></p>
+        </div>
+      </div>
+    </div>
+    <p class="ferr" data-err="avatar"></p>
+
+    <div class="sec">
+      <span class="lbl">Темы <span class="hint">· до 5</span></span>
+      <div data-cats data-input="topics"></div>
+      <p class="ferr" data-err="topics"></p>
+    </div>
+
+    <div class="sec">
+      <span class="lbl">Площадки</span>
+      <div class="plats" data-platforms data-input="platforms"></div>
+      <button class="btn pill-text add-row" type="button" data-add-platform><Icon name="plus" size={18} />Площадка</button>
+      <p class="ferr" data-err="platforms"></p>
+    </div>
+
+    <div class="sec">
+      <span class="lbl">Подробности</span>
+      <div data-blocks></div>
+      <p class="ferr" data-err="blocks"></p>
+    </div>
+
+    <div class="sec">
+      <span class="lbl">Работы <span class="hint">· до 9 фото</span></span>
+      <div data-photos></div>
+      <p class="ferr" data-err="works"></p>
+    </div>
+  </div>
+
+  <div data-pane="preview" hidden><p class="sub">Так анкету увидит бизнес</p><div class="pv" data-preview></div></div>
+
+  <div class="ed-bar">
+    <p class="ed-state" data-state aria-live="polite">{c ? 'Черновик' : 'Сохранится само'}</p>
+    <button class="btn pill-emerald" type="button" data-submit aria-disabled="true">На проверку</button>
+    <span class="sr-only" id="submit-why"></span>
+  </div>
+</form>
+<script src="../../scripts/editor.ts"></script>

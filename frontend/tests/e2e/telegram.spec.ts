@@ -76,10 +76,8 @@ test('вход через бота: /start → «Подтвердить вход
   await page.waitForURL('**/app', { timeout: 15_000 });
   await expect(page.locator('[data-app]')).toBeVisible();
   await waitCall(request, tg, (c) => c.method === 'editMessageText' && String(c.params.text).includes('Вход подтверждён'));
-  // Telegram привязан — шаг «Уведомления в Telegram» выполнен
-  await expect(page.locator('[data-step="telegram"]')).toHaveAttribute('data-done', 'true');
   await page.goto('/app/settings');
-  await expect(page.locator('[data-provider="telegram"]')).toContainText('Подключён');
+  await expect(page.locator('[data-provider="telegram"] .row-v')).toHaveText('Есть');
 
   // ссылка одноразовая: повторное нажатие — «устарела»
   await hook(request, tap(tg, `ok:${token}`));
@@ -95,7 +93,7 @@ test('вход через бота: /start → «Подтвердить вход
   await hook(request, say(tg, `/start login_${t2}`));
   await hook(request, tap(tg, `ok:${t2}`));
   await page.waitForURL('**/app', { timeout: 15_000 });
-  await expect(page.locator('.hello')).toContainText('Тест');
+  expect((await (await page.request.get('/api/me')).json()).user.name).toContain('Тест');
   expect(errors).toEqual([]);
 });
 

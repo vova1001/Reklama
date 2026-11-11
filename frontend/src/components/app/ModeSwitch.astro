@@ -1,5 +1,5 @@
 ---
-// Переключатель режима «Бизнес / Автор» — сегмент-радиогруппа (стрелки, Home/End). Сохраняется сразу (PATCH /api/me/mode).
+// Переключатель режима «Бизнес / Автор» — радиогруппа (стрелки, Home/End). Сохраняется сразу (PATCH /api/me/mode).
 import Icon from '../Icon.astro';
 import { MODES } from '../../content/app';
 import type { Mode } from '../../lib/auth';
@@ -8,7 +8,7 @@ const { mode, id, class: cls = '' } = Astro.props;
 ---
 <div class={`mseg ${cls}`} role="radiogroup" aria-label="Режим" id={id} data-mode-switch>
   {MODES.map((m) => (
-    <button type="button" role="radio" aria-checked={mode === m.id ? 'true' : 'false'} tabindex={mode === m.id ? 0 : -1} data-mode-value={m.id}>
+    <button type="button" role="radio" aria-checked={mode === m.id ? 'true' : 'false'} tabindex={mode === m.id ? 0 : -1} data-mode-value={m.id} data-tip={m.title}>
       <Icon name={m.icon} size={18} /><span>{m.title}</span>
     </button>
   ))}

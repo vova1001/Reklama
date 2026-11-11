@@ -4,7 +4,6 @@
 import App from '../../layouts/App.astro';
 import Icon from '../../components/Icon.astro';
 import Avatar from '../../components/Avatar.astro';
-import Side from '../../components/app/Side.astro';
 import { MODES } from '../../content/app';
 import { fetchProfiles, type Mode } from '../../lib/auth';
 import { getHome, type Category } from '../../lib/api';
@@ -27,18 +26,18 @@ const channels = creator?.channels.length ? creator.channels : [''];
 const filled: Record<Mode, boolean> = { business: !!business, creator: !!creator };
 ---
 <App title="Профиль" page="profile">
-  <div class="page-head">
+  <div class="head">
     <h1>Профиль</h1>
     <button class="btn pill-ghost" type="button" data-logout><Icon name="log-out" size={20} />Выйти</button>
   </div>
 
   <!-- общие данные -->
-  <section class="card pane" aria-labelledby="basics-t">
+  <section class="sec" aria-labelledby="basics-t">
     <div class="who">
-      <Avatar user={u} size={56} />
+      <div class="ava-up" data-avatar data-photo={u.avatarUrl.startsWith('/media/') ? u.avatarUrl : ''}><Avatar user={u} size={64} /></div>
       <div>
-        <h2 id="basics-t" class="pane-h">Общие данные</h2>
-        <p class="muted">{u.email ?? 'Почта не указана'} · видны в обоих режимах</p>
+        <h2 id="basics-t" class="sec-h">Общие данные</h2>
+        <p class="muted">{u.email ?? 'Почта не указана'}</p>
       </div>
     </div>
     <form class="form" novalidate data-form="basics">
@@ -60,9 +59,8 @@ const filled: Record<Mode, boolean> = { business: !!business, creator: !!creator
   </section>
 
   <!-- профили режимов -->
-  <section class="card pane" aria-labelledby="modes-t">
-    <h2 id="modes-t" class="pane-h">Профили режимов</h2>
-    <p class="muted">Один аккаунт — и бизнес, и автор. Заполните профиль режима, когда он понадобится.</p>
+  <section class="sec" aria-labelledby="modes-t">
+    <h2 id="modes-t" class="sec-h">Режимы</h2>
     <div class="tabs" role="tablist" aria-label="Профили режимов" data-tabs>
       {MODES.map((m) => (
         <button type="button" role="tab" id={`tab-${m.id}`} aria-controls={`panel-${m.id}`} aria-selected={tab === m.id ? 'true' : 'false'} tabindex={tab === m.id ? 0 : -1} data-tab={m.id}>
@@ -77,7 +75,7 @@ const filled: Record<Mode, boolean> = { business: !!business, creator: !!creator
       <form class="form" novalidate data-form="business">
         <div class="row2">
           <div class="field">
-            <label class="lbl" for="bz-name">Название компании или бренда</label>
+            <label class="lbl" for="bz-name">Название</label>
             <input class="inp" id="bz-name" name="name" autocomplete="organization" maxlength="80" value={business?.name ?? ''} placeholder="Кофейня «Зерно»" aria-describedby="bz-name-err" data-input="name" />
             <p class="ferr" id="bz-name-err" data-err="name" aria-live="polite"></p>
           </div>
@@ -88,7 +86,7 @@ const filled: Record<Mode, boolean> = { business: !!business, creator: !!creator
           </div>
         </div>
         <div class="field">
-          <span class="lbl" id="bz-sph-l">Сфера <span class="hint">· до 5</span></span>
+          <span class="lbl" id="bz-sph-l">Сферы <span class="hint">· до 5</span></span>
           <div class="chips" role="group" aria-labelledby="bz-sph-l" aria-describedby="bz-sph-err" data-spheres>
             {categories.map((c) => (
               <button type="button" class="chip" aria-pressed={bizSpheres.has(c.slug) ? 'true' : 'false'} data-slug={c.slug}><Icon name={c.icon} size={18} />{c.title}</button>
@@ -97,7 +95,7 @@ const filled: Record<Mode, boolean> = { business: !!business, creator: !!creator
           <p class="ferr" id="bz-sph-err" data-err="spheres" aria-live="polite"></p>
         </div>
         <p class="ferr" data-err="form" role="alert"></p>
-        <div class="form-act"><button class="btn pill-dark" type="submit" data-submit><span>Сохранить профиль бизнеса</span></button><p class="saved" role="status" data-saved></p></div>
+        <div class="form-act"><button class="btn pill-dark" type="submit" data-submit><span>Сохранить</span></button><p class="saved" role="status" data-saved></p></div>
       </form>
     </div>
 
@@ -106,7 +104,7 @@ const filled: Record<Mode, boolean> = { business: !!business, creator: !!creator
       <form class="form" novalidate data-form="creator">
         <div class="row2">
           <div class="field">
-            <label class="lbl" for="cr-name">Имя или псевдоним</label>
+            <label class="lbl" for="cr-name">Имя</label>
             <input class="inp" id="cr-name" name="name" autocomplete="nickname" maxlength="80" value={creator?.name ?? u.name} aria-describedby="cr-name-err" data-input="name" />
             <p class="ferr" id="cr-name-err" data-err="name" aria-live="polite"></p>
           </div>
@@ -126,7 +124,7 @@ const filled: Record<Mode, boolean> = { business: !!business, creator: !!creator
           <p class="ferr" id="cr-sph-err" data-err="spheres" aria-live="polite"></p>
         </div>
         <div class="field">
-          <span class="lbl" id="cr-ch-l">Ваши каналы <span class="hint">· ссылка или @имя, до 5</span></span>
+          <span class="lbl" id="cr-ch-l">Каналы <span class="hint">· до 5</span></span>
           <div class="chans" role="group" aria-labelledby="cr-ch-l" aria-describedby="cr-ch-err" data-channels>
             {channels.map((c, i) => (
               <div class="chan">
@@ -140,10 +138,10 @@ const filled: Record<Mode, boolean> = { business: !!business, creator: !!creator
           <p class="ferr" id="cr-ch-err" data-err="channels" aria-live="polite"></p>
         </div>
         <p class="ferr" data-err="form" role="alert"></p>
-        <div class="form-act"><button class="btn pill-dark" type="submit" data-submit><span>Сохранить профиль автора</span></button><p class="saved" role="status" data-saved></p></div>
+        <div class="form-act"><button class="btn pill-dark" type="submit" data-submit><span>Сохранить</span></button><p class="saved" role="status" data-saved></p></div>
       </form>
     </div>
   </section>
 
-  <Side slot="aside" me={me} actions={false} />
 </App>
+<script src="../../scripts/avatar.ts"></script>

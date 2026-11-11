@@ -8,8 +8,12 @@
 		-Server
 	}
 	respond /ping "ok" 200
-	@api path /api/* /healthz
+	@api path /api/* /healthz /media/*
 	handle @api {
+		# загрузка фото — до 10 МБ (бэкенд режет сам)
+		request_body /api/me/media {
+			max_size 11MB
+		}
 		# адрес посетителя ставит только Caddy (присланный клиентом X-Real-IP перезаписывается)
 		reverse_proxy backend:8080 {
 			header_up X-Real-IP {remote_host}
