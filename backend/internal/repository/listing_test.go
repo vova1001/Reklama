@@ -40,13 +40,13 @@ func TestListingsTasks(t *testing.T) {
 
 	// черновик: пустой — можно; с фото и блоками — всё сохраняется и читается
 	empty, err := r.CreateTask(ctx, domain.Task{OwnerID: u.ID, Access: domain.AccessOpen})
-	if err != nil || empty.Status != domain.StatusDraft || empty.Category != "" || empty.PublishBy != nil || empty.Blocks == nil {
+	if err != nil || empty.Status != domain.StatusDraft || len(empty.Categories) != 0 || empty.PublishBy != nil || empty.Blocks == nil {
 		t.Fatalf("%v %+v", err, empty)
 	}
 	day := time.Date(2026, 11, 20, 0, 0, 0, 0, time.UTC)
 	future := time.Now().Add(48 * time.Hour).UTC().Truncate(time.Second)
 	in := domain.Task{
-		OwnerID: u.ID, Title: "Сторис", City: "Казань", Category: "food", Formats: []string{"reels"}, Access: domain.AccessApproval,
+		OwnerID: u.ID, Title: "Сторис", City: "Казань", Categories: []string{"food", "beauty"}, Formats: []string{"reels", "Прямой эфир"}, Access: domain.AccessApproval,
 		MinViews: 5000, RewardKopecks: 300000, PublishBy: &day, PublishTime: "18:30", DeadlineAt: &future,
 		Blocks: []domain.Block{{Kind: domain.BlockList, Title: "Что показать", Items: []string{"Интерьер", "Меню"}}},
 		Cover:  "cover00000000000000000", Photos: []string{"photo20000000000000000", "photo10000000000000000"},
@@ -63,8 +63,14 @@ func TestListingsTasks(t *testing.T) {
 	if _, err := r.OwnTask(ctx, other.ID, tk.ID); !errors.Is(err, domain.ErrNotFound) {
 		t.Errorf("чужое: %v", err)
 	}
-	if _, err := r.CreateTask(ctx, domain.Task{OwnerID: u.ID, Access: "open", Category: "cars"}); err == nil {
-		t.Error("сфера вне справочника (FK)")
+	if got.Categories[1] != "beauty" || got.Formats[1] != "Прямой эфир" {
+		t.Errorf("сферы и форматы по порядку: %+v %+v", got.Categories, got.Formats)
+	}
+	if _, err := r.CreateTask(ctx, domain.Task{OwnerID: u.ID, Access: "open", Categories: []string{"a", "b", "c", "d", "e", "f"}}); err == nil {
+		t.Error("больше 5 сфер (CHECK)")
+	}
+	if fs, err := r.OwnFormats(ctx, u.ID); err != nil || len(fs) != 1 || fs[0] != "Прямой эфир" {
+		t.Errorf("свои форматы: %v %v", err, fs)
 	}
 	// фото уже прикреплено к первому заданию — к другому не прикрепить (транзакция откатится)
 	if _, err := r.UpdateTask(ctx, domain.Task{ID: empty.ID, OwnerID: u.ID, Access: "open", Photos: []string{"photo10000000000000000"}}); !errors.Is(err, domain.ErrConflict) {
@@ -131,7 +137,7 @@ func TestListingsTasks(t *testing.T) {
 	// лента: название бизнеса и сферы, курсор
 	_, _ = repository.NewProfiles(pool).SaveBusinessProfile(ctx, u.ID, domain.BusinessProfile{Name: "Кофейня", City: "Казань", Spheres: []string{"food"}})
 	feed, err := r.PublishedTasks(ctx, domain.FeedFilter{}, nil, 10)
-	if err != nil || len(feed) != 1 || feed[0].Brand != "Кофейня" || feed[0].CategoryTitle != "Еда и кафе" {
+	if err != nil || len(feed) != 1 || feed[0].Brand != "Кофейня" || len(feed[0].CategoryTitles) != 2 || feed[0].CategoryTitles[0] != "Еда и кафе" {
 		t.Fatalf("%v %+v", err, feed)
 	}
 	next, _ := r.PublishedTasks(ctx, domain.FeedFilter{}, &domain.FeedCursor{PublishedAt: *feed[0].PublishedAt, ID: feed[0].ID}, 10)
@@ -139,14 +145,20 @@ func TestListingsTasks(t *testing.T) {
 		t.Errorf("после курсора: %+v", next)
 	}
 	// отбор: город без регистра, сфера, формат
-	for f, want := range map[domain.FeedFilter]int{
-		{City: "казань"}: 1, {City: "Москва"}: 0, {Category: "food", Format: "reels"}: 1, {Category: "beauty"}: 0, {Format: "tiktok"}: 0,
+	for _, c := range []struct {
+		f    domain.FeedFilter
+		want int
+	}{
+		{domain.FeedFilter{City: "казань"}, 1}, {domain.FeedFilter{City: "Москва"}, 0},
+		{domain.FeedFilter{Categories: []string{"food"}, Formats: []string{"reels"}}, 1},
+		{domain.FeedFilter{Categories: []string{"sport", "beauty"}}, 1}, {domain.FeedFilter{Categories: []string{"sport"}}, 0},
+		{domain.FeedFilter{Formats: []string{"tiktok", "shorts"}}, 0}, {domain.FeedFilter{Formats: []string{"tiktok", "reels"}}, 1},
 	} {
-		if got, err := r.PublishedTasks(ctx, f, nil, 10); err != nil || len(got) != want {
-			t.Errorf("отбор %+v: %v %d", f, err, len(got))
+		if got, err := r.PublishedTasks(ctx, c.f, nil, 10); err != nil || len(got) != c.want {
+			t.Errorf("отбор %+v: %v %d", c.f, err, len(got))
 		}
 	}
-	if one, err := r.PublishedTask(ctx, tk.ID); err != nil || one.Brand != "Кофейня" || one.CategoryTitle != "Еда и кафе" {
+	if one, err := r.PublishedTask(ctx, tk.ID); err != nil || one.Brand != "Кофейня" || one.CategoryTitles[0] != "Еда и кафе" {
 		t.Errorf("страница задания: %v %+v", err, one)
 	}
 	if _, err := r.PublishedTask(ctx, empty.ID); !errors.Is(err, domain.ErrNotFound) {
@@ -288,9 +300,15 @@ func TestListingsCards(t *testing.T) {
 	if len(page2) != 1 || page2[0].UserID != u.ID {
 		t.Errorf("курсор: %+v", page2)
 	}
-	for f, want := range map[domain.FeedFilter]int{{Category: "food"}: 1, {Category: "beauty"}: 1, {City: "москва"}: 1, {City: "Тверь"}: 0} {
-		if got, _ := r.PublishedCards(ctx, f, nil, 10); len(got) != want {
-			t.Errorf("отбор %+v: %d", f, len(got))
+	for _, c := range []struct {
+		f    domain.FeedFilter
+		want int
+	}{
+		{domain.FeedFilter{Categories: []string{"food"}}, 1}, {domain.FeedFilter{Categories: []string{"beauty"}}, 1},
+		{domain.FeedFilter{Categories: []string{"food", "beauty"}}, 2}, {domain.FeedFilter{City: "москва"}, 1}, {domain.FeedFilter{City: "Тверь"}, 0},
+	} {
+		if got, _ := r.PublishedCards(ctx, c.f, nil, 10); len(got) != c.want {
+			t.Errorf("отбор %+v: %d", c.f, len(got))
 		}
 	}
 	if one, err := r.PublishedCard(ctx, u.ID); err != nil || one.Name != "Алина К" || one.TopicTitles[0] != "Красота и салоны" {

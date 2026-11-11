@@ -9,7 +9,7 @@ interface Props { card: Card; topics: string[] }
 const { card: c, topics } = Astro.props;
 const host = (u: string) => { try { return new URL(u).hostname.replace(/^www\./, ''); } catch { return u; } };
 ---
-<article class="page" data-card-page={c.id}>
+<article class="page" data-card-page={c.id} data-lb-group>
   <div class="pv-who">
     {c.avatar ? <img class="pv-ava page-ava" src={c.avatar.src} alt="" width="96" height="96" /> : <span class="pv-ava page-ava"></span>}
     <div><h1 class="page-t">{c.name}</h1><p class="page-meta">{c.city}</p></div>

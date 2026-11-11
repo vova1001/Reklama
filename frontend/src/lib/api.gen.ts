@@ -378,7 +378,8 @@ export interface paths {
         /**
          * Лента опубликованных заданий
          * @description Новые сверху. Курсор `next` из ответа — в параметр `cursor` следующего запроса. Отбор (пусто — без отбора):
-         *     сфера, город (без регистра; задания «Вся Россия» подходят любому городу), формат. Неверный отбор — 400 с `fields`.
+         *     любая из сфер (`category` повторяется, до 5), город (без регистра; задания «Вся Россия» подходят любому городу),
+         *     любой из форматов списка (`format` повторяется). Неверный отбор — 400 с `fields`.
          */
         get: operations["getFeed"];
         put?: never;
@@ -651,6 +652,27 @@ export interface paths {
          * @description До 6 — общие и свои на проверке; совпадение, начало, вхождение, опечатка в 1–2 буквы.
          */
         get: operations["similarCategories"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/formats/similar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Подсказки своего формата
+         * @description До 6 похожих на запрос: форматы списка (`builtin`), известные и свои, уже использованные бизнесом (`own`).
+         *     `id` выбранной подсказки передаётся в `TaskInput.formats` как есть.
+         */
+        get: operations["similarFormats"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1006,17 +1028,33 @@ export interface components {
             /** @description 1600 px */
             large: string;
         };
-        /** @enum {string} */
+        /**
+         * @description Форматы списка (отбор ленты)
+         * @enum {string}
+         */
         TaskFormat: "reels" | "shorts" | "youtube" | "vk_clips" | "tiktok" | "telegram";
+        FormatItem: {
+            /** @description slug формата списка или название своего */
+            id: string;
+            title: string;
+            builtin: boolean;
+            /** @description Уже использован бизнесом */
+            own: boolean;
+        };
         /** @description Черновик может быть неполным; ограничения формы проверяются всегда, обязательность — при отправке. */
         TaskInput: {
             title: string;
             city: string;
             /** @description «Вся Россия» */
             nationwide: boolean;
-            /** @description slug общей или своей категории; "" — не выбрана */
-            category: string;
-            formats: components["schemas"]["TaskFormat"][];
+            /** @description slug общих или своих категорий (своих — до 3), по порядку выбора; к отправке — хотя бы одна */
+            categories: string[];
+            /**
+             * @description Slug формата списка (`TaskFormat`) или своё название (2–30 символов, буквы; без ссылок). Сервер нормализует:
+             *     название формата списка → его slug, известное — его написание, своё — без лишних пробелов, с заглавной;
+             *     повторы (без учёта регистра и ё) отбрасываются.
+             */
+            formats: string[];
             /** @enum {string} */
             access: "open" | "approval" | "";
             /**
@@ -1044,10 +1082,11 @@ export interface components {
             title: string;
             city: string;
             nationwide: boolean;
-            category: string;
-            /** @description Только в ленте */
-            categoryTitle?: string;
-            formats: components["schemas"]["TaskFormat"][];
+            categories: string[];
+            /** @description Названия сфер по порядку (только в ленте и на странице задания) */
+            categoryTitles?: string[];
+            /** @description Slug формата списка или своё название */
+            formats: string[];
             /** @enum {string} */
             access: "open" | "approval";
             /** Format: int64 */
@@ -1855,10 +1894,10 @@ export interface operations {
             query?: {
                 cursor?: string;
                 limit?: number;
-                /** @description slug сферы */
-                category?: string;
+                /** @description slug сфер */
+                category?: string[];
                 city?: string;
-                format?: components["schemas"]["TaskFormat"];
+                format?: components["schemas"]["TaskFormat"][];
             };
             header?: never;
             path?: never;
@@ -1890,7 +1929,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Задание (с `brand` и `categoryTitle`) */
+            /** @description Задание (с `brand` и `categoryTitles`) */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -1908,8 +1947,8 @@ export interface operations {
             query?: {
                 cursor?: string;
                 limit?: number;
-                /** @description slug темы */
-                topic?: string;
+                /** @description slug тем — любая из них */
+                topic?: string[];
                 city?: string;
             };
             header?: never;
@@ -2442,6 +2481,31 @@ export interface operations {
                 content: {
                     "application/json": {
                         items: components["schemas"]["CategoryItem"][];
+                    };
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    similarFormats: {
+        parameters: {
+            query: {
+                q: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Подсказки */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["FormatItem"][];
                     };
                 };
             };

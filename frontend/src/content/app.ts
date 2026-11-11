@@ -41,6 +41,26 @@ export const FORMATS: { id: string; title: string }[] = [
   { id: 'telegram', title: 'Telegram' },
 ];
 
+/** Разделы форм: заголовок и подсказка в одну строку (до ~45 знаков — помещается на телефоне). */
+export const FORM_GROUPS = {
+  task: {
+    main: { title: 'Основное', hint: 'По сфере, городу и формату вас найдут авторы' },
+    terms: { title: 'Условия', hint: 'Кто берёт, сколько просмотров, оплата и срок' },
+    desc: { title: 'Описание', hint: 'Что снять и что важно — читают первым' },
+    photo: { title: 'Фото', hint: 'Примеры, что показать, — до 6 фото' },
+  },
+  card: {
+    main: { title: 'Основное', hint: 'Как вас зовут, где вы и о чём снимаете' },
+    platforms: { title: 'Площадки', hint: 'Ссылка и число подписчиков на каждой' },
+    desc: { title: 'О себе', hint: 'По желанию: опыт, форматы и цены' },
+    photo: { title: 'Работы', hint: 'Кадры из ваших видео — до 9 фото' },
+  },
+  profile: {
+    basics: { title: 'Общие данные', hint: 'Видно в приложении: имя и город' },
+    modes: { title: 'Режимы', hint: 'Заполните тот, в котором работаете' },
+  },
+} as const;
+
 export const PLATFORM_TITLE: Record<string, string> = {
   telegram: 'Telegram', youtube: 'YouTube', vk: 'ВКонтакте', tiktok: 'TikTok', instagram: 'Instagram',
   dzen: 'Дзен', rutube: 'Rutube', other: 'Сайт',
@@ -70,7 +90,7 @@ export const CARD_BLOCKS = [{ kind: 'text' as const, title: 'О себе', items
 /** Ошибки полноты — те же тексты, что у сервера (service/tasks.go complete, service/cards.go cardComplete). */
 export const TASK_RULES: Record<string, { short: string; msg: string }> = {
   title: { short: 'название', msg: 'Название — от 5 до 100 символов' },
-  category: { short: 'сфера', msg: 'Выберите сферу' },
+  categories: { short: 'сфера', msg: 'Выберите сферу' },
   city: { short: 'город', msg: 'Укажите город или «Вся Россия»' },
   formats: { short: 'формат', msg: 'Выберите хотя бы один формат' },
   minViews: { short: 'просмотры', msg: 'Укажите число просмотров' },

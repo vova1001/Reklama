@@ -14,7 +14,8 @@ const me = Astro.locals.me;
 if (!me) return Astro.redirect('/login', 303);
 const isCreator = me.user.mode === 'creator';
 const sp = Astro.url.searchParams;
-const q = { category: sp.get('category') ?? '', city: (sp.get('city') ?? '').trim().slice(0, 80), format: isCreator ? sp.get('format') ?? '' : '' };
+const list = (k: string, max: number) => [...new Set(sp.getAll(k).map((v) => v.trim()).filter(Boolean))].slice(0, max);
+const q = { category: list('category', 5), city: (sp.get('city') ?? '').trim().slice(0, 80), format: isCreator ? list('format', 6) : [] };
 const [feed, cards, categories] = await Promise.all([
   isCreator ? fetchFeed(Astro.request, q) : Promise.resolve(null),
   isCreator ? Promise.resolve(null) : fetchCardFeed(Astro.request, q),
@@ -22,7 +23,7 @@ const [feed, cards, categories] = await Promise.all([
 ]);
 const page = isCreator ? feed : cards;
 const count = isCreator ? feed?.tasks.length ?? 0 : cards?.cards.length ?? 0;
-const filtered = !!(q.category || q.city || q.format);
+const filtered = !!(q.category.length || q.city || q.format.length);
 ---
 <App title="Лента" page="feed" wide="grid">
   <Nudge me={me} />

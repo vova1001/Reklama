@@ -16,8 +16,12 @@ import video from '../../icons/video.svg?raw';
 import calendar from '../../icons/calendar.svg?raw';
 import users from '../../icons/users.svg?raw';
 import camera from '../../icons/camera.svg?raw';
+import check from '../../icons/check.svg?raw';
+import left from '../../icons/arrow-left.svg?raw';
+import right from '../../icons/arrow-right.svg?raw';
+import clock from '../../icons/clock.svg?raw';
 
-const RAW = { grip, x, plus, trash, imagePlus, tag, alert, crop, list, text, link, wallet, eye, video, calendar, users, camera };
+const RAW = { grip, x, plus, trash, imagePlus, tag, alert, crop, list, text, link, wallet, eye, video, calendar, users, camera, check, left, right, clock };
 export type IconName = keyof typeof RAW;
 
 /** Иконка Lucide (линия 1.5, как на сервере) строкой SVG. */

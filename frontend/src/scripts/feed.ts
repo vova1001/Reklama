@@ -1,12 +1,13 @@
-// Лента: отбор (свои списки: клик, стрелки, Enter, Escape; город — Enter или уход с поля) и следующие страницы по
-// курсору — без перезагрузки (готовая разметка с сервера: /app/more), сами, когда «Показать ещё» близко к экрану.
+// Лента: отбор (свои списки с несколькими отметками: щелчок, стрелки, Enter/пробел, Escape; город — Enter или уход
+// с поля) и следующие страницы по курсору — без перезагрузки (готовая разметка с сервера: /app/more), сами, когда
+// «Показать ещё» близко к экрану.
 import { $, $$ } from '../lib/client';
 
 const form = $<HTMLFormElement>('[data-filters]');
 if (form) {
   const go = () => {
     const p = new URLSearchParams();
-    for (const [k, v] of new FormData(form)) if (String(v).trim()) p.set(k, String(v).trim());
+    for (const [k, v] of new FormData(form)) if (String(v).trim()) p.append(k, String(v).trim());
     const q = p.toString();
     location.assign(q ? `/app?${q}` : '/app');
   };
@@ -23,34 +24,62 @@ if (form) {
     go();
   });
 
-  $$('[data-pick]', form).forEach((pk) => {
+  // Списки с несколькими отметками: щелчок, пробел и Enter отмечают; «Все …» снимает отметки. Закрыли список
+  // (Escape, Tab, щелчок мимо, повторно по кнопке) — лента открывается с новым отбором, если он изменился.
+  $$<HTMLElement>('[data-pick]', form).forEach((pk) => {
     const btn = $<HTMLButtonElement>('.pk-btn', pk)!;
     const list = $<HTMLUListElement>('.pk-list', pk)!;
-    const input = $<HTMLInputElement>('input', pk)!;
+    const vals = $('[data-vals]', pk)!;
+    const text = $('[data-text]', pk)!;
     const opts = $$<HTMLLIElement>('[role="option"]', list);
-    let i = Math.max(0, opts.findIndex((o) => o.getAttribute('aria-selected') === 'true'));
+    const max = Number(pk.dataset.max) || 5;
+    const label = pk.dataset.label ?? '';
+    const chosen = () => opts.filter((o) => o.dataset.v && o.getAttribute('aria-selected') === 'true');
+    const sig = () => chosen().map((o) => o.dataset.v).join(',');
+    let before = sig();
+    let i = 0;
     const hi = (n: number) => {
       i = (n + opts.length) % opts.length;
       opts.forEach((o, j) => o.classList.toggle('is-hi', j === i));
+      list.setAttribute('aria-activedescendant', opts[i].id);
       opts[i].scrollIntoView({ block: 'nearest' });
     };
+    const render = () => {
+      const c = chosen();
+      opts[0].setAttribute('aria-selected', String(!c.length));
+      vals.replaceChildren(
+        ...c.map((o) => {
+          const inp = document.createElement('input');
+          inp.type = 'hidden';
+          inp.name = pk.dataset.name!;
+          inp.value = o.dataset.v!;
+          return inp;
+        }),
+      );
+      text.textContent = !c.length ? label : c.length === 1 ? c[0].dataset.t! : `${label} · ${c.length}`;
+      btn.toggleAttribute('data-on', c.length > 0);
+      btn.setAttribute('aria-label', `${label}: ${c.length ? c.map((o) => o.dataset.t).join(', ') : 'все'}`);
+    };
     const open = (on: boolean) => {
+      if (list.hidden === !on) return;
       list.hidden = !on;
       btn.setAttribute('aria-expanded', String(on));
       if (on) {
-        hi(i);
+        before = sig();
+        hi(Math.max(0, opts.findIndex((o) => o.getAttribute('aria-selected') === 'true')));
         list.focus();
-      }
+      } else if (sig() !== before) go();
     };
-    const pick = (o: HTMLLIElement) => {
-      open(false);
-      if (input.value === (o.dataset.v ?? '')) return btn.focus();
-      input.value = o.dataset.v ?? '';
-      go();
+    const toggle = (o: HTMLLIElement) => {
+      if (!o.dataset.v) opts.forEach((x) => x.setAttribute('aria-selected', 'false'));
+      else if (o.getAttribute('aria-selected') === 'true') o.setAttribute('aria-selected', 'false');
+      else if (chosen().length >= max) return;
+      else o.setAttribute('aria-selected', 'true');
+      render();
     };
     btn.addEventListener('click', () => open(list.hidden));
     opts.forEach((o, j) => {
-      o.addEventListener('click', () => pick(o));
+      o.addEventListener('click', () => toggle(o));
       o.addEventListener('pointermove', () => hi(j));
     });
     list.addEventListener('keydown', (e) => {
@@ -59,10 +88,10 @@ if (form) {
         hi(i + (e.key === 'ArrowDown' ? 1 : -1));
       } else if (e.key === 'Enter' || e.key === ' ') {
         e.preventDefault();
-        pick(opts[i]);
+        toggle(opts[i]);
       } else if (e.key === 'Escape' || e.key === 'Tab') {
-        open(false);
         if (e.key === 'Escape') btn.focus();
+        open(false);
       }
     });
     document.addEventListener('pointerdown', (e) => {
@@ -83,7 +112,7 @@ if (tiles && more) {
     more.classList.add('is-busy');
     try {
       const u = new URL('/app/more', location.origin);
-      new URLSearchParams(location.search).forEach((v, k) => k !== 'cursor' && u.searchParams.set(k, v));
+      new URLSearchParams(location.search).forEach((v, k) => k !== 'cursor' && u.searchParams.append(k, v));
       u.searchParams.set('kind', tiles.dataset.tiles!);
       u.searchParams.set('cursor', next);
       const res = await fetch(u, { credentials: 'same-origin' });

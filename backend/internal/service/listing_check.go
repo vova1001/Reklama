@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"fmt"
 	"net/url"
 	"strings"
@@ -27,10 +28,9 @@ const (
 	maxRewardKop   = 1e8   // оплата — до 1 000 000 ₽
 	minRewardKop   = 10000 // от 100 ₽
 	maxDeadlineDay = 90    // срок публикации — до 90 дней
+	maxFormats     = 3     // форматов в задании (из списка и своих)
+	maxCategories  = 5     // сфер в задании
 )
-
-// Formats — форматы публикации задания (порядок — как в форме).
-var Formats = []string{"reels", "shorts", "youtube", "vk_clips", "tiktok", "telegram"}
 
 // msk — дата «сегодня» для сроков считается по Москве (UTC+3, без перехода на летнее время).
 
@@ -104,14 +104,25 @@ func blocksFilled(bs []domain.Block) bool {
 	return false
 }
 
-// checkFormats — форматы из списка, без повторов.
+// checkFormats — до maxFormats форматов: из списка (slug) или свои (нормализуются — normFormat), без повторов
+// (без учёта регистра, ё и знаков).
 func checkFormats(ve *ValidationError, in []string) []string {
-	out := uniq(in)
-	for _, f := range out {
-		if !contains(Formats, f) {
-			ve.add("formats", "Выберите форматы из списка")
-			break
+	out := make([]string, 0, len(in))
+	seen := map[string]bool{}
+	for _, raw := range in {
+		f, msg := normFormat(raw)
+		if msg != "" {
+			ve.add("formats", msg)
+			return out
 		}
+		if f == "" || seen[NormCategory(f)] {
+			continue
+		}
+		seen[NormCategory(f)] = true
+		out = append(out, f)
+	}
+	if len(out) > maxFormats {
+		ve.add("formats", fmt.Sprintf("Не больше %d форматов", maxFormats))
 	}
 	return out
 }
@@ -223,4 +234,38 @@ func platformKind(link string) string {
 		}
 		h = h[i+1:]
 	}
+}
+
+// checkSlugs — форма списка сфер или тем: без повторов, до maxCategories, вид slug. Сообщения — с нужным словом.
+func checkSlugs(ve *ValidationError, field string, in []string, many, pick string) []string {
+	out := uniq(in)
+	if len(out) > maxCategories {
+		ve.add(field, fmt.Sprintf("Не больше %d %s", maxCategories, many))
+	}
+	for _, t := range out {
+		if !reSlug.MatchString(t) {
+			ve.add(field, pick)
+			break
+		}
+	}
+	return out
+}
+
+// checkUsable — все сферы или темы годятся пользователю (общие или его свои на проверке), своих — до
+// maxCustomPerItem. nil — годятся; *ValidationError — нет.
+func checkUsable(ctx context.Context, cc CategoryChecker, userID int64, field string, slugs []string, pick, customMsg string) error {
+	if len(slugs) == 0 {
+		return nil
+	}
+	n, custom, err := cc.Usable(ctx, userID, slugs)
+	if err != nil {
+		return err
+	}
+	if n != len(slugs) {
+		return &ValidationError{Fields: map[string]string{field: pick}}
+	}
+	if custom > maxCustomPerItem {
+		return &ValidationError{Fields: map[string]string{field: fmt.Sprintf(customMsg, maxCustomPerItem)}}
+	}
+	return nil
 }

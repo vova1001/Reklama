@@ -139,8 +139,8 @@ func (m *memListings) PublishedTasks(_ context.Context, f domain.FeedFilter, aft
 	var out []domain.Task
 	for _, t := range m.tasks {
 		if t.Status == domain.StatusPublished && (after == nil || t.ID < after.ID) &&
-			(f.Category == "" || t.Category == f.Category) && (f.City == "" || t.Nationwide || t.City == f.City) &&
-			(f.Format == "" || contains(t.Formats, f.Format)) {
+			(len(f.Categories) == 0 || overlaps(t.Categories, f.Categories)) && (f.City == "" || t.Nationwide || t.City == f.City) &&
+			(len(f.Formats) == 0 || overlaps(t.Formats, f.Formats)) {
 			out = append(out, *t)
 		}
 	}
@@ -237,7 +237,7 @@ func (m *memListings) PublishedCards(_ context.Context, f domain.FeedFilter, aft
 	var out []domain.CreatorCard
 	for _, c := range m.cards {
 		if c.Status == domain.StatusPublished && (after == nil || c.UserID < after.ID) &&
-			(f.Category == "" || contains(c.Topics, f.Category)) && (f.City == "" || c.City == f.City) {
+			(len(f.Categories) == 0 || overlaps(c.Topics, f.Categories)) && (f.City == "" || c.City == f.City) {
 			out = append(out, *c)
 		}
 	}
@@ -558,6 +558,30 @@ func (f *fakeImages) Process(_ context.Context, data []byte, opt ImageOptions) (
 	out := ProcessedImage{Width: 1600, Height: 900, Variants: map[int][]byte{}}
 	for _, s := range opt.Sizes {
 		out.Variants[s] = []byte("webp")
+	}
+	return out, nil
+}
+
+func overlaps(a, b []string) bool {
+	for _, x := range a {
+		if contains(b, x) {
+			return true
+		}
+	}
+	return false
+}
+
+// OwnFormats — свои форматы бизнеса из его заданий (порядок — по первому появлению).
+func (m *memListings) OwnFormats(_ context.Context, ownerID int64) ([]string, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	out := []string{}
+	for _, t := range m.tasks {
+		for _, f := range t.Formats {
+			if _, ok := builtinFormat(f); !ok && t.OwnerID == ownerID && !contains(out, f) {
+				out = append(out, f)
+			}
+		}
 	}
 	return out, nil
 }

@@ -3,6 +3,7 @@ package repository_test
 import (
 	"context"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/jackc/pgx/v5"
@@ -85,6 +86,11 @@ func TestSeedData(t *testing.T) {
 	}
 	if len(faq) != 4 || faq[0].Question != "Как сервис проверяет выполнение?" {
 		t.Errorf("вопросы: %+v", faq)
+	}
+	for _, q := range faq {
+		if strings.Contains(strings.ToLower(q.Answer), "лайк") {
+			t.Errorf("лайков в условиях нет: %q", q.Answer)
+		}
 	}
 }
 

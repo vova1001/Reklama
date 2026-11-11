@@ -48,7 +48,7 @@ func (r *Listings) CreateTask(ctx context.Context, t domain.Task) (domain.Task, 
 	err = r.inTx(ctx, func(q *store.Queries) error {
 		var err error
 		row, err = q.CreateTask(ctx, store.CreateTaskParams{
-			OwnerID: t.OwnerID, Title: t.Title, City: t.City, Nationwide: t.Nationwide, Category: text(t.Category),
+			OwnerID: t.OwnerID, Title: t.Title, City: t.City, Nationwide: t.Nationwide, Categories: nonNil(t.Categories),
 			Formats: nonNil(t.Formats), Access: t.Access, MinViews: t.MinViews,
 			RewardKopecks: t.RewardKopecks, PublishBy: date(t.PublishBy), PublishTime: clockTime(t.PublishTime), DeadlineAt: tsOpt(t.DeadlineAt), Blocks: blocks,
 			Cover: text(t.Cover), Photos: nonNil(t.Photos),
@@ -116,7 +116,7 @@ func (r *Listings) UpdateTask(ctx context.Context, t domain.Task) (domain.Task, 
 	err = r.inTx(ctx, func(q *store.Queries) error {
 		var err error
 		row, err = q.UpdateOwnTask(ctx, store.UpdateOwnTaskParams{
-			ID: t.ID, OwnerID: t.OwnerID, Title: t.Title, City: t.City, Nationwide: t.Nationwide, Category: text(t.Category),
+			ID: t.ID, OwnerID: t.OwnerID, Title: t.Title, City: t.City, Nationwide: t.Nationwide, Categories: nonNil(t.Categories),
 			Formats: nonNil(t.Formats), Access: t.Access, MinViews: t.MinViews,
 			RewardKopecks: t.RewardKopecks, PublishBy: date(t.PublishBy), PublishTime: clockTime(t.PublishTime), DeadlineAt: tsOpt(t.DeadlineAt), Blocks: blocks,
 			Cover: text(t.Cover), Photos: nonNil(t.Photos),
@@ -184,9 +184,9 @@ func (r *Listings) SetTaskStatus(ctx context.Context, chain ...domain.StatusChan
 	return taskOf(row)
 }
 
-// PublishedTasks — опубликованные задания (новые сверху) с названием бизнеса и сферы; after — курсор или nil.
+// PublishedTasks — опубликованные задания (новые сверху) с названием бизнеса и сфер; after — курсор или nil.
 func (r *Listings) PublishedTasks(ctx context.Context, f domain.FeedFilter, after *domain.FeedCursor, limit int) ([]domain.Task, error) {
-	p := store.ListPublishedTasksParams{Lim: int32(limit), Category: f.Category, City: f.City, Format: f.Format}
+	p := store.ListPublishedTasksParams{Lim: int32(limit), Categories: nonNil(f.Categories), City: f.City, Formats: nonNil(f.Formats)}
 	if after != nil {
 		p.BeforeAt, p.BeforeID = ts(after.PublishedAt), after.ID
 	}
@@ -217,7 +217,7 @@ func (r *Listings) PublishedTask(ctx context.Context, id int64) (domain.Task, er
 func publishedTaskOf(row store.GetPublishedTaskRow) (domain.Task, error) {
 	t, err := taskOf(store.Task{
 		ID: row.ID, OwnerID: row.OwnerID, Status: row.Status, RejectReason: row.RejectReason, Title: row.Title,
-		City: row.City, Nationwide: row.Nationwide, Category: row.Category, Formats: row.Formats, Access: row.Access,
+		City: row.City, Nationwide: row.Nationwide, Categories: row.Categories, Formats: row.Formats, Access: row.Access,
 		MinViews: row.MinViews, RewardKopecks: row.RewardKopecks, PublishBy: row.PublishBy, PublishTime: row.PublishTime, DeadlineAt: row.DeadlineAt,
 		Blocks: row.Blocks, Cover: row.Cover, Photos: row.Photos, CreatedAt: row.CreatedAt, UpdatedAt: row.UpdatedAt,
 		SubmittedAt: row.SubmittedAt, PublishedAt: row.PublishedAt,
@@ -225,7 +225,7 @@ func publishedTaskOf(row store.GetPublishedTaskRow) (domain.Task, error) {
 	if err != nil {
 		return domain.Task{}, err
 	}
-	t.Brand, t.CategoryTitle = row.Brand, row.CategoryTitle
+	t.Brand, t.CategoryTitles = row.Brand, nonNil(row.CategoryTitles)
 	return t, nil
 }
 
@@ -308,7 +308,7 @@ func (r *Listings) SetCardStatus(ctx context.Context, chain ...domain.StatusChan
 
 // PublishedCards — опубликованные анкеты (новые сверху) с названиями тем; after — курсор (ID — user_id) или nil.
 func (r *Listings) PublishedCards(ctx context.Context, f domain.FeedFilter, after *domain.FeedCursor, limit int) ([]domain.CreatorCard, error) {
-	p := store.ListPublishedCardsParams{Lim: int32(limit), Topic: f.Category, City: f.City}
+	p := store.ListPublishedCardsParams{Lim: int32(limit), Topics: nonNil(f.Categories), City: f.City}
 	if after != nil {
 		p.BeforeAt, p.BeforeID = ts(after.PublishedAt), after.ID
 	}
@@ -419,7 +419,7 @@ func taskOf(t store.Task) (domain.Task, error) {
 	}
 	out := domain.Task{
 		ID: t.ID, OwnerID: t.OwnerID, Status: domain.Status(t.Status), RejectReason: t.RejectReason, Title: t.Title,
-		City: t.City, Nationwide: t.Nationwide, Category: t.Category.String, Formats: nonNil(t.Formats), Access: t.Access,
+		City: t.City, Nationwide: t.Nationwide, Categories: nonNil(t.Categories), Formats: nonNil(t.Formats), Access: t.Access,
 		MinViews: t.MinViews, RewardKopecks: t.RewardKopecks, Blocks: blocks,
 		Cover: t.Cover.String, Photos: nonNil(t.Photos), CreatedAt: t.CreatedAt.Time, UpdatedAt: t.UpdatedAt.Time,
 		SubmittedAt: tsPtr(t.SubmittedAt), PublishedAt: tsPtr(t.PublishedAt), DeadlineAt: tsPtr(t.DeadlineAt),
@@ -536,4 +536,14 @@ func tsOpt(t *time.Time) pgtype.Timestamptz {
 func (r *Listings) ExpireTasks(ctx context.Context, now time.Time) ([]int64, error) {
 	ids, err := r.q.ExpireTasks(ctx, ts(now))
 	return ids, dbErr("завершение просроченных заданий", err)
+}
+
+// OwnFormats — свои форматы бизнеса (не из списка) из его заданий, чаще используемые сверху.
+func (r *Listings) OwnFormats(ctx context.Context, ownerID int64) ([]string, error) {
+	builtin := make([]string, 0, len(domain.BuiltinFormats))
+	for _, f := range domain.BuiltinFormats {
+		builtin = append(builtin, f.ID)
+	}
+	out, err := r.q.OwnTaskFormats(ctx, store.OwnTaskFormatsParams{OwnerID: ownerID, Builtin: builtin})
+	return nonNil(out), dbErr("свои форматы", err)
 }

@@ -23,6 +23,8 @@ services:
       # ----- адрес -----
       - key: PUBLIC_URL # [ПЕРЕЕЗД] адрес сайта: redirect Google, cookie, ссылки
         value: https://ohvat-jif6.onrender.com
+      - key: KEEPALIVE_URL # [ПЕРЕЕЗД] = PUBLIC_URL: самопинг /healthz раз в 10 мин через прокси Render (free не засыпает); на платном — пусто
+        value: https://ohvat-jif6.onrender.com
       # ----- вход -----
       - key: AUTH_SECRET # ключ HMAC для кодов из писем; Render создаёт сам один раз
         generateValue: true

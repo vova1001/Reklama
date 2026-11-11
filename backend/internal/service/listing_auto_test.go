@@ -104,7 +104,7 @@ func TestFeedFilter(t *testing.T) {
 	ctx := context.Background()
 	mk := func(city string, nationwide bool, cat, format string) int64 {
 		in := fullTask()
-		in.City, in.Nationwide, in.Category, in.Formats = city, nationwide, cat, []string{format}
+		in.City, in.Nationwide, in.Categories, in.Formats = city, nationwide, []string{cat}, []string{format}
 		d, err := e.tasks.Create(ctx, biz, in)
 		if err != nil {
 			t.Fatal(err)
@@ -132,8 +132,15 @@ func TestFeedFilter(t *testing.T) {
 	if got := ids(FeedQuery{Filter: domain.FeedFilter{City: " Казань "}}); len(got) != 2 || got[0] != all || got[1] != kazan {
 		t.Errorf("город (и «Вся Россия»): %v", got)
 	}
-	if got := ids(FeedQuery{Filter: domain.FeedFilter{Category: "food", Format: "reels"}}); len(got) != 1 || got[0] != kazan {
+	if got := ids(FeedQuery{Filter: domain.FeedFilter{Categories: []string{"food"}, Formats: []string{"reels"}}}); len(got) != 1 || got[0] != kazan {
 		t.Errorf("сфера и формат: %v", got)
+	}
+	// несколько сфер — любая из них; пустые значения отбрасываются
+	if got := ids(FeedQuery{Filter: domain.FeedFilter{Categories: []string{"beauty", " ", "sport"}}}); len(got) != 1 || got[0] != all {
+		t.Errorf("любая из сфер: %v", got)
+	}
+	if got := ids(FeedQuery{Filter: domain.FeedFilter{Formats: []string{"reels", "shorts", "reels"}}}); len(got) != 3 || e.repo.lastFilter.Formats[1] != "shorts" || len(e.repo.lastFilter.Formats) != 2 {
+		t.Errorf("любой из форматов: %v %+v", got, e.repo.lastFilter)
 	}
 	// страницы по курсору
 	p, _ := e.tasks.Feed(ctx, FeedQuery{Limit: 2})
@@ -144,16 +151,27 @@ func TestFeedFilter(t *testing.T) {
 		t.Fatalf("страница 2: %+v", p2)
 	}
 	// неверный отбор — ошибки по полям
-	for q, field := range map[domain.FeedFilter]string{
-		{Category: "Еда!"}: "category", {Format: "vine"}: "format", {City: strings.Repeat("я", 81)}: "city",
+	for _, c := range []struct {
+		q     domain.FeedFilter
+		field string
+	}{
+		{domain.FeedFilter{Categories: []string{"Еда!"}}, "category"}, {domain.FeedFilter{Categories: []string{"a", "b", "c", "d", "e", "f"}}, "category"},
+		{domain.FeedFilter{Formats: []string{"vine"}}, "format"}, {domain.FeedFilter{Formats: []string{"Reels"}}, "format"},
+		{domain.FeedFilter{City: strings.Repeat("я", 81)}, "city"},
 	} {
-		if f := fields(t, func() error { _, err := e.tasks.Feed(ctx, FeedQuery{Filter: q}); return err }()); f[field] == "" {
-			t.Errorf("%+v: %v", q, f)
+		if f := fields(t, func() error { _, err := e.tasks.Feed(ctx, FeedQuery{Filter: c.q}); return err }()); f[c.field] == "" {
+			t.Errorf("%+v: %v", c.q, f)
 		}
+	}
+	if f := fields(t, func() error {
+		_, err := e.cards.Feed(ctx, FeedQuery{Filter: domain.FeedFilter{Categories: []string{"Еда!"}}})
+		return err
+	}()); f["topic"] == "" {
+		t.Errorf("тема у анкет: %v", f)
 	}
 	// у анкет формата нет
 	if f := fields(t, func() error {
-		_, err := e.cards.Feed(ctx, FeedQuery{Filter: domain.FeedFilter{Format: "reels"}})
+		_, err := e.cards.Feed(ctx, FeedQuery{Filter: domain.FeedFilter{Formats: []string{"reels"}}})
 		return err
 	}()); f["format"] == "" {
 		t.Errorf("формат у анкет: %v", f)

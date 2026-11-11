@@ -22,7 +22,7 @@ type taskIn struct {
 	Title         string     `json:"title"`
 	City          string     `json:"city"`
 	Nationwide    bool       `json:"nationwide"`
-	Category      string     `json:"category"`
+	Categories    []string   `json:"categories"`
 	Formats       []string   `json:"formats"`
 	Access        string     `json:"access"`
 	MinViews      int64      `json:"minViews"`
@@ -57,29 +57,29 @@ type photoDTO struct {
 }
 
 type taskDTO struct {
-	ID            int64      `json:"id"`
-	Status        string     `json:"status"`
-	RejectReason  string     `json:"rejectReason"`
-	Title         string     `json:"title"`
-	City          string     `json:"city"`
-	Nationwide    bool       `json:"nationwide"`
-	Category      string     `json:"category"`
-	CategoryTitle string     `json:"categoryTitle,omitempty"`
-	Formats       []string   `json:"formats"`
-	Access        string     `json:"access"`
-	MinViews      int64      `json:"minViews"`
-	RewardKopecks int64      `json:"rewardKopecks"`
-	PublishBy     *string    `json:"publishBy"`
-	PublishTime   string     `json:"publishTime"`
-	DeadlineAt    *time.Time `json:"deadlineAt"`
-	Blocks        []blockDTO `json:"blocks"`
-	Cover         *photoDTO  `json:"cover"`
-	Photos        []photoDTO `json:"photos"`
-	Brand         string     `json:"brand,omitempty"`
-	CreatedAt     time.Time  `json:"createdAt"`
-	UpdatedAt     time.Time  `json:"updatedAt"`
-	SubmittedAt   *time.Time `json:"submittedAt"`
-	PublishedAt   *time.Time `json:"publishedAt"`
+	ID             int64      `json:"id"`
+	Status         string     `json:"status"`
+	RejectReason   string     `json:"rejectReason"`
+	Title          string     `json:"title"`
+	City           string     `json:"city"`
+	Nationwide     bool       `json:"nationwide"`
+	Categories     []string   `json:"categories"`
+	CategoryTitles []string   `json:"categoryTitles,omitempty"`
+	Formats        []string   `json:"formats"`
+	Access         string     `json:"access"`
+	MinViews       int64      `json:"minViews"`
+	RewardKopecks  int64      `json:"rewardKopecks"`
+	PublishBy      *string    `json:"publishBy"`
+	PublishTime    string     `json:"publishTime"`
+	DeadlineAt     *time.Time `json:"deadlineAt"`
+	Blocks         []blockDTO `json:"blocks"`
+	Cover          *photoDTO  `json:"cover"`
+	Photos         []photoDTO `json:"photos"`
+	Brand          string     `json:"brand,omitempty"`
+	CreatedAt      time.Time  `json:"createdAt"`
+	UpdatedAt      time.Time  `json:"updatedAt"`
+	SubmittedAt    *time.Time `json:"submittedAt"`
+	PublishedAt    *time.Time `json:"publishedAt"`
 }
 
 type tasksOut struct {
@@ -140,6 +140,17 @@ type similarOut struct {
 	Items []categoryItemDTO `json:"items"`
 }
 
+type formatItemDTO struct {
+	ID      string `json:"id"` // slug из списка или своё название — так и передаётся в formats
+	Title   string `json:"title"`
+	Builtin bool   `json:"builtin"`
+	Own     bool   `json:"own"`
+}
+
+type formatsOut struct {
+	Items []formatItemDTO `json:"items"`
+}
+
 type categoryIn struct {
 	Title string `json:"title"`
 }
@@ -182,7 +193,7 @@ func toBlocksDTO(bs []domain.Block) []blockDTO {
 
 func (in taskIn) toService() service.TaskInput {
 	return service.TaskInput{
-		Title: in.Title, City: in.City, Nationwide: in.Nationwide, Category: in.Category, Formats: in.Formats,
+		Title: in.Title, City: in.City, Nationwide: in.Nationwide, Categories: in.Categories, Formats: in.Formats,
 		Access: in.Access, MinViews: in.MinViews, RewardKopecks: in.RewardKopecks,
 		PublishBy: in.PublishBy, PublishTime: in.PublishTime, Blocks: blocksIn(in.Blocks), Cover: in.Cover, Photos: in.Photos,
 	}
@@ -219,7 +230,7 @@ func toTaskDTO(t domain.Task) taskDTO {
 	}
 	return taskDTO{
 		ID: t.ID, Status: string(t.Status), RejectReason: t.RejectReason, Title: t.Title, City: t.City, Nationwide: t.Nationwide,
-		Category: t.Category, CategoryTitle: t.CategoryTitle, Formats: nonNilStr(t.Formats), Access: t.Access,
+		Categories: nonNilStr(t.Categories), CategoryTitles: t.CategoryTitles, Formats: nonNilStr(t.Formats), Access: t.Access,
 		MinViews: t.MinViews, RewardKopecks: t.RewardKopecks, PublishBy: by, PublishTime: t.PublishTime, DeadlineAt: utcPtr(t.DeadlineAt), Blocks: toBlocksDTO(t.Blocks),
 		Cover: photo(t.Cover), Photos: photos(t.Photos), Brand: t.Brand,
 		CreatedAt: t.CreatedAt.UTC(), UpdatedAt: t.UpdatedAt.UTC(), SubmittedAt: utcPtr(t.SubmittedAt), PublishedAt: utcPtr(t.PublishedAt),

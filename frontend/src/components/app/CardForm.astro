@@ -1,9 +1,10 @@
 ---
-// Анкета автора на весь экран: фото, имя и город, темы, площадки (ссылка и подписчики), блоки (по желанию),
-// работы. Начальные значения — из профиля автора. Логика — scripts/editor.ts.
+// Анкета автора на весь экран, разделами с заголовком и подсказкой в одну строку: «Основное» (фото, имя, город,
+// темы), «Площадки» (ссылка и подписчики), «О себе» (блоки, по желанию), «Работы». Начальные значения — из профиля
+// автора. Логика — scripts/editor.ts.
 import Icon from '../Icon.astro';
 import EditorBar from './EditorBar.astro';
-import { CARD_BLOCKS, CARD_TEMPLATES } from '../../content/app';
+import { CARD_BLOCKS, CARD_TEMPLATES, FORM_GROUPS } from '../../content/app';
 import type { Card, CategoryItem, CreatorProfile, User } from '../../lib/auth';
 interface Props { card: Card | null; profile: CreatorProfile | null; user: User; categories: { common: CategoryItem[]; own: CategoryItem[] } }
 const { card: c, profile, user, categories } = Astro.props;
@@ -20,6 +21,7 @@ const init = {
 const json = JSON.stringify(init).replace(/</g, '\\u003c');
 const name = c?.name || profile?.name || user.name;
 const city = c?.city || profile?.city || user.city;
+const G = FORM_GROUPS.card;
 ---
 <form class="ed" novalidate autocomplete="off" data-editor="card">
   <script type="application/json" data-init set:html={json} />
@@ -29,45 +31,60 @@ const city = c?.city || profile?.city || user.city;
     {c?.status === 'rejected' && <p class="banner is-err" role="note"><Icon name="circle-alert" size={20} /><span><b>Отклонено.</b> {c.rejectReason}</span></p>}
 
     <div data-pane="edit">
-      <div class="sec who-ed">
-        <div data-cover></div>
-        <div class="grow">
-          <div class="field" data-sec="name">
-            <input class="inp ed-title" id="c-name" name="name" maxlength="80" value={name} placeholder="Ваше имя" aria-label="Имя" autocomplete="nickname" data-input="name" />
-            <p class="ferr" data-err="name"></p>
-          </div>
-          <div class="field" data-sec="city">
-            <label class="lbl" for="c-city">Город</label>
-            <input class="inp" id="c-city" name="city" maxlength="80" value={city} placeholder="Казань" autocomplete="address-level2" data-input="city" />
-            <p class="ferr" data-err="city"></p>
+      <section class="grp" aria-labelledby="g-main" aria-describedby="g-main-d">
+        <h2 class="grp-h" id="g-main">{G.main.title}</h2>
+        <p class="grp-d" id="g-main-d">{G.main.hint}</p>
+        <div class="sec who-ed">
+          <div data-cover></div>
+          <div class="grow">
+            <div class="field" data-sec="name">
+              <label class="lbl" for="c-name">Имя</label>
+              <input class="inp" id="c-name" name="name" maxlength="80" value={name} placeholder="Ваше имя" autocomplete="nickname" data-input="name" />
+              <p class="ferr" data-err="name"></p>
+            </div>
+            <div class="field" data-sec="city">
+              <label class="lbl" for="c-city">Город</label>
+              <input class="inp" id="c-city" name="city" maxlength="80" value={city} placeholder="Казань" autocomplete="address-level2" data-input="city" />
+              <p class="ferr" data-err="city"></p>
+            </div>
           </div>
         </div>
-      </div>
-      <p class="ferr" data-err="avatar"></p>
+        <p class="ferr" data-err="avatar"></p>
 
-      <div class="sec" data-sec="topics">
-        <span class="lbl">Темы <span class="hint">· до 5</span></span>
-        <div data-cats data-input="topics"></div>
-        <p class="ferr" data-err="topics"></p>
-      </div>
+        <div class="sec" data-sec="topics">
+          <span class="lbl">Темы <span class="hint">· можно несколько, до 5</span></span>
+          <div data-cats data-input="topics"></div>
+          <p class="ferr" data-err="topics"></p>
+        </div>
+      </section>
 
-      <div class="sec" data-sec="platforms">
-        <span class="lbl">Площадки</span>
-        <div class="plats" data-platforms data-input="platforms"></div>
-        <button class="btn pill-text add-row" type="button" data-add-platform><Icon name="plus" size={18} />Площадка</button>
-        <p class="ferr" data-err="platforms"></p>
-      </div>
+      <section class="grp" aria-labelledby="g-plat" aria-describedby="g-plat-d">
+        <h2 class="grp-h" id="g-plat">{G.platforms.title}</h2>
+        <p class="grp-d" id="g-plat-d">{G.platforms.hint}</p>
+        <div class="sec" data-sec="platforms">
+          <div class="plats" data-platforms data-input="platforms"></div>
+          <button class="btn pill-text add-row" type="button" data-add-platform><Icon name="plus" size={18} />Площадка</button>
+          <p class="ferr" data-err="platforms"></p>
+        </div>
+      </section>
 
-      <div class="sec" data-sec="blocks">
-        <div data-blocks data-input="blocks"></div>
-        <p class="ferr" data-err="blocks"></p>
-      </div>
+      <section class="grp" aria-labelledby="g-desc" aria-describedby="g-desc-d">
+        <h2 class="grp-h" id="g-desc">{G.desc.title}</h2>
+        <p class="grp-d" id="g-desc-d">{G.desc.hint}</p>
+        <div class="sec" data-sec="blocks">
+          <div data-blocks data-input="blocks"></div>
+          <p class="ferr" data-err="blocks"></p>
+        </div>
+      </section>
 
-      <div class="sec">
-        <span class="lbl">Работы <span class="hint">· до 9 фото</span></span>
-        <div data-photos></div>
-        <p class="ferr" data-err="works"></p>
-      </div>
+      <section class="grp" aria-labelledby="g-photo" aria-describedby="g-photo-d">
+        <h2 class="grp-h" id="g-photo">{G.photo.title}</h2>
+        <p class="grp-d" id="g-photo-d">{G.photo.hint}</p>
+        <div class="sec">
+          <div data-photos></div>
+          <p class="ferr" data-err="works"></p>
+        </div>
+      </section>
     </div>
 
     <div data-pane="preview" hidden><div class="pv" data-preview></div></div>

@@ -20,6 +20,7 @@ import (
 	"ohvat/backend/internal/domain"
 	"ohvat/backend/internal/gateway/google"
 	"ohvat/backend/internal/gateway/imaging"
+	"ohvat/backend/internal/gateway/keepalive"
 	"ohvat/backend/internal/gateway/mail"
 	"ohvat/backend/internal/gateway/storage"
 	tggw "ohvat/backend/internal/gateway/telegram"
@@ -158,7 +159,7 @@ func run(log *slog.Logger) error {
 	}
 	api := httpapi.New(httpapi.Services{
 		Home: service.NewHome(repository.NewHome(pool)), Health: service.NewHealth(repository.NewHealth(pool)),
-		Auth: auth, Profiles: profiles, Tasks: tasks, Cards: cards, Categories: service.NewCategories(catRepo), Media: media, Drafts: drafts,
+		Auth: auth, Profiles: profiles, Tasks: tasks, Cards: cards, Categories: service.NewCategories(catRepo), Formats: service.NewFormats(listRepo), Media: media, Drafts: drafts,
 	}, opts)
 	srv := &http.Server{
 		Addr:              cfg.HTTPAddr,
@@ -192,6 +193,11 @@ func run(log *slog.Logger) error {
 	g.Go(func() error { media.RunCleanup(gctx, time.Hour); return nil })
 	g.Go(func() error { tasks.RunExpiry(gctx, 5*time.Minute, log); return nil })
 	g.Go(func() error { drafts.RunCleanup(gctx, draftsPG, time.Hour, log); return nil })
+	if cfg.KeepAliveURL != "" { // самопинг через публичный адрес: бесплатный хостинг не усыпляет сервис
+		ka := service.KeepAlive{Prober: keepalive.New(cfg.KeepAliveURL), Every: 10 * time.Minute, Timeout: 30 * time.Second, Log: log}
+		g.Go(func() error { ka.Run(gctx); return nil })
+		log.Info("самопинг включён", "url", cfg.KeepAliveURL+"/healthz", "every", "10m")
+	}
 	for _, m := range lims.memory {
 		g.Go(func() error { m.Run(gctx, time.Minute); return nil })
 	}

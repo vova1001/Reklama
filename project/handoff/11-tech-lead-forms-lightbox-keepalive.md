@@ -12,3 +12,32 @@
 7. **Формы — крупнее и понятнее:** подписи 16–17px полужирным, поля 17–18px, высота 52–56px; короткая подсказка под заголовком раздела (одна строка, 15px, не серее контраста 4.5:1);
    разделы с понятными заголовками («Основное», «Условия», «Описание», «Фото»), ровные отступы, ничего мелкого. Применить к заданию, анкете автора и профилю.
 - Go три слоя, тесты (-race), e2e (мультивыбор, свои формат/срок, просмотр фото). Скриншоты не нужны. Коммит, не пушить. Отчёт 3 строки + дерево по слоям в файле.
+
+## Отчёт (техлид)
+- **Сделано:** самопинг в бэкенде (`KEEPALIVE_URL` = PUBLIC_URL, раз в 10 мин `/healthz`, таймаут 30 с, в журнал — только ошибки; GitHub — запасной); сферы — до 5, форматы — до 3 с «+ Свой» (подсказки, нормализация), срок — пилюли + «Свой» (свой календарь и время), отбор ленты массивом; просмотр фото поверх страницы (счётчик, стрелки, ←/→, свайп, миниатюры, Esc/фон, фокус); формы разделами с подсказкой, подписи 17px / 600, поля 54px / 17px — задание, анкета, профиль. Лайков нет — убран последний (ответ FAQ на главной, миграция 00011); реферальной ссылки нет.
+- **Проверено:** `make test` (-race, PostgreSQL + Redis) — зелёные, покрытие 91,6%; gofmt, go vet, `astro check` — 0 ошибок; e2e 1440 / 768 / 375 — 106 пройдено, 2 пропущены по замыслу (мультивыбор, свой формат и срок, просмотр фото, восстановление черновика).
+- **Вопросы:** 1) свои форматы сразу видны в задании (без проверки, как свои сферы) — так подходит? 2) в отборе ленты — только форматы списка; свои форматы добавить в отбор? **Сверх задачи:** выбранные пилюли с галочкой и в отборе ленты — несколько отметок.
+
+### Изменения по слоям
+```
+backend/
+  migrations/ 00010_task_categories.sql (category → categories[], до 5; GIN по сферам, форматам, темам анкет),
+              00011_faq_views_only.sql (ответ FAQ без лайков)
+  queries/listing.sql      categories[], category_titles, отбор && массивами, OwnTaskFormats → store/ (sqlc)
+  domain/  listing.go (Task.Categories/CategoryTitles, FeedFilter массивами), format.go нов. (BuiltinFormats, FormatHints)
+  repository/listing.go    сферы массивом, отбор, OwnFormats
+  service/ formats.go нов. (Formats.Similar за FormatRepository, normFormat), keepalive.go нов. (KeepAlive за Prober),
+           tasks.go / cards.go / listing_check.go (checkSlugs, checkUsable, checkFormats — до 3, свои)
+  gateway/keepalive/ нов.  GET ${KEEPALIVE_URL}/healthz (реализует service.Prober)
+  transport/http/          taskIn/taskDTO: categories, categoryTitles; GET /api/me/formats/similar; отбор category/format/topic повторяются
+  config, cmd/server       KEEPALIVE_URL (проверка адреса), самопинг под errgroup
+  api/openapi.yaml 0.8.0;  тесты: formats_test, keepalive_test, gateway/keepalive, config, repository, transport
+frontend/src/
+  scripts/ lightbox.ts нов.; editor/combo.ts нов. (общее «+ Своя / + Свой»), formats.ts нов., due.ts нов. (календарь);
+           editor/category.ts (мультивыбор, галочка), editor.ts, feed.ts (отбор с несколькими отметками)
+  components/app/ TaskForm, CardForm (разделы), TaskBody / TaskPage / CreatorPage (просмотр фото), FeedFilters, TaskItem
+  pages/app/ index, more (отбор массивом), profile (разделы с подсказкой); content/app.ts (FORM_GROUPS), lib/auth.ts,
+  styles/app.css (формы, пилюли с галочкой, календарь, просмотр фото); tests/e2e/listings.spec.ts
+окружение: render.yaml (KEEPALIVE_URL), .env.example, docker-compose*.yml, .github/workflows/keepalive.yml (запасной);
+  README, deploy/render.md, project/architecture.md, project/design/tokens.md
+```

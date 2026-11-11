@@ -72,7 +72,7 @@ func (f *fakeListings) Feed(_ context.Context, q service.FeedQuery) (service.Fee
 	f.put("feed", q.After)
 	f.put("filter", q.Filter)
 	t := sampleTask(9, domain.StatusPublished)
-	t.Brand, t.CategoryTitle = "Кофейня", "Еда и кафе"
+	t.Brand, t.CategoryTitles = "Кофейня", []string{"Еда и кафе"}
 	return service.FeedPage{Tasks: []domain.Task{t}, Next: &domain.FeedCursor{PublishedAt: day, ID: 9}}, f.err
 }
 
@@ -128,6 +128,13 @@ func (c fakeCats) Create(_ context.Context, _ domain.User, title string) (domain
 	return domain.CategoryInfo{Slug: "u-2", Title: title, Status: "pending_review", AuthorID: 3}, title != "Еда", c.f.err
 }
 
+type fakeFormats struct{ f *fakeListings }
+
+func (m fakeFormats) Similar(_ context.Context, _ domain.User, q string) ([]domain.Format, error) {
+	m.f.put("fq", q)
+	return []domain.Format{{ID: "reels", Title: "Reels", Builtin: true}, {ID: "Прямой эфир", Title: "Прямой эфир", Own: true}}, m.f.err
+}
+
 type fakeMedia struct{ f *fakeListings }
 
 func (m fakeMedia) MaxBytes() int64 { return 1 << 10 }
@@ -160,14 +167,14 @@ func listSrv(f *fakeListings, opt Options) *Server {
 	opt.Origin, opt.SecureCookies = testOrigin, true
 	return New(Services{
 		Home: fakeHome{}, Health: fakeDB{}, Auth: &fakeAuth{user: domain.User{ID: 3}}, Profiles: &fakeProfiles{},
-		Tasks: f, Cards: fakeCards{f}, Categories: fakeCats{f}, Media: fakeMedia{f},
+		Tasks: f, Cards: fakeCards{f}, Categories: fakeCats{f}, Formats: fakeFormats{f}, Media: fakeMedia{f},
 	}, opt)
 }
 
 func TestTaskEndpoints(t *testing.T) {
 	f := &fakeListings{}
 	s := listSrv(f, Options{})
-	body := `{"title":"Сторис","city":"","nationwide":true,"category":"food","formats":["reels"],"access":"approval",
+	body := `{"title":"Сторис","city":"","nationwide":true,"categories":["food","beauty"],"formats":["reels","Прямой эфир"],"access":"approval",
 		"minViews":5000,"rewardKopecks":300000,"publishBy":"2026-11-20",
 		"blocks":[{"kind":"list","title":"Что показать","items":["Меню"]}],"cover":"","photos":["p1"]}`
 	rec := serve(s, meReq(http.MethodPost, "/api/me/tasks", body))
@@ -175,7 +182,8 @@ func TestTaskEndpoints(t *testing.T) {
 		t.Fatalf("%d %s", rec.Code, rec.Body.String())
 	}
 	in := f.last["create"].(service.TaskInput)
-	if !in.Nationwide || in.RewardKopecks != 300000 || in.Blocks[0].Items[0] != "Меню" || in.Photos[0] != "p1" || in.PublishBy != "2026-11-20" {
+	if !in.Nationwide || in.RewardKopecks != 300000 || in.Blocks[0].Items[0] != "Меню" || in.Photos[0] != "p1" || in.PublishBy != "2026-11-20" ||
+		len(in.Categories) != 2 || in.Formats[1] != "Прямой эфир" {
 		t.Errorf("в сервис: %+v", in)
 	}
 	var out taskDTO
@@ -281,13 +289,17 @@ func TestFeedEndpoint(t *testing.T) {
 		}
 	}
 	// отбор — в сервис как есть (проверяет сервис), огромный параметр обрезается
-	serve(s, httptest.NewRequest(http.MethodGet, "/api/tasks?category=food&city=%D0%9A%D0%B0%D0%B7%D0%B0%D0%BD%D1%8C&format=reels&city2="+strings.Repeat("x", 300), nil))
-	if f := f.last["filter"].(domain.FeedFilter); f.Category != "food" || f.City != "Казань" || f.Format != "reels" {
+	serve(s, httptest.NewRequest(http.MethodGet, "/api/tasks?category=food&category=beauty&city=%D0%9A%D0%B0%D0%B7%D0%B0%D0%BD%D1%8C&format=reels&city2="+strings.Repeat("x", 300), nil))
+	if f := f.last["filter"].(domain.FeedFilter); len(f.Categories) != 2 || f.Categories[1] != "beauty" || f.City != "Казань" || f.Formats[0] != "reels" {
 		t.Errorf("отбор: %+v", f)
 	}
 	serve(s, httptest.NewRequest(http.MethodGet, "/api/tasks?city="+strings.Repeat("x", 300), nil))
 	if f := f.last["filter"].(domain.FeedFilter); len(f.City) != 200 {
 		t.Errorf("обрезка: %d", len(f.City))
+	}
+	serve(s, httptest.NewRequest(http.MethodGet, "/api/tasks?"+strings.Repeat("category="+strings.Repeat("x", 100)+"&", 20), nil))
+	if f := f.last["filter"].(domain.FeedFilter); len(f.Categories) != 10 || len(f.Categories[0]) != 64 {
+		t.Errorf("обрезка списка: %d", len(f.Categories))
 	}
 	// страница задания: опубликованное — всем, иначе 404
 	if rec := serve(s, httptest.NewRequest(http.MethodGet, "/api/tasks/9", nil)); rec.Code != 200 || !strings.Contains(rec.Body.String(), `"status":"published"`) {
@@ -305,13 +317,13 @@ func TestCardFeedEndpoints(t *testing.T) {
 	if rec := serve(s, httptest.NewRequest(http.MethodGet, "/api/cards", nil)); rec.Code != 401 {
 		t.Errorf("без входа: %d", rec.Code)
 	}
-	rec := serve(s, meReq(http.MethodGet, "/api/cards?topic=food&city=Москва&cursor=", ""))
+	rec := serve(s, meReq(http.MethodGet, "/api/cards?topic=food&topic=beauty&city=Москва&cursor=", ""))
 	var out cardFeedOut
 	_ = json.Unmarshal(rec.Body.Bytes(), &out)
 	if rec.Code != 200 || len(out.Cards) != 1 || out.Cards[0].ID != 8 || out.Cards[0].TopicTitles[0] != "Еда" || out.Next == nil || out.Cards[0].PublishedAt == nil {
 		t.Fatalf("%d %s", rec.Code, rec.Body.String())
 	}
-	if q := f.last["cardFilter"].(domain.FeedFilter); q.Category != "food" || q.City != "Москва" {
+	if q := f.last["cardFilter"].(domain.FeedFilter); len(q.Categories) != 2 || q.Categories[0] != "food" || q.City != "Москва" {
 		t.Errorf("отбор: %+v", q)
 	}
 	if rec := serve(s, meReq(http.MethodGet, "/api/cards?cursor=!!", "")); rec.Code != 400 {
@@ -353,6 +365,14 @@ func TestCardAndCategoryEndpoints(t *testing.T) {
 	serve(s, meReq(http.MethodGet, "/api/me/categories/similar?q="+strings.Repeat("a", 300), ""))
 	if q := f.last["q"].(string); len(q) != 200 {
 		t.Errorf("запрос обрезан: %d", len(q))
+	}
+	rec = serve(s, meReq(http.MethodGet, "/api/me/formats/similar?q=%D1%8D%D1%84"+strings.Repeat("a", 300), ""))
+	if rec.Code != 200 || len(f.last["fq"].(string)) != 200 || !strings.Contains(rec.Body.String(), `{"id":"reels","title":"Reels","builtin":true,"own":false}`) ||
+		!strings.Contains(rec.Body.String(), `"own":true`) {
+		t.Errorf("подсказки форматов: %d %s", rec.Code, rec.Body.String())
+	}
+	if rec := serve(s, httptest.NewRequest(http.MethodGet, "/api/me/formats/similar?q=x", nil)); rec.Code != 401 {
+		t.Errorf("форматы без входа: %d", rec.Code)
 	}
 	if rec := serve(s, meReq(http.MethodPost, "/api/me/categories", `{"title":"Настолки"}`)); rec.Code != 201 {
 		t.Errorf("новая: %d", rec.Code)

@@ -4,7 +4,7 @@
 import App from '../../layouts/App.astro';
 import Icon from '../../components/Icon.astro';
 import Avatar from '../../components/Avatar.astro';
-import { MODES } from '../../content/app';
+import { FORM_GROUPS, MODES } from '../../content/app';
 import { fetchProfiles, type Mode } from '../../lib/auth';
 import { getHome, type Category } from '../../lib/api';
 
@@ -24,6 +24,7 @@ const bizSpheres = new Set(business?.spheres ?? []);
 const creSpheres = new Set(creator?.spheres ?? []);
 const channels = creator?.channels.length ? creator.channels : [''];
 const filled: Record<Mode, boolean> = { business: !!business, creator: !!creator };
+const G = FORM_GROUPS.profile;
 ---
 <App title="Профиль" page="profile">
   <div class="head">
@@ -36,7 +37,8 @@ const filled: Record<Mode, boolean> = { business: !!business, creator: !!creator
     <div class="who">
       <div class="ava-up" data-avatar data-photo={u.avatarUrl.startsWith('/media/') ? u.avatarUrl : ''}><Avatar user={u} size={64} /></div>
       <div>
-        <h2 id="basics-t" class="sec-h">Общие данные</h2>
+        <h2 id="basics-t" class="grp-h">{G.basics.title}</h2>
+        <p class="grp-d">{G.basics.hint}</p>
         <p class="muted">{u.email ?? 'Почта не указана'}</p>
       </div>
     </div>
@@ -60,7 +62,8 @@ const filled: Record<Mode, boolean> = { business: !!business, creator: !!creator
 
   <!-- профили режимов -->
   <section class="sec" aria-labelledby="modes-t">
-    <h2 id="modes-t" class="sec-h">Режимы</h2>
+    <h2 id="modes-t" class="grp-h">{G.modes.title}</h2>
+    <p class="grp-d">{G.modes.hint}</p>
     <div class="tabs" role="tablist" aria-label="Профили режимов" data-tabs>
       {MODES.map((m) => (
         <button type="button" role="tab" id={`tab-${m.id}`} aria-controls={`panel-${m.id}`} aria-selected={tab === m.id ? 'true' : 'false'} tabindex={tab === m.id ? 0 : -1} data-tab={m.id}>
@@ -86,7 +89,7 @@ const filled: Record<Mode, boolean> = { business: !!business, creator: !!creator
           </div>
         </div>
         <div class="field">
-          <span class="lbl" id="bz-sph-l">Сферы <span class="hint">· до 5</span></span>
+          <span class="lbl" id="bz-sph-l">Сферы <span class="hint">· можно несколько, до 5</span></span>
           <div class="chips" role="group" aria-labelledby="bz-sph-l" aria-describedby="bz-sph-err" data-spheres>
             {categories.map((c) => (
               <button type="button" class="chip" aria-pressed={bizSpheres.has(c.slug) ? 'true' : 'false'} data-slug={c.slug}><Icon name={c.icon} size={18} />{c.title}</button>
@@ -115,7 +118,7 @@ const filled: Record<Mode, boolean> = { business: !!business, creator: !!creator
           </div>
         </div>
         <div class="field">
-          <span class="lbl" id="cr-sph-l">Темы <span class="hint">· до 5</span></span>
+          <span class="lbl" id="cr-sph-l">Темы <span class="hint">· можно несколько, до 5</span></span>
           <div class="chips" role="group" aria-labelledby="cr-sph-l" aria-describedby="cr-sph-err" data-spheres>
             {categories.map((c) => (
               <button type="button" class="chip" aria-pressed={creSpheres.has(c.slug) ? 'true' : 'false'} data-slug={c.slug}><Icon name={c.icon} size={18} />{c.title}</button>

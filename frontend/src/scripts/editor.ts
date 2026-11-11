@@ -10,6 +10,8 @@ import { CARD_RULES, DUE_RANGE, FOLLOWERS_MSG, PLATFORM_TITLE, PLATFORM_URL_MSG,
 import { formatsTitle, goal, num, rub, until } from '../lib/format';
 import { BlocksEditor, type Block } from './editor/blocks';
 import { CategoryPicker } from './editor/category';
+import { FormatPicker } from './editor/formats';
+import { DuePicker, isoDay } from './editor/due';
 import { appear, h, ic, vanish } from './editor/dom';
 import { Uploader, type Photo } from './editor/uploader';
 import { DraftSync } from './editor/drafts';
@@ -28,6 +30,7 @@ interface Init {
   cover: Photo[];
   photos: Photo[];
   selected: string[];
+  formats?: string[];
   categories: { common: Item[]; own: Item[] };
   platforms: { url: string; followers: number }[];
   brand: string;
@@ -66,10 +69,7 @@ function restore(form: HTMLFormElement, init: Init, d: Partial<Snap>) {
   }
   const nation = $('[data-nationwide]', form);
   if (nation && typeof d.nationwide === 'boolean') nation.setAttribute('aria-checked', String(d.nationwide));
-  if (d.formats) {
-    const f = new Set(strs(d.formats));
-    $$('[data-format]', form).forEach((b) => b.setAttribute('aria-pressed', String(f.has(b.dataset.format!))));
-  }
+  if (d.formats) init.formats = strs(d.formats).map((f) => f.slice(0, 30)).slice(0, 3);
   if (typeof d.access === 'string' && d.access) {
     $$<HTMLButtonElement>('[data-access] [role="radio"]', form).forEach((b) => {
       b.setAttribute('aria-checked', String(b.dataset.v === d.access));
@@ -131,8 +131,11 @@ async function start(form: HTMLFormElement) {
   // ===== части формы =====
   const blocks = new BlocksEditor($('[data-blocks]', form)!, init.blocks, init.templates, changed);
   const picker = new CategoryPicker($('[data-cats]', form)!, init.categories.common, init.categories.own, init.selected, {
-    multi: !isTask, max: isTask ? 1 : 5, maxCustom: 3, label: isTask ? 'Сфера' : 'Темы', onChange: changed,
+    multi: true, max: 5, maxCustom: 3, label: isTask ? 'Сфера' : 'Темы', addLabel: 'Своя', onChange: changed,
   });
+  const fmts = isTask ? new FormatPicker($('[data-formats]', form)!, init.formats ?? [], { max: 3, onChange: changed }) : null;
+  const dueBox = $('[data-due]', form);
+  const duePick = dueBox ? new DuePicker(dueBox, changed) : null;
   const onBusy = (b: boolean) => {
     if (b) stateEl.textContent = 'Загружаю фото…';
   };
@@ -159,13 +162,7 @@ async function start(form: HTMLFormElement) {
     });
   });
 
-  // пилюли-переключатели (форматы), сегмент (кто берёт), «Вся Россия»
-  $$<HTMLButtonElement>('[data-toggle]', form).forEach((b) =>
-    b.addEventListener('click', () => {
-      b.setAttribute('aria-pressed', String(b.getAttribute('aria-pressed') !== 'true'));
-      changed();
-    }),
-  );
+  // сегмент (кто берёт), «Вся Россия»
   $$<HTMLButtonElement>('[data-access] [role="radio"]', form).forEach((b, i, all) => {
     const pick = (x: HTMLButtonElement) => {
       all.forEach((y) => {
@@ -197,31 +194,10 @@ async function start(form: HTMLFormElement) {
   });
   syncNation();
 
-  // срок: ДД.ММ.ГГГГ с точками сами, быстрые варианты
-  const due = $<HTMLInputElement>('[name="publishBy"]', form);
-  due?.addEventListener('input', () => {
-    const d = due.value.replace(/\D/g, '').slice(0, 8);
-    due.value = [d.slice(0, 2), d.slice(2, 4), d.slice(4)].filter(Boolean).join('.');
-  });
-  $$<HTMLButtonElement>('[data-days]', form).forEach((b) =>
-    b.addEventListener('click', () => {
-      const t = new Date();
-      t.setDate(t.getDate() + Number(b.dataset.days));
-      due!.value = `${String(t.getDate()).padStart(2, '0')}.${String(t.getMonth() + 1).padStart(2, '0')}.${t.getFullYear()}`;
-      changed();
-    }),
-  );
-  // время срока (по желанию): ЧЧ:ММ, двоеточие ставится само
+  // срок — пилюли и «+ Свой» с календарём и временем ЧЧ:ММ (scripts/editor/due.ts)
   const dueTime = $<HTMLInputElement>('[name="publishTime"]', form);
-  dueTime?.addEventListener('input', () => {
-    const d = dueTime.value.replace(/\D/g, '').slice(0, 4);
-    dueTime.value = d.length > 2 ? `${d.slice(0, 2)}:${d.slice(2)}` : d;
-  });
   const timeOk = () => !dueTime?.value || /^([01]\d|2[0-3]):[0-5]\d$/.test(dueTime.value);
-  const isoDue = () => {
-    const m = due?.value.match(/^(\d{2})\.(\d{2})\.(\d{4})$/);
-    return m ? `${m[3]}-${m[2]}-${m[1]}` : '';
-  };
+  const isoDue = () => duePick?.iso() ?? '';
 
   // площадки автора: ссылка + подписчики, добавить и убрать
   const plats = $('[data-platforms]', form);
@@ -307,8 +283,8 @@ async function start(form: HTMLFormElement) {
     isTask
       ? {
           title: val('title'), city: nation?.getAttribute('aria-checked') === 'true' ? '' : val('city'),
-          nationwide: nation?.getAttribute('aria-checked') === 'true', category: picker.value()[0] ?? '',
-          formats: $$<HTMLButtonElement>('[data-format][aria-pressed="true"]', form).map((b) => b.dataset.format!),
+          nationwide: nation?.getAttribute('aria-checked') === 'true', categories: picker.value(),
+          formats: fmts?.value() ?? [],
           access: $<HTMLButtonElement>('[data-access] [aria-checked="true"]', form)?.dataset.v ?? 'open',
           minViews: parseNum(val('minViews')),
           rewardKopecks: parseNum(val('reward')) * 100, publishBy: isoDue(), publishTime: timeOk() ? val('publishTime') : '', blocks: blocks.value(),
@@ -325,7 +301,7 @@ async function start(form: HTMLFormElement) {
     $$<HTMLInputElement>('[data-pane="edit"] input[name]', form).forEach((i) => (fields[i.name] = i.value));
     return {
       v: 1, fields, nationwide: nation?.getAttribute('aria-checked') === 'true',
-      formats: $$<HTMLButtonElement>('[data-format][aria-pressed="true"]', form).map((b) => b.dataset.format!),
+      formats: fmts?.value() ?? [],
       access: $<HTMLButtonElement>('[data-access] [aria-checked="true"]', form)?.dataset.v ?? '',
       selected: picker.value(), platforms: platValue(), blocks: blocks.value(), cover: cover.photos(), photos: photos.photos(),
     };
@@ -340,13 +316,13 @@ async function start(form: HTMLFormElement) {
     if (isTask) {
       const title = p.title as string;
       if (title.length < 5) out.set('title', r('title'));
-      if (!p.category) out.set('category', r('category'));
+      if (!(p.categories as string[]).length) out.set('categories', r('categories'));
       if (!p.nationwide && (p.city as string).length < 2) out.set('city', r('city'));
       if (!(p.formats as string[]).length) out.set('formats', r('formats'));
       if (!p.minViews) out.set('minViews', r('minViews'));
       if ((p.rewardKopecks as number) < 10000) out.set('reward', r('reward'));
       const d = p.publishBy as string;
-      if (!d) out.set('publishBy', due?.value ? 'Дата в формате ДД.ММ.ГГГГ' : r('publishBy'));
+      if (!d) out.set('publishBy', r('publishBy'));
       else if (d <= isoDay(0) || d > isoDay(90)) out.set('publishBy', DUE_RANGE);
       else if (!timeOk()) out.set('publishBy', 'Время в формате ЧЧ:ММ');
       if (!hasBlocks) out.set('blocks', r('blocks'));
@@ -418,6 +394,8 @@ async function start(form: HTMLFormElement) {
     const target =
       k === 'blocks'
         ? blocks.first()
+        : k === 'publishBy' && duePick
+          ? duePick.focusTarget()
         : k === 'platforms'
           ? ($$<HTMLElement>('.plat-w', form).find((w) => $('[data-err-plat]', w)!.textContent)?.querySelector<HTMLInputElement>('input') ??
             $$<HTMLInputElement>('.plat input', form)[0] ??
@@ -606,7 +584,7 @@ async function start(form: HTMLFormElement) {
   function taskPreview() {
     const t = payload() as unknown as { title: string; city: string; nationwide: boolean; formats: string[]; minViews: number; rewardKopecks: number; publishBy: string; publishTime: string; blocks: Block[] };
     const where = t.nationwide ? 'Вся Россия' : t.city;
-    const meta = [where, picker.titles()[0]].filter(Boolean).join(' · ');
+    const meta = [where, picker.titles().join(', ')].filter(Boolean).join(' · ');
     const it = h('article', { class: 'it pv-it' }, h('div', { class: 'it-meta' }, h('span', {}, init.brand ? h('b', {}, init.brand) : null, init.brand && meta ? ' · ' : '', meta)), h('h2', { class: 'it-t' }, t.title || 'Название задания'));
     const c = cover.photos()[0];
     if (c) it.append(h('img', { class: 'it-cover', src: c.src, alt: '' }));
@@ -646,11 +624,4 @@ async function start(form: HTMLFormElement) {
   form.dataset.ready = '1';
   if (restored) changed(); // восстановленное — сохранить и в задание/анкету (если проходит проверку)
   if (init.id === null && isTask && !restored) $<HTMLInputElement>('[name="title"]', form)?.focus({ preventScroll: true });
-}
-
-/** Дата через n дней по местному времени, ГГГГ-ММ-ДД. */
-function isoDay(n: number): string {
-  const t = new Date();
-  t.setDate(t.getDate() + n);
-  return `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}-${String(t.getDate()).padStart(2, '0')}`;
 }

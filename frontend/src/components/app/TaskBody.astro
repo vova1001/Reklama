@@ -1,5 +1,6 @@
 ---
-// Содержимое задания или анкеты: блоки (абзацы, пункты, ссылки) и фото — так, как увидят другие.
+// Содержимое задания или анкеты: блоки (абзацы, пункты, ссылки) и фото — так, как увидят другие. Фото открываются
+// поверх страницы (scripts/lightbox.ts): листание, счётчик, миниатюры; без новых вкладок.
 import type { components } from '../../lib/api.gen';
 type Block = components['schemas']['Block'];
 type Photo = components['schemas']['Photo'];
@@ -19,7 +20,12 @@ const { blocks, photos = [] } = Astro.props;
   ))}
   {photos.length > 0 && (
     <div class="body-ph">
-      {photos.map((p) => <a href={p.large} target="_blank" rel="noopener"><img src={p.thumb} srcset={`${p.thumb} 320w, ${p.src} 800w`} sizes="200px" alt="" loading="lazy" decoding="async" width="320" height="320" /></a>)}
+      {photos.map((p, i) => (
+        <button type="button" class="lb-t" data-lb data-src={p.src} data-large={p.large} data-thumb={p.thumb} aria-label={`Открыть фото ${i + 1} из ${photos.length}`}>
+          <img src={p.thumb} srcset={`${p.thumb} 320w, ${p.src} 800w`} sizes="200px" alt="" loading="lazy" decoding="async" width="320" height="320" />
+        </button>
+      ))}
     </div>
   )}
 </div>
+<script src="../../scripts/lightbox.ts"></script>

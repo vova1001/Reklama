@@ -89,6 +89,11 @@ type CategoryService interface {
 	Create(ctx context.Context, u domain.User, title string) (domain.CategoryInfo, bool, error)
 }
 
+// FormatService — подсказки при вводе своего формата.
+type FormatService interface {
+	Similar(ctx context.Context, u domain.User, q string) ([]domain.Format, error)
+}
+
 // MediaService — фото: загрузка, удаление, аватар, просмотр с правами.
 type MediaService interface {
 	MaxBytes() int64
@@ -107,6 +112,7 @@ type Services struct {
 	Tasks      TaskService
 	Cards      CardService
 	Categories CategoryService
+	Formats    FormatService
 	Media      MediaService
 	Drafts     DraftService
 }
@@ -139,6 +145,7 @@ type Server struct {
 	tasks      TaskService
 	cards      CardService
 	categories CategoryService
+	formats    FormatService
 	media      MediaService
 	drafts     DraftService
 	opt        Options
@@ -151,7 +158,7 @@ func New(svc Services, opt Options) *Server {
 	}
 	return &Server{
 		home: svc.Home, health: svc.Health, auth: svc.Auth, profiles: svc.Profiles, tasks: svc.Tasks, cards: svc.Cards,
-		categories: svc.Categories, media: svc.Media, drafts: svc.Drafts, opt: opt,
+		categories: svc.Categories, formats: svc.Formats, media: svc.Media, drafts: svc.Drafts, opt: opt,
 	}
 }
 
@@ -217,6 +224,7 @@ func (s *Server) Routes() http.Handler {
 			r.Get("/categories", s.getCategories)
 			r.Get("/categories/similar", s.getSimilarCategories)
 			r.Post("/categories", s.createCategory)
+			r.Get("/formats/similar", s.getSimilarFormats)
 
 			r.With(limit(s.opt.UploadLimiter, byUser("upload:"))).Post("/media", s.uploadMedia)
 			r.Delete("/media/{id}", s.deleteMedia)

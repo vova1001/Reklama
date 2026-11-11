@@ -75,8 +75,8 @@ type TaskInput struct {
 	Title         string
 	City          string
 	Nationwide    bool
-	Category      string
-	Formats       []string
+	Categories    []string // slug сфер, до 5
+	Formats       []string // slug из списка или свои названия, до 3
 	Access        string
 	MinViews      int64
 	RewardKopecks int64
@@ -255,16 +255,26 @@ func (s *Tasks) Public(ctx context.Context, id int64) (domain.Task, error) {
 	return s.repo.PublishedTask(ctx, id)
 }
 
-// feedFilter — проверка отбора ленты: сфера — slug, город — до 80 символов, формат — из списка (только задания).
+// feedFilter — проверка отбора ленты: сферы — slug (до 5), город — до 80 символов, форматы — из списка
+// (до 6, только задания). Пустые значения отбрасываются.
 func feedFilter(q FeedQuery, tasks bool) (domain.FeedFilter, int, error) {
-	f := domain.FeedFilter{Category: squash(q.Filter.Category), City: squash(q.Filter.City), Format: squash(q.Filter.Format)}
 	ve := &ValidationError{}
-	if f.Category != "" && !reSlug.MatchString(f.Category) {
-		ve.add("category", "Выберите сферу из списка")
+	f := domain.FeedFilter{City: squash(q.Filter.City)}
+	field, pick := "topic", "Выберите тему из списка"
+	if tasks {
+		field, pick = "category", "Выберите сферу из списка"
 	}
+	f.Categories = checkSlugs(ve, field, nonEmptyAll(q.Filter.Categories), "в отборе", pick)
 	maxLen(ve, "city", f.City, 80, "Город — до 80 символов")
-	if f.Format != "" && (!tasks || !contains(Formats, f.Format)) {
-		ve.add("format", "Выберите формат из списка")
+	for _, raw := range nonEmptyAll(q.Filter.Formats) {
+		bf, ok := builtinFormat(raw)
+		if !tasks || !ok || raw != bf.ID {
+			ve.add("format", "Выберите формат из списка")
+			break
+		}
+		if !contains(f.Formats, bf.ID) {
+			f.Formats = append(f.Formats, bf.ID)
+		}
 	}
 	limit := q.Limit
 	if limit <= 0 || limit > 50 {
@@ -285,7 +295,7 @@ func cursorOf(at *time.Time, id int64) *domain.FeedCursor {
 func (s *Tasks) shape(ctx context.Context, userID, id int64, in TaskInput) (domain.Task, error) {
 	ve := &ValidationError{}
 	t := domain.Task{
-		Title: squash(in.Title), City: squash(in.City), Nationwide: in.Nationwide, Category: squash(in.Category),
+		Title: squash(in.Title), City: squash(in.City), Nationwide: in.Nationwide,
 		Access: in.Access, MinViews: in.MinViews, RewardKopecks: in.RewardKopecks,
 	}
 	maxLen(ve, "title", t.Title, 100, "Название — до 100 символов")
@@ -293,9 +303,7 @@ func (s *Tasks) shape(ctx context.Context, userID, id int64, in TaskInput) (doma
 		t.City = ""
 	}
 	maxLen(ve, "city", t.City, 80, "Город — до 80 символов")
-	if t.Category != "" && !reSlug.MatchString(t.Category) {
-		ve.add("category", "Выберите сферу из списка")
-	}
+	t.Categories = checkSlugs(ve, "categories", in.Categories, "сфер", "Выберите сферу из списка")
 	t.Formats = checkFormats(ve, in.Formats)
 	switch t.Access {
 	case "":
@@ -325,14 +333,8 @@ func (s *Tasks) shape(ctx context.Context, userID, id int64, in TaskInput) (doma
 	if err := ve.orNil(); err != nil {
 		return domain.Task{}, err
 	}
-	if t.Category != "" {
-		n, _, err := s.Categories.Usable(ctx, userID, []string{t.Category})
-		if err != nil {
-			return domain.Task{}, err
-		}
-		if n != 1 {
-			return domain.Task{}, &ValidationError{Fields: map[string]string{"category": "Выберите сферу из списка"}}
-		}
+	if err := checkUsable(ctx, s.Categories, userID, "categories", t.Categories, "Выберите сферу из списка", "Своих сфер — не больше %d"); err != nil {
+		return domain.Task{}, err
 	}
 	return t, nil
 }
@@ -346,8 +348,8 @@ func (s *Tasks) complete(t domain.Task) error {
 	if !t.Nationwide && utf8.RuneCountInString(t.City) < 2 {
 		ve.add("city", "Укажите город или «Вся Россия»")
 	}
-	if t.Category == "" {
-		ve.add("category", "Выберите сферу")
+	if len(t.Categories) == 0 {
+		ve.add("categories", "Выберите сферу")
 	}
 	if len(t.Formats) == 0 {
 		ve.add("formats", "Выберите хотя бы один формат")
@@ -386,6 +388,17 @@ func checkSubmitQuota(ctx context.Context, subs SubmitCounter, clock Clock, user
 		return &LimitError{Reason: "submits_daily", RetryAfter: wait}
 	}
 	return nil
+}
+
+// nonEmptyAll — без пустых строк (после squash).
+func nonEmptyAll(in []string) []string {
+	out := make([]string, 0, len(in))
+	for _, s := range in {
+		if s = squash(s); s != "" {
+			out = append(out, s)
+		}
+	}
+	return out
 }
 
 func nonEmpty(s string) []string {

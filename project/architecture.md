@@ -42,7 +42,7 @@ Render — один контейнер (nginx + Astro + Go), свой серве
 | `plan_features` | plan_id → plans (каскад), position, text | PK (plan_id, position) |
 | `faq` | question, answer, position, is_published | position, где is_published |
 | `users` | name, email (подтверждённая, NULL), avatar_url, city, active_mode (`business`/`creator`, по умолчанию business), onboarded_at (общие данные сохранялись), last_login_at | уник. email, где не NULL |
-| `tasks` | owner_id → users, status (`draft`/`pending_review`/`published`/`rejected`), reject_reason, title, city, nationwide, category → categories.slug, formats[], access (`open`/`approval`), min_views, min_likes, reward_kopecks, publish_by (date), blocks (jsonb), cover → media, photos[], submitted_at, published_at | (owner_id, updated_at); лента (published_at, id) где published; очередь проверки где pending |
+| `tasks` | owner_id → users, status (`draft`/`pending_review`/`published`/`rejected`), reject_reason, title, city, nationwide, categories[] (slug, до 5; задача 11), formats[] (до 3, свои — названием), access (`open`/`approval`), min_views, min_likes, reward_kopecks, publish_by (date), blocks (jsonb), cover → media, photos[], submitted_at, published_at | (owner_id, updated_at); лента (published_at, id) где published; очередь проверки где pending |
 | `creator_cards` | user_id → users (PK), status, reject_reason, name, city, topics[], platforms (jsonb: kind, url, followers), blocks (jsonb), avatar → media, works[] | опубликованные; очередь проверки |
 | `moderation_log` | subject (`task`/`creator_card`/`category`), subject_id, from/to status, reason, actor_id, created_at — каждая смена статуса | (subject, subject_id); отправки за сутки по actor_id |
 | `media` | id (128 случайных бит), owner_id, purpose, width, height, bytes, subject/subject_id (к чему прикреплено; NULL — сирота), touched_at | владелец; сироты; прикреплённые |
@@ -105,6 +105,25 @@ norm (нижний регистр, ё → е, одиночные пробелы)
   от завтра до 90 дней; `deadline_at` (UTC) считает сервис. Лента и страница — только `deadline_at > now()`;
   `Tasks.RunExpiry` раз в 5 минут переводит просроченные в `expired` (журнал, «срок публикации прошёл»).
 
+### Мультивыбор, свои форматы и срок, просмотр фото, самопинг (задача 11)
+
+- **Сферы задания** — до 5 (своих — до 3): `tasks.category` → `categories text[]` (миграция 00010, GIN-индекс по
+  опубликованным); проверка — `checkSlugs` + `checkUsable` (общая с анкетой). **Форматы** — до 3: slug из списка или
+  своё название (`normFormat`: название из списка → slug, известное из `domain.FormatHints` — его написание, своё —
+  2–30 символов, буквы, без ссылок и мата, с заглавной; повторы без учёта регистра и ё отбрасываются). Подсказки —
+  `GET /api/me/formats/similar` (`service.Formats` за `FormatRepository`: список, известные, свои из заданий бизнеса).
+- **Лента** — отбор массивом: `category`, `format`, `topic` повторяются, подходит любое (`&&`); список отбора на
+  фронте — с несколькими отметками, лента открывается при закрытии списка.
+- **Срок** — пилюли «3 дня / Неделя / 2 недели / Месяц / + Свой»; «Свой» — свой календарь (завтра…90 дней) и время
+  (`scripts/editor/due.ts`); контракт тот же (`publishBy`, `publishTime`).
+- **Фото** на страницах задания и анкеты — `scripts/lightbox.ts`: `<dialog>` поверх страницы, счётчик, стрелки,
+  ←/→/Home/End, свайп, миниатюры, Esc/✕/фон — закрыть, фокус — на открывшее фото.
+- **Формы** — разделы `.grp` (заголовок 21px + подсказка 15px одной строкой; тексты — `content/app.ts FORM_GROUPS`),
+  подписи 17px / 600, поля 54px / 17px — задание, анкета, профиль.
+- **Самопинг** — `service.KeepAlive` (интерфейс `Prober`) + `gateway/keepalive` (GET `${KEEPALIVE_URL}/healthz`,
+  таймаут 30 с): раз в 10 минут под errgroup; пусто — выключен; в журнал — только ошибки. На Render `KEEPALIVE_URL` =
+  `PUBLIC_URL`; workflow GitHub `keepalive.yml` — запасной.
+
 ### Контракт
 
 `backend/api/openapi.yaml`: `GET /api/home`, `GET /healthz`; вход — `GET /api/auth/config`, `POST /api/auth/email/start`,
@@ -114,7 +133,8 @@ norm (нижний регистр, ё → е, одиночные пробелы)
 `GET /api/tasks` (лента), `GET/POST /api/me/tasks`, `GET/PUT/DELETE /api/me/tasks/{id}`, `POST …/submit`, `POST …/withdraw`,
 `GET/PUT /api/me/card`, `POST /api/me/card/submit|withdraw`, `GET/POST /api/me/categories`, `GET /api/me/categories/similar`,
 `POST /api/me/media`, `DELETE /api/me/media/{id}`, `PUT /api/me/avatar`, `GET /media/{id}/{size}.webp`; задача 09 —
-`GET /api/tasks/{id}`, `GET /api/cards`, `GET /api/cards/{id}`, отбор ленты.
+`GET /api/tasks/{id}`, `GET /api/cards`, `GET /api/cards/{id}`, отбор ленты; задача 11 — `GET /api/me/formats/similar`,
+сферы и форматы массивами (0.8.0).
 Типы фронта генерируются из контракта (`npm run gen:api` → `frontend/src/lib/api.gen.ts`).
 
 ## Фронтенд (Astro 7 SSR + Tailwind 4 + TypeScript)

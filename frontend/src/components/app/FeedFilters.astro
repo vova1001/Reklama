@@ -1,28 +1,30 @@
 ---
-// Отбор ленты — компактно одной строкой: сфера (тема), формат (только задания), город; сортировка — «Новые».
-// Выбор сразу открывает ленту с отбором (адрес запоминает). Списки — свои (scripts/feed.ts).
+// Отбор ленты — компактно одной строкой: сферы (темы), форматы (только задания) — можно несколько, подходит любая
+// из выбранных; город; сортировка — «Новые». Списки — свои (scripts/feed.ts): отметки ставятся сразу, лента
+// открывается с отбором при закрытии списка (адрес запоминает).
 import Icon from '../Icon.astro';
 import { FORMATS } from '../../content/app';
 import type { CategoryItem } from '../../lib/auth';
-interface Props { kind: 'tasks' | 'cards'; categories: CategoryItem[]; category: string; city: string; format: string }
+interface Props { kind: 'tasks' | 'cards'; categories: CategoryItem[]; category: string[]; city: string; format: string[] }
 const { kind, categories, category, city, format } = Astro.props;
 const picks = [
-  { name: 'category', label: kind === 'tasks' ? 'Сфера' : 'Тема', all: kind === 'tasks' ? 'Все сферы' : 'Все темы', value: category, options: categories.map((c) => ({ v: c.slug, t: c.title })) },
-  ...(kind === 'tasks' ? [{ name: 'format', label: 'Формат', all: 'Все форматы', value: format, options: FORMATS.map((f) => ({ v: f.id, t: f.title })) }] : []),
+  { name: 'category', label: kind === 'tasks' ? 'Сфера' : 'Тема', all: kind === 'tasks' ? 'Все сферы' : 'Все темы', max: 5, values: category, options: categories.map((c) => ({ v: c.slug, t: c.title })) },
+  ...(kind === 'tasks' ? [{ name: 'format', label: 'Формат', all: 'Все форматы', max: 6, values: format, options: FORMATS.map((f) => ({ v: f.id, t: f.title })) }] : []),
 ];
 ---
 <form class="ff" method="get" action="/app" role="search" aria-label="Отбор" data-filters>
   {picks.map((p) => {
-    const cur = p.options.find((o) => o.v === p.value);
+    const cur = p.options.filter((o) => p.values.includes(o.v));
+    const text = cur.length === 0 ? p.label : cur.length === 1 ? cur[0].t : `${p.label} · ${cur.length}`;
     return (
-      <div class="pk" data-pick>
-        <input type="hidden" name={p.name} value={cur ? p.value : ''} />
-        <button class="pk-btn" type="button" aria-haspopup="listbox" aria-expanded="false" aria-label={`${p.label}: ${cur?.t ?? 'все'}`} data-on={cur ? '1' : undefined}>
-          <span>{cur?.t ?? p.label}</span><Icon name="chevron-down" size={16} />
+      <div class="pk" data-pick data-name={p.name} data-label={p.label} data-max={p.max}>
+        <span data-vals>{cur.map((o) => <input type="hidden" name={p.name} value={o.v} />)}</span>
+        <button class="pk-btn" type="button" aria-haspopup="listbox" aria-expanded="false" aria-label={`${p.label}: ${cur.length ? cur.map((o) => o.t).join(', ') : 'все'}`} data-on={cur.length ? '1' : undefined}>
+          <span data-text>{text}</span><Icon name="chevron-down" size={16} />
         </button>
-        <ul class="pk-list" role="listbox" aria-label={p.label} tabindex="-1" hidden>
-          <li role="option" data-v="" aria-selected={!cur ? 'true' : 'false'}>{p.all}</li>
-          {p.options.map((o) => <li role="option" data-v={o.v} aria-selected={o.v === p.value ? 'true' : 'false'}>{o.t}</li>)}
+        <ul class="pk-list" role="listbox" aria-label={`${p.label} — можно несколько`} aria-multiselectable="true" tabindex="-1" hidden>
+          <li role="option" id={`${p.name}-o0`} data-v="" aria-selected={!cur.length ? 'true' : 'false'}>{p.all}</li>
+          {p.options.map((o, i) => <li role="option" id={`${p.name}-o${i + 1}`} data-v={o.v} data-t={o.t} aria-selected={p.values.includes(o.v) ? 'true' : 'false'}>{o.t}</li>)}
         </ul>
       </div>
     );

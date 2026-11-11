@@ -112,7 +112,7 @@ func (s *Server) withdrawTask(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, toTaskDTO(t))
 }
 
-// GET /api/tasks — лента опубликованных (cursor, limit 1–50; отбор: category, city, format).
+// GET /api/tasks — лента опубликованных (cursor, limit 1–50; отбор: category и format — повторяются, city).
 func (s *Server) getFeed(w http.ResponseWriter, r *http.Request) {
 	q, ok := feedQuery(w, r)
 	if !ok {
@@ -142,13 +142,13 @@ func (s *Server) getPublicTask(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, toTaskDTO(t))
 }
 
-// GET /api/cards — лента опубликованных анкет (только после входа; cursor, limit; отбор: topic, city).
+// GET /api/cards — лента опубликованных анкет (только после входа; cursor, limit; отбор: topic — повторяется, city).
 func (s *Server) getCardFeed(w http.ResponseWriter, r *http.Request) {
 	q, ok := feedQuery(w, r)
 	if !ok {
 		return
 	}
-	q.Filter.Category = r.URL.Query().Get("topic")
+	q.Filter.Categories = clipAll(r.URL.Query()["topic"], 64)
 	p, err := s.cards.Feed(r.Context(), q)
 	if err != nil {
 		s.fail(w, r, err)
@@ -184,7 +184,7 @@ func feedQuery(w http.ResponseWriter, r *http.Request) (service.FeedQuery, bool)
 		return service.FeedQuery{}, false
 	}
 	limit, _ := strconv.Atoi(v.Get("limit"))
-	f := domain.FeedFilter{Category: clip(v.Get("category"), 64), City: clip(v.Get("city"), 200), Format: clip(v.Get("format"), 32)}
+	f := domain.FeedFilter{Categories: clipAll(v["category"], 64), City: clip(v.Get("city"), 200), Formats: clipAll(v["format"], 32)}
 	return service.FeedQuery{Filter: f, After: after, Limit: limit}, true
 }
 
@@ -194,6 +194,18 @@ func clip(s string, n int) string {
 		return s[:n]
 	}
 	return s
+}
+
+// clipAll — не больше 10 значений, каждое не длиннее n байт (лишние значения — ошибка проверки в сервисе).
+func clipAll(vs []string, n int) []string {
+	if len(vs) > 10 {
+		vs = vs[:10]
+	}
+	out := make([]string, 0, len(vs))
+	for _, v := range vs {
+		out = append(out, clip(v, n))
+	}
+	return out
 }
 
 // ===== анкета автора =====
@@ -284,6 +296,21 @@ func (s *Server) createCategory(w http.ResponseWriter, r *http.Request) {
 		status = http.StatusCreated
 	}
 	writeJSON(w, status, categoryCreated{Category: toCategoryItems([]domain.CategoryInfo{c})[0], Created: created})
+}
+
+// GET /api/me/formats/similar?q= — подсказки своего формата: из списка, известные и свои уже использованные.
+func (s *Server) getSimilarFormats(w http.ResponseWriter, r *http.Request) {
+	q := clip(r.URL.Query().Get("q"), 200)
+	fs, err := s.formats.Similar(r.Context(), currentUser(r), q)
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	out := make([]formatItemDTO, 0, len(fs))
+	for _, f := range fs {
+		out = append(out, formatItemDTO{ID: f.ID, Title: f.Title, Builtin: f.Builtin, Own: f.Own})
+	}
+	writeJSON(w, http.StatusOK, formatsOut{Items: out})
 }
 
 // pathID — {id} из адреса; не число — 404.

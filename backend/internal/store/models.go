@@ -163,7 +163,6 @@ type Task struct {
 	Title         string
 	City          string
 	Nationwide    bool
-	Category      pgtype.Text
 	Formats       []string
 	Access        string
 	MinViews      int64
@@ -178,6 +177,7 @@ type Task struct {
 	PublishedAt   pgtype.Timestamptz
 	PublishTime   pgtype.Time
 	DeadlineAt    pgtype.Timestamptz
+	Categories    []string
 }
 
 type TelegramChat struct {

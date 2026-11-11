@@ -87,30 +87,30 @@ const (
 
 // Task — задание бизнеса.
 type Task struct {
-	ID            int64
-	OwnerID       int64
-	Status        Status
-	RejectReason  string
-	Title         string
-	City          string
-	Nationwide    bool   // «Вся Россия» — город не важен
-	Category      string // slug темы; "" — не выбрана (черновик)
-	Formats       []string
-	Access        string
-	MinViews      int64      // условие выполнения — просмотры
-	RewardKopecks int64      // оплата за выполнение
-	PublishBy     *time.Time // срок публикации (дата, 00:00 UTC); nil — не задан
-	PublishTime   string     // время срока по Москве «ЧЧ:ММ»; "" — до конца дня
-	DeadlineAt    *time.Time // срок целиком в UTC (дата + время или 23:59:59 по Москве)
-	Blocks        []Block
-	Cover         string   // media.id обложки (16:9); "" — нет
-	Photos        []string // media.id примеров «что показать», по порядку
-	CategoryTitle string   // название сферы (в том числе своей, ещё на проверке)
-	Brand         string   // название бизнеса (только в ленте)
-	CreatedAt     time.Time
-	UpdatedAt     time.Time
-	SubmittedAt   *time.Time
-	PublishedAt   *time.Time
+	ID             int64
+	OwnerID        int64
+	Status         Status
+	RejectReason   string
+	Title          string
+	City           string
+	Nationwide     bool     // «Вся Россия» — город не важен
+	Categories     []string // slug сфер по порядку выбора, до 5; пусто — не выбраны (черновик)
+	Formats        []string // форматы: slug из списка (FormatReels…) или своё название, до 3
+	Access         string
+	MinViews       int64      // условие выполнения — просмотры
+	RewardKopecks  int64      // оплата за выполнение
+	PublishBy      *time.Time // срок публикации (дата, 00:00 UTC); nil — не задан
+	PublishTime    string     // время срока по Москве «ЧЧ:ММ»; "" — до конца дня
+	DeadlineAt     *time.Time // срок целиком в UTC (дата + время или 23:59:59 по Москве)
+	Blocks         []Block
+	Cover          string   // media.id обложки (16:9); "" — нет
+	Photos         []string // media.id примеров «что показать», по порядку
+	CategoryTitles []string // названия сфер по порядку (только в ленте и на странице задания)
+	Brand          string   // название бизнеса (только в ленте)
+	CreatedAt      time.Time
+	UpdatedAt      time.Time
+	SubmittedAt    *time.Time
+	PublishedAt    *time.Time
 }
 
 // Platform — площадка автора: вид (по адресу), ссылка, подписчики.
@@ -167,9 +167,9 @@ type FeedCursor struct {
 	ID          int64
 }
 
-// FeedFilter — отбор в ленте; пустое поле — без отбора. Format — только для заданий.
+// FeedFilter — отбор в ленте; пустое поле — без отбора. Formats — только для заданий.
 type FeedFilter struct {
-	Category string // сфера задания или тема анкеты (slug)
-	City     string // город; задания «Вся Россия» подходят любому
-	Format   string // формат публикации задания
+	Categories []string // любая из сфер задания или тем анкеты (slug)
+	City       string   // город; задания «Вся Россия» подходят любому
+	Formats    []string // любой из форматов задания (slug из списка)
 }

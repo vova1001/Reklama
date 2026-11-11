@@ -51,12 +51,12 @@ export async function fetchProfiles(req: Request): Promise<{ business: BusinessP
 }
 
 export type CardFeed = components['schemas']['CardFeed'];
-/** Отбор ленты: сфера (тема), город, формат (только задания); курсор. */
-export interface FeedQuery { category?: string; city?: string; format?: string; cursor?: string }
+/** Отбор ленты: сферы (темы) и форматы (только задания) — любая из выбранных; город; курсор. */
+export interface FeedQuery { category?: string[]; city?: string; format?: string[]; cursor?: string }
 
-const qs = (o: Record<string, string | undefined>) => {
+const qs = (o: Record<string, string | string[] | undefined>) => {
   const p = new URLSearchParams();
-  for (const [k, v] of Object.entries(o)) if (v) p.set(k, v);
+  for (const [k, v] of Object.entries(o)) for (const x of Array.isArray(v) ? v : [v]) if (x) p.append(k, x);
   const s = p.toString();
   return s ? `?${s}` : '';
 };

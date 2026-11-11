@@ -11,7 +11,7 @@ const where = t.nationwide ? 'Вся Россия' : t.city;
 ---
 <article class="it" id={`task-${t.id}`} data-status={t.status}>
   <div class="it-meta">
-    <span>{brand ?? t.brand ? <b>{brand ?? t.brand}</b> : null}{(brand ?? t.brand) && where ? ' · ' : ''}{where}{t.categoryTitle ? ` · ${t.categoryTitle}` : ''}</span>
+    <span>{brand ?? t.brand ? <b>{brand ?? t.brand}</b> : null}{(brand ?? t.brand) && where ? ' · ' : ''}{where}{t.categoryTitles?.length ? ` · ${t.categoryTitles.join(', ')}` : ''}</span>
     {own && <span class="st" data-s={t.status}>{STATUS[t.status]}</span>}
   </div>
   <h2 class="it-t">{href ? <a href={href}>{t.title || 'Без названия'}</a> : t.title}</h2>

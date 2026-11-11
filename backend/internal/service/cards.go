@@ -125,7 +125,7 @@ type CardPage struct {
 	Next  *domain.FeedCursor
 }
 
-// Feed — опубликованные анкеты по отбору (тема — Filter.Category, город), новые сверху.
+// Feed — опубликованные анкеты по отбору (любая из тем — Filter.Categories, город), новые сверху.
 func (s *Cards) Feed(ctx context.Context, q FeedQuery) (CardPage, error) {
 	f, limit, err := feedFilter(q, false)
 	if err != nil {
@@ -154,16 +154,7 @@ func (s *Cards) shape(ctx context.Context, userID int64, exists bool, in CardInp
 	c := domain.CreatorCard{Name: squash(in.Name), City: squash(in.City)}
 	maxLen(ve, "name", c.Name, 80, "Имя — до 80 символов")
 	maxLen(ve, "city", c.City, 80, "Город — до 80 символов")
-	c.Topics = uniq(in.Topics)
-	if len(c.Topics) > maxItems {
-		ve.add("topics", "Не больше 5 тем")
-	}
-	for _, t := range c.Topics {
-		if !reSlug.MatchString(t) {
-			ve.add("topics", "Выберите темы из списка")
-			break
-		}
-	}
+	c.Topics = checkSlugs(ve, "topics", in.Topics, "тем", "Выберите темы из списка")
 	c.Platforms = checkPlatforms(ve, in.Platforms)
 	c.Blocks = checkBlocks(ve, in.Blocks)
 	var sid int64
@@ -183,17 +174,8 @@ func (s *Cards) shape(ctx context.Context, userID int64, exists bool, in CardInp
 	if err := ve.orNil(); err != nil {
 		return domain.CreatorCard{}, err
 	}
-	if len(c.Topics) > 0 {
-		n, custom, err := s.Categories.Usable(ctx, userID, c.Topics)
-		if err != nil {
-			return domain.CreatorCard{}, err
-		}
-		if n != len(c.Topics) {
-			return domain.CreatorCard{}, &ValidationError{Fields: map[string]string{"topics": "Выберите темы из списка"}}
-		}
-		if custom > maxCustomPerItem {
-			return domain.CreatorCard{}, &ValidationError{Fields: map[string]string{"topics": fmt.Sprintf("Своих тем — не больше %d", maxCustomPerItem)}}
-		}
+	if err := checkUsable(ctx, s.Categories, userID, "topics", c.Topics, "Выберите темы из списка", "Своих тем — не больше %d"); err != nil {
+		return domain.CreatorCard{}, err
 	}
 	return c, nil
 }

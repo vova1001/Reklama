@@ -1,9 +1,10 @@
-// Сферы и темы: общий справочник пилюлями + своя. Своя — поле с подсказками похожих (общих и своих), чтобы не
-// плодить дубли; «Добавить …» создаёт её на сервере («на проверке» — видна только вам). multi — несколько
+// Сферы и темы: общий справочник пилюлями с отметкой + своя. Своя — поле с подсказками похожих (общих и своих),
+// чтобы не плодить дубли; «Добавить …» создаёт её на сервере («на проверке» — видна только вам). multi — несколько
 // (до max, своих — до maxCustom), иначе одна.
 import type { components } from '../../lib/api.gen';
 import { api } from '../../lib/client';
 import { guard, toast } from '../../lib/ui';
+import { Combo } from './combo';
 import { appear, h, ic } from './dom';
 
 type Item = components['schemas']['CategoryItem'];
@@ -13,18 +14,16 @@ export interface PickerOptions {
   max: number;
   maxCustom: number;
   label: string; // для читалки: «Сфера», «Темы»
+  addLabel: string; // «Своя», «Своя тема»
   onChange: () => void;
 }
-
-const norm = (s: string) => s.toLowerCase().replace(/ё/g, 'е').replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
 
 export class CategoryPicker {
   private chips: HTMLElement;
   private own = new Map<string, Item>();
-  private combo: HTMLElement | null = null;
 
-  constructor(private root: HTMLElement, common: Item[], own: Item[], selected: string[], private o: PickerOptions) {
-    this.chips = h('div', { class: 'chips', role: 'group', 'aria-label': o.label });
+  constructor(root: HTMLElement, common: Item[], own: Item[], selected: string[], private o: PickerOptions) {
+    this.chips = h('div', { class: 'chips', role: 'group', 'aria-label': `${o.label}${o.multi ? ` — можно несколько, до ${o.max}` : ''}` });
     root.append(this.chips);
     const sel = new Set(selected);
     for (const c of common) this.chips.append(this.chip(c, sel.has(c.slug)));
@@ -33,9 +32,23 @@ export class CategoryPicker {
       // свои показываем, если выбраны или ещё на проверке (отклонённые — только если выбраны)
       if (sel.has(c.slug) || c.status === 'pending_review') this.chips.append(this.chip(c, sel.has(c.slug)));
     }
-    const add = h('button', { class: 'chip chip-add', type: 'button', 'aria-pressed': 'false', html: ic('plus', 18) }, 'Своя');
-    add.addEventListener('click', () => this.openCombo(add));
+    const add = h('button', { class: 'chip chip-add', type: 'button', 'aria-expanded': 'false', html: ic('plus', 18) }, o.addLabel);
     this.chips.append(add);
+    const found = new Map<string, Item>(); // подсказки с сервера — чтобы выбрать по ключу
+    new Combo(root, add, {
+      placeholder: 'Своя — например, «Настольные игры»', label: 'Своя категория', maxlength: 40,
+      search: async (q) => {
+        const r = await api<{ items: Item[] }>('GET', `/api/me/categories/similar?q=${encodeURIComponent(q)}`);
+        if (!r.ok) return guard(r.status) ? [] : r.error.message;
+        r.data.items.forEach((c) => found.set(c.slug, c));
+        return r.data.items.map((c) => ({ key: c.slug, title: c.title, note: c.own ? 'ваша' : undefined }));
+      },
+      pick: (it) => {
+        const c = found.get(it.key);
+        if (c) this.pick(c);
+      },
+      create: (q, err) => this.create(q, err),
+    });
   }
 
   value(): string[] {
@@ -48,7 +61,7 @@ export class CategoryPicker {
   }
 
   private chip(c: Item, on: boolean): HTMLButtonElement {
-    const b = h('button', { class: `chip ${c.own ? 'is-own' : ''}`, type: 'button', 'aria-pressed': String(on), 'data-slug': c.slug, 'data-title': c.title, html: c.own ? ic('tag', 16) : undefined }, c.title);
+    const b = h('button', { class: `chip is-check ${c.own ? 'is-own' : ''}`, type: 'button', 'aria-pressed': String(on), 'data-slug': c.slug, 'data-title': c.title, html: ic('check', 16) }, c.title);
     if (c.own) b.append(h('span', { class: 'chip-note' }, c.status === 'rejected' ? 'отклонена' : 'на проверке'));
     b.addEventListener('click', () => this.toggle(b));
     return b;
@@ -66,94 +79,6 @@ export class CategoryPicker {
     }
     b.setAttribute('aria-pressed', String(on));
     this.o.onChange();
-  }
-
-  // ===== своя: поле с подсказками (combobox) =====
-  private openCombo(add: HTMLButtonElement) {
-    if (this.combo) return this.combo.querySelector('input')!.focus();
-    const id = `cb-${Math.random().toString(36).slice(2, 8)}`;
-    const input = h('input', {
-      class: 'inp', type: 'text', maxlength: '40', placeholder: 'Своя — например, «Настольные игры»', role: 'combobox',
-      'aria-expanded': 'false', 'aria-controls': id, 'aria-autocomplete': 'list', 'aria-label': 'Своя категория', autocomplete: 'off',
-    });
-    const box = h('ul', { class: 'cb-list', id, role: 'listbox', hidden: true });
-    const err = h('p', { class: 'ferr', 'aria-live': 'polite' });
-    const wrap = h('div', { class: 'cb' }, input, box, err);
-    this.combo = wrap;
-    this.root.append(wrap);
-    appear(wrap);
-    add.setAttribute('aria-pressed', 'true');
-    input.focus();
-
-    let opts: { el: HTMLLIElement; run: () => void }[] = [];
-    let active = -1;
-    let timer = 0;
-    let seq = 0;
-    const close = () => {
-      wrap.remove();
-      this.combo = null;
-      add.setAttribute('aria-pressed', 'false');
-      add.focus();
-    };
-    const setActive = (i: number) => {
-      active = i;
-      opts.forEach((o, j) => o.el.setAttribute('aria-selected', String(j === i)));
-      input.setAttribute('aria-activedescendant', i >= 0 ? opts[i].el.id : '');
-    };
-    const render = (items: Item[], q: string) => {
-      box.replaceChildren();
-      opts = [];
-      const exact = items.find((c) => norm(c.title) === norm(q));
-      for (const c of items) {
-        const el = h('li', { role: 'option', id: `${id}-${opts.length}`, 'aria-selected': 'false' }, c.title, c.own ? h('span', { class: 'chip-note' }, 'ваша') : null);
-        opts.push({ el, run: () => this.pick(c) });
-        box.append(el);
-      }
-      if (!exact && q.trim().length >= 2) {
-        const el = h('li', { role: 'option', id: `${id}-${opts.length}`, 'aria-selected': 'false', class: 'cb-new', html: ic('plus', 16) }, `Добавить «${q.trim()}»`);
-        opts.push({ el, run: () => void this.create(q, err).then((ok) => ok && close()) });
-        box.append(el);
-      }
-      opts.forEach((o) => o.el.addEventListener('pointerdown', (e) => {
-        e.preventDefault();
-        o.run();
-        if (!o.el.classList.contains('cb-new')) close();
-      }));
-      box.hidden = opts.length === 0;
-      input.setAttribute('aria-expanded', String(!box.hidden));
-      setActive(opts.length ? 0 : -1);
-    };
-    input.addEventListener('input', () => {
-      err.textContent = '';
-      clearTimeout(timer);
-      const q = input.value;
-      if (q.trim().length < 2) return render([], q);
-      timer = window.setTimeout(async () => {
-        const my = ++seq;
-        const r = await api<{ items: Item[] }>('GET', `/api/me/categories/similar?q=${encodeURIComponent(q)}`);
-        if (my !== seq) return; // пришёл ответ на старый ввод
-        if (!r.ok) return void (guard(r.status) || (err.textContent = r.error.message));
-        render(r.data.items, q);
-      }, 150);
-    });
-    input.addEventListener('keydown', (e) => {
-      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
-        e.preventDefault();
-        if (opts.length) setActive((active + (e.key === 'ArrowDown' ? 1 : -1) + opts.length) % opts.length);
-      } else if (e.key === 'Enter') {
-        e.preventDefault();
-        const o = opts[active];
-        if (!o) return;
-        o.run();
-        if (!o.el.classList.contains('cb-new')) close();
-      } else if (e.key === 'Escape') {
-        e.preventDefault();
-        close();
-      }
-    });
-    input.addEventListener('blur', () => setTimeout(() => {
-      if (this.combo === wrap && !wrap.contains(document.activeElement) && !input.value.trim()) close();
-    }, 150));
   }
 
   /** Выбрать существующую (общую или свою). */

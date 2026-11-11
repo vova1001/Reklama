@@ -20,10 +20,15 @@ test.beforeEach(async ({ context }) => {
   await context.route('https://telegram.org/**', (r) => r.abort());
 });
 
+const MONTHS_GEN = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря'];
 function dateIn(days: number) {
   const d = new Date();
   d.setDate(d.getDate() + days);
-  return { ru: `${String(d.getDate()).padStart(2, '0')}.${String(d.getMonth() + 1).padStart(2, '0')}.${d.getFullYear()}`, iso: d.toISOString().slice(0, 10) };
+  const p = (n: number) => String(n).padStart(2, '0');
+  return {
+    ru: `${p(d.getDate())}.${p(d.getMonth() + 1)}.${d.getFullYear()}`, iso: `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`,
+    label: `${d.getDate()} ${MONTHS_GEN[d.getMonth()]} ${d.getFullYear()}`, month: d.getMonth(),
+  };
 }
 
 async function csrf(page: Page) {
@@ -89,7 +94,7 @@ test('задание: редактор на весь экран, проверк�
   await expect(page.locator('[data-sec="title"]')).toHaveClass(/is-bad/);
   // «Осталось»: слово ведёт к полю
   await left.getByRole('button', { name: 'сфера' }).click();
-  await expect(page.locator('[data-sec="category"]')).toHaveClass(/is-bad/);
+  await expect(page.locator('[data-sec="categories"]')).toHaveClass(/is-bad/);
 
   // первая правка создаёт черновик; ошибка уходит, как только поле заполнено
   await page.getByLabel('Название задания').fill('Сторис о новом осеннем меню');
@@ -105,22 +110,57 @@ test('задание: редактор на весь экран, проверк�
   await page.getByLabel('Город').fill(city);
   await expect(page.locator('[data-err="city"]')).toBeHidden();
 
-  await page.locator('[data-cats] [data-slug]').first().click();
-  await page.getByRole('button', { name: 'Reels' }).click();
-  await page.getByRole('button', { name: 'Shorts' }).click();
+  // разделы формы — с заголовком и подсказкой; подписи и поля крупные
+  await expect(page.locator('.grp-h')).toHaveText(['Основное', 'Условия', 'Описание', 'Фото']);
+  await expect(page.locator('.grp-d').first()).toHaveCSS('font-size', '15px');
+  await expect(page.locator('label[for="t-city"]')).toHaveCSS('font-size', '17px');
+  await expect(page.locator('label[for="t-city"]')).toHaveCSS('font-weight', '600');
+  expect((await page.getByLabel('Город').boundingBox())!.height).toBeGreaterThanOrEqual(52);
+  await expect(page.getByLabel('Город')).toHaveCSS('font-size', '17px');
+
+  // сфер — несколько: отмечены галочкой
+  const cats = page.locator('[data-cats] [data-slug]');
+  await cats.nth(0).click();
+  await cats.nth(1).click();
+  await expect(cats.nth(1)).toHaveAttribute('aria-pressed', 'true');
+  await expect(cats.nth(1).locator('.ic').first()).toHaveCSS('opacity', '1');
+  const slugs = [await cats.nth(0).getAttribute('data-slug'), await cats.nth(1).getAttribute('data-slug')];
+  // форматы — до 3, «+ Свой» с подсказками
+  const fmt = page.locator('[data-formats]');
+  await fmt.getByRole('button', { name: 'Reels' }).click();
+  await fmt.getByRole('button', { name: 'Shorts' }).click();
+  await fmt.getByRole('button', { name: 'Свой' }).click();
+  const fcb = page.getByRole('combobox', { name: 'Свой формат' });
+  await fcb.fill('прямой эф');
+  await expect(page.getByRole('option', { name: 'Прямой эфир' })).toBeVisible();
+  await fcb.press('Enter');
+  await expect(fmt.locator('.chip.is-own[aria-pressed="true"]')).toHaveText('Прямой эфир');
+  await fmt.getByRole('button', { name: 'TikTok' }).click();
+  await expect(page.locator('[data-toast]')).toContainText('Не больше 3 форматов');
+  await expect(fmt.getByRole('button', { name: 'TikTok' })).toHaveAttribute('aria-pressed', 'false');
   await page.getByRole('radio', { name: 'С одобрением' }).click();
   await page.getByLabel('Просмотры от').fill('5000');
   await expect(page.getByLabel('Просмотры от')).toHaveValue('5 000');
   await page.getByLabel('Оплата').fill('3000');
   await expect(page.getByLabel('Лайки от')).toHaveCount(0); // условие — только просмотры
-  // срок обязателен: от завтра до 90 дней; время — по желанию
-  await page.getByLabel('Срок публикации').fill(dateIn(120).ru);
-  await page.getByLabel('Время (по Москве)').focus();
-  await expect(page.locator('[data-err="publishBy"]')).toHaveText('Срок — от завтра до 90 дней');
-  await page.getByRole('button', { name: 'Неделя' }).click();
-  await expect(page.getByLabel('Срок публикации')).toHaveValue(dateIn(7).ru);
-  await page.getByLabel('Время (по Москве)').fill('1830');
-  await expect(page.getByLabel('Время (по Москве)')).toHaveValue('18:30');
+  // срок обязателен: пилюли или «+ Свой» — свой календарь (от завтра до 90 дней) и время по желанию;
+  // без «Своего» поля даты не видно
+  const due = page.locator('[data-due]');
+  await expect(due.locator('[data-due-panel]')).toBeHidden();
+  await due.getByRole('button', { name: 'Неделя' }).click();
+  await expect(due.getByRole('button', { name: 'Неделя' })).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.locator('input[name="publishBy"]')).toHaveValue(dateIn(7).ru);
+  await due.getByRole('button', { name: 'Свой' }).click();
+  await expect(due.locator('[data-due-panel]')).toBeVisible();
+  await expect(due.getByRole('button', { name: 'Свой' })).toHaveAttribute('aria-pressed', 'true');
+  await expect(due.getByRole('button', { name: dateIn(0).label, exact: true })).toBeDisabled(); // сегодня — нельзя
+  if (dateIn(10).month !== dateIn(7).month) await due.getByRole('button', { name: 'Следующий месяц' }).click();
+  await due.getByRole('button', { name: dateIn(10).label, exact: true }).click();
+  await expect(due.getByRole('button', { name: dateIn(10).label, exact: true })).toHaveAttribute('aria-pressed', 'true');
+  await page.getByLabel('Время').fill('1830');
+  await expect(page.getByLabel('Время')).toHaveValue('18:30');
+  await expect(due.locator('[data-due-sum]')).toContainText('18:30 по Москве');
+  await expect(page.locator('input[name="publishBy"]')).toHaveValue(dateIn(10).ru);
   await expect(page.locator('[data-err="publishBy"]')).toBeHidden();
   await expect(left).toContainText('Осталось: описание');
 
@@ -180,10 +220,11 @@ test('задание: редактор на весь экран, проверк�
 
   const draft = await (await page.request.get(`/api/me/tasks/${id}`)).json();
   expect(draft.status).toBe('draft');
-  expect(draft.formats).toEqual(['reels', 'shorts']);
+  expect(draft.formats).toEqual(['reels', 'shorts', 'Прямой эфир']);
+  expect(draft.categories).toEqual(slugs);
   expect(draft.access).toBe('approval');
   expect(draft.rewardKopecks).toBe(300000);
-  expect(draft.publishBy).toBe(dateIn(7).iso);
+  expect(draft.publishBy).toBe(dateIn(10).iso);
   expect(draft.publishTime).toBe('18:30');
   expect(draft.deadlineAt).toBeTruthy();
   expect(draft.minLikes).toBeUndefined();
@@ -226,6 +267,10 @@ test('задание: редактор на весь экран, проверк�
   await expectTileSummary(other, tile, /3\s000\s₽/, info);
   await other.goto('/app?city=Нетакогогорода');
   await expect(other.locator(`[data-tile="${id}"]`)).toHaveCount(0);
+  // отбор по нескольким сферам — подходит любая из выбранных
+  await other.goto(`/app?city=${encodeURIComponent(city)}&category=${slugs[1]}&category=nosuch-cat`);
+  await expect(other.locator(`[data-tile="${id}"]`)).toHaveCount(1);
+  await expect(other.locator('.pk-btn').first()).toHaveAttribute('data-on', '1');
   // нажатие — страница задания целиком
   await other.goto(`/app?city=${encodeURIComponent(city)}`);
   await other.locator(`[data-tile="${id}"] a`).click();
@@ -235,6 +280,31 @@ test('задание: редактор на весь экран, проверк�
   await expect(other.locator('.terms')).toContainText(/до \d+ [а-я]+, 18:30/);
   await expect(other.locator('.terms')).not.toContainText('лайк');
   await expect(other.locator('.body-b h3')).toHaveText(['Описание', 'Что показать', 'Хештеги']);
+  await expect(other.locator('.terms')).toContainText('Reels, Shorts, Прямой эфир');
+  // фото — поверх страницы: счётчик, стрелки и клавиши, миниатюры; Esc — закрыть, фокус — обратно; без новых вкладок
+  const photo2 = other.locator('.body-ph [data-lb]').first();
+  await photo2.click();
+  const lb = other.getByRole('dialog', { name: 'Просмотр фото' });
+  await expect(lb).toBeVisible();
+  await expect(lb.locator('.lb-count')).toHaveText('2 / 3'); // обложка — первая
+  await expect(lb.locator('.lb-th')).toHaveCount(3);
+  await expect(lb.locator('.lb-th').nth(1)).toHaveAttribute('aria-current', 'true');
+  await other.keyboard.press('ArrowRight');
+  await expect(lb.locator('.lb-count')).toHaveText('3 / 3');
+  await expect(lb.getByRole('button', { name: 'Следующее фото' })).toBeDisabled();
+  await lb.getByRole('button', { name: 'Предыдущее фото' }).click();
+  await lb.getByRole('button', { name: 'Фото 1 из 3' }).click();
+  await expect(lb.locator('.lb-count')).toHaveText('1 / 3');
+  await expect(lb.locator('.lb-img')).toHaveAttribute('src', /\/media\/.+\/800\.webp/);
+  await other.keyboard.press('Escape');
+  await expect(lb).toBeHidden();
+  await expect(photo2).toBeFocused();
+  expect(other.context().pages()).toHaveLength(1);
+  // щелчок по фону — закрыть
+  await other.locator('.page-cover-b').click();
+  await expect(lb.locator('.lb-count')).toHaveText('1 / 3');
+  await lb.locator('.lb-stage').click({ position: { x: 4, y: 4 } });
+  await expect(lb).toBeHidden();
   await other.getByRole('button', { name: 'Откликнуться' }).click();
   await expect(other.locator('[data-toast]')).toContainText('Отклики появятся');
 
@@ -270,7 +340,7 @@ test('черновик: сохраняется сам, ✕ закрывает, �
   await expect(page.locator('[data-blocks] .bi-in').first()).toHaveValue('Пока только идея');
   // «Опубликовать» — ошибки у всех незаполненных, курсор — в первом
   await page.getByRole('button', { name: 'Опубликовать' }).click();
-  await expect(page.locator('[data-err="category"]')).toHaveText('Выберите сферу');
+  await expect(page.locator('[data-err="categories"]')).toHaveText('Выберите сферу');
   await expect(page.locator('[data-err="reward"]')).toHaveText('Оплата — от 100 ₽');
   await expect(page.locator('[data-err="title"]')).toBeHidden();
   await expect(page.locator('[data-left]')).toContainText('и ещё');
@@ -322,10 +392,10 @@ test('анкета автора: из профиля, текст без Enter, �
   // фото
   await page.locator('[data-cover] input[type=file]').setInputFiles(fixture('portrait.jpg'));
   await page.getByRole('dialog', { name: 'Кадрирование' }).getByRole('button', { name: 'Готово' }).click();
-  await page.locator('[data-photos] input[type=file]').setInputFiles([fixture('photo.jpg')]);
-  await expect(page.locator('[data-cover] .up-t[data-id], [data-photos] .up-t[data-id]')).toHaveCount(2, { timeout: 20_000 });
+  await page.locator('[data-photos] input[type=file]').setInputFiles([fixture('photo.jpg'), fixture('portrait.jpg')]);
+  await expect(page.locator('[data-cover] .up-t[data-id], [data-photos] .up-t[data-id]')).toHaveCount(3, { timeout: 20_000 });
   await saved(page);
-  await expect.poll(async () => (await (await page.request.get('/api/me/card')).json()).card?.works.length, { timeout: 10_000 }).toBe(1);
+  await expect.poll(async () => (await (await page.request.get('/api/me/card')).json()).card?.works.length, { timeout: 10_000 }).toBe(2);
   const card = (await (await page.request.get('/api/me/card')).json()).card;
   expect(card.platforms).toEqual([{ kind: 'telegram', url: 'https://t.me/alina', followers: 12000 }]);
   expect(card.blocks[0].items).toEqual(['Снимаю еду и городские места']);
@@ -348,6 +418,14 @@ test('анкета автора: из профиля, текст без Enter, �
   await expect(biz.getByRole('heading', { level: 1, name: 'Алина' })).toBeVisible();
   await expect(biz.locator('.pv-tags')).toContainText('Настольные игры');
   await expect(biz.locator('.rows')).toContainText(/12\s000 подписч\./);
+  // портфолио — просмотр поверх страницы, листание
+  await biz.locator('.body-ph [data-lb]').nth(1).click();
+  const lb = biz.getByRole('dialog', { name: 'Просмотр фото' });
+  await expect(lb.locator('.lb-count')).toHaveText('2 / 2');
+  await biz.keyboard.press('ArrowLeft');
+  await expect(lb.locator('.lb-count')).toHaveText('1 / 2');
+  await lb.getByRole('button', { name: 'Закрыть' }).click();
+  await expect(lb).toBeHidden();
   await biz.getByRole('button', { name: 'Предложить задание' }).click();
   await expect(biz.locator('[data-toast]')).toContainText('Предложения появятся');
   // фото опубликованной анкеты — всем
@@ -371,6 +449,10 @@ test('черновик формы: заполнить → обновить → �
   await page.getByLabel('Название задания').fill('Кофе');
   await page.locator('[data-cats] [data-slug]').nth(1).click();
   await page.getByRole('button', { name: 'TikTok' }).click();
+  await page.locator('[data-formats]').getByRole('button', { name: 'Свой' }).click();
+  await page.getByRole('combobox', { name: 'Свой формат' }).fill('Распаковка кофе');
+  await page.getByRole('option', { name: 'Добавить «Распаковка кофе»' }).click();
+  await page.locator('[data-due]').getByRole('button', { name: '2 недели' }).click();
   await page.getByLabel('Просмотры от').fill('7000');
   const blocks = page.locator('[data-blocks] .bk');
   await blocks.nth(1).locator('.bi-in').first().fill('Бариста');
@@ -389,6 +471,10 @@ test('черновик формы: заполнить → обновить → �
   await expect(page.getByLabel('Название задания')).toHaveValue('Кофе');
   await expect(page.getByLabel('Просмотры от')).toHaveValue('7 000');
   await expect(page.getByRole('button', { name: 'TikTok' })).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.locator('[data-formats] .chip.is-own')).toHaveText('Распаковка кофе');
+  await expect(page.locator('[data-formats] .chip.is-own')).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.locator('[data-due]').getByRole('button', { name: '2 недели' })).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.locator('[data-due-panel]')).toBeHidden();
   await expect(page.locator(`[data-cats] [data-slug="${slug}"]`)).toHaveAttribute('aria-pressed', 'true');
   await expect.poll(() => vals(page.locator('[data-blocks] .bk-title'))).toEqual(['Описание', 'Что показать', 'Сроки']);
   await expect.poll(() => vals(page.locator('[data-blocks] .bk').nth(1).locator('.bi-in'))).toEqual(['Латте-арт', 'Бариста']);
@@ -447,14 +533,25 @@ test('сервер проверяет сам: неполное — 400 по по
   await login(page, uniq(info.project.name, 'api'));
   const csrf = (await (await page.request.get('/api/auth/config')).json()).csrfToken;
   const h = { 'X-CSRF-Token': csrf };
-  const base = { title: '', city: '', nationwide: false, category: '', formats: [], access: 'open', minViews: 0, rewardKopecks: 0, publishBy: '', blocks: [], cover: '', photos: [] };
+  const base = { title: '', city: '', nationwide: false, categories: [] as string[], formats: [] as string[], access: 'open', minViews: 0, rewardKopecks: 0, publishBy: '', blocks: [], cover: '', photos: [] };
   const created = await page.request.post('/api/me/tasks', { headers: h, data: base });
   expect(created.status()).toBe(201);
   const { id } = await created.json();
   const sub = await page.request.post(`/api/me/tasks/${id}/submit`, { headers: h });
   expect(sub.status()).toBe(400);
   const f = (await sub.json()).error.fields;
-  for (const k of ['title', 'city', 'category', 'formats', 'minViews', 'reward', 'publishBy', 'blocks']) expect(f[k], k).toBeTruthy();
+  for (const k of ['title', 'city', 'categories', 'formats', 'minViews', 'reward', 'publishBy', 'blocks']) expect(f[k], k).toBeTruthy();
+  // свои форматы: нормализуются, до 3; сфер — до 5
+  const norm = await page.request.put(`/api/me/tasks/${id}`, { headers: h, data: { ...base, formats: [' Reels', '  прямой   эфир ', 'обзор кофе', 'reels'] } });
+  expect((await norm.json()).formats).toEqual(['reels', 'Прямой эфир', 'Обзор кофе']);
+  const many = await page.request.put(`/api/me/tasks/${id}`, { headers: h, data: { ...base, formats: ['reels', 'shorts', 'tiktok', 'Обзор'] } });
+  expect((await many.json()).error.fields.formats).toBe('Не больше 3 форматов');
+  const link = await page.request.put(`/api/me/tasks/${id}`, { headers: h, data: { ...base, formats: ['vk.com/x'] } });
+  expect((await link.json()).error.fields.formats).toBeTruthy();
+  const cats = await page.request.put(`/api/me/tasks/${id}`, { headers: h, data: { ...base, categories: ['a', 'b', 'c', 'd', 'e', 'f'] } });
+  expect((await cats.json()).error.fields.categories).toBe('Не больше 5 сфер');
+  const hints = await (await page.request.get('/api/me/formats/similar?q=' + encodeURIComponent('обзор'))).json();
+  expect(hints.items.map((x: { title: string }) => x.title)).toEqual(expect.arrayContaining(['Обзор', 'Обзор кофе']));
   const bad = await page.request.put(`/api/me/tasks/${id}`, { headers: h, data: { ...base, blocks: [{ kind: 'links', title: 'x', items: ['javascript:alert(1)'] }] } });
   expect((await bad.json()).error.fields['blocks.0']).toBeTruthy();
   expect((await page.request.put(`/api/me/tasks/${id}`, { headers: h, data: { ...base, status: 'published' } })).status()).toBe(400);

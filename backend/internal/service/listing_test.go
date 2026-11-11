@@ -33,7 +33,7 @@ var biz = domain.User{ID: 7, ActiveMode: domain.ModeBusiness}
 
 func fullTask() TaskInput {
 	return TaskInput{
-		Title: "  Сторис  о новом меню ", City: "Казань", Category: "food", Formats: []string{"reels", "shorts", "reels"},
+		Title: "  Сторис  о новом меню ", City: "Казань", Categories: []string{"food"}, Formats: []string{"reels", "shorts", "reels"},
 		Access: "approval", MinViews: 5000, RewardKopecks: 300000, PublishBy: "2026-11-20",
 		Blocks: []domain.Block{
 			{Kind: domain.BlockText, Title: "Описание", Items: []string{"Снимите  завтрак", " "}},
@@ -63,7 +63,7 @@ func TestTaskLifecycle(t *testing.T) {
 	}
 	// неполный — на проверку нельзя, ошибки по полям
 	f := fields(t, func() error { _, err := e.tasks.Submit(ctx, biz, d.ID); return err }())
-	for _, k := range []string{"title", "city", "category", "formats", "minViews", "reward", "publishBy", "blocks"} {
+	for _, k := range []string{"title", "city", "categories", "formats", "minViews", "reward", "publishBy", "blocks"} {
 		if f[k] == "" {
 			t.Errorf("нет ошибки %s: %v", k, f)
 		}
@@ -165,14 +165,18 @@ func TestTaskShape(t *testing.T) {
 		field string
 	}{
 		{"название", func(in *TaskInput) { in.Title = long }, "title"},
-		{"формат", func(in *TaskInput) { in.Formats = []string{"reels", "gif"} }, "formats"},
+		{"свой формат короткий", func(in *TaskInput) { in.Formats = []string{"reels", "я"} }, "formats"},
+		{"свой формат ссылка", func(in *TaskInput) { in.Formats = []string{"vk.com/clip"} }, "formats"},
+		{"свой формат без букв", func(in *TaskInput) { in.Formats = []string{"123"} }, "formats"},
+		{"форматов много", func(in *TaskInput) { in.Formats = []string{"reels", "shorts", "tiktok", "Stories"} }, "formats"},
+		{"сфер много", func(in *TaskInput) { in.Categories = []string{"a", "b", "c", "d", "e", "f"} }, "categories"},
 		{"тип", func(in *TaskInput) { in.Access = "vip" }, "access"},
 		{"просмотры", func(in *TaskInput) { in.MinViews = -1 }, "minViews"},
 		{"время срока", func(in *TaskInput) { in.PublishTime = "25:00" }, "publishTime"},
 		{"оплата", func(in *TaskInput) { in.RewardKopecks = 2e8 }, "reward"},
 		{"дата", func(in *TaskInput) { in.PublishBy = "20.11.2026" }, "publishBy"},
-		{"сфера не slug", func(in *TaskInput) { in.Category = "Еда" }, "category"},
-		{"сфера не из списка", func(in *TaskInput) { in.Category = "cars" }, "category"},
+		{"сфера не slug", func(in *TaskInput) { in.Categories = []string{"food", "Еда"} }, "categories"},
+		{"сфера не из списка", func(in *TaskInput) { in.Categories = []string{"food", "cars"} }, "categories"},
 		{"блоков много", func(in *TaskInput) { in.Blocks = many }, "blocks"},
 		{"вид блока", func(in *TaskInput) { in.Blocks = []domain.Block{{Kind: "html", Items: []string{"x"}}} }, "blocks.0"},
 		{"заголовок блока", func(in *TaskInput) { in.Blocks = []domain.Block{{Kind: "list", Title: long}} }, "blocks.0"},

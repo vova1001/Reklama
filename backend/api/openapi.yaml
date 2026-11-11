@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: Охват API
-  version: 0.7.0
+  version: 0.8.0
   description: |
     API площадки «Охват»: данные главной, регистрация и вход (почта с кодом, Telegram, Google), приложение после входа:
     один аккаунт — два режима («Бизнес» и «Автор»), профили режимов заполняются, когда понадобятся.
@@ -410,15 +410,16 @@ paths:
       summary: Лента опубликованных заданий
       description: |
         Новые сверху. Курсор `next` из ответа — в параметр `cursor` следующего запроса. Отбор (пусто — без отбора):
-        сфера, город (без регистра; задания «Вся Россия» подходят любому городу), формат. Неверный отбор — 400 с `fields`.
+        любая из сфер (`category` повторяется, до 5), город (без регистра; задания «Вся Россия» подходят любому городу),
+        любой из форматов списка (`format` повторяется). Неверный отбор — 400 с `fields`.
       operationId: getFeed
       tags: [tasks]
       parameters:
         - { name: cursor, in: query, schema: { type: string } }
         - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 50, default: 20 } }
-        - { name: category, in: query, schema: { type: string }, description: slug сферы }
+        - { name: category, in: query, style: form, explode: true, schema: { type: array, maxItems: 5, items: { type: string } }, description: slug сфер }
         - { name: city, in: query, schema: { type: string, maxLength: 80 } }
-        - { name: format, in: query, schema: { $ref: "#/components/schemas/TaskFormat" } }
+        - { name: format, in: query, style: form, explode: true, schema: { type: array, items: { $ref: "#/components/schemas/TaskFormat" } } }
       responses:
         "200":
           description: Страница ленты
@@ -436,7 +437,7 @@ paths:
       tags: [tasks]
       responses:
         "200":
-          description: Задание (с `brand` и `categoryTitle`)
+          description: Задание (с `brand` и `categoryTitles`)
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Task" }
@@ -452,7 +453,7 @@ paths:
       parameters:
         - { name: cursor, in: query, schema: { type: string } }
         - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 50, default: 20 } }
-        - { name: topic, in: query, schema: { type: string }, description: slug темы }
+        - { name: topic, in: query, style: form, explode: true, schema: { type: array, maxItems: 5, items: { type: string } }, description: slug тем — любая из них }
         - { name: city, in: query, schema: { type: string, maxLength: 80 } }
       responses:
         "200":
@@ -804,6 +805,28 @@ paths:
                 required: [items]
                 properties:
                   items: { type: array, items: { $ref: "#/components/schemas/CategoryItem" } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+  /api/me/formats/similar:
+    get:
+      summary: Подсказки своего формата
+      description: |
+        До 6 похожих на запрос: форматы списка (`builtin`), известные и свои, уже использованные бизнесом (`own`).
+        `id` выбранной подсказки передаётся в `TaskInput.formats` как есть.
+      operationId: similarFormats
+      tags: [tasks]
+      security: [{ session: [] }]
+      parameters:
+        - { name: q, in: query, required: true, schema: { type: string, maxLength: 200 } }
+      responses:
+        "200":
+          description: Подсказки
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items: { type: array, items: { $ref: "#/components/schemas/FormatItem" } }
         "401": { $ref: "#/components/responses/Unauthorized" }
   /api/me/media:
     post:
@@ -1248,17 +1271,33 @@ components:
     TaskFormat:
       type: string
       enum: [reels, shorts, youtube, vk_clips, tiktok, telegram]
+      description: Форматы списка (отбор ленты)
+    FormatItem:
+      type: object
+      required: [id, title, builtin, own]
+      properties:
+        id: { type: string, description: "slug формата списка или название своего" }
+        title: { type: string }
+        builtin: { type: boolean }
+        own: { type: boolean, description: Уже использован бизнесом }
     TaskInput:
       type: object
-      required: [title, city, nationwide, category, formats, access, minViews, rewardKopecks, publishBy, publishTime, blocks, cover, photos]
+      required: [title, city, nationwide, categories, formats, access, minViews, rewardKopecks, publishBy, publishTime, blocks, cover, photos]
       additionalProperties: false
       description: Черновик может быть неполным; ограничения формы проверяются всегда, обязательность — при отправке.
       properties:
         title: { type: string, maxLength: 100 }
         city: { type: string, maxLength: 80 }
         nationwide: { type: boolean, description: "«Вся Россия»" }
-        category: { type: string, description: "slug общей или своей категории; \"\" — не выбрана" }
-        formats: { type: array, items: { $ref: "#/components/schemas/TaskFormat" } }
+        categories: { type: array, maxItems: 5, items: { type: string }, description: "slug общих или своих категорий (своих — до 3), по порядку выбора; к отправке — хотя бы одна" }
+        formats:
+          type: array
+          maxItems: 3
+          items: { type: string, maxLength: 30 }
+          description: |
+            Slug формата списка (`TaskFormat`) или своё название (2–30 символов, буквы; без ссылок). Сервер нормализует:
+            название формата списка → его slug, известное — его написание, своё — без лишних пробелов, с заглавной;
+            повторы (без учёта регистра и ё) отбрасываются.
         access: { type: string, enum: [open, approval, ""] }
         minViews: { type: integer, format: int64, minimum: 0, maximum: 1000000000, description: Условие выполнения — просмотры }
         rewardKopecks: { type: integer, format: int64, minimum: 0, maximum: 100000000 }
@@ -1269,7 +1308,7 @@ components:
         photos: { type: array, maxItems: 6, items: { type: string }, description: id фото task_photo по порядку }
     Task:
       type: object
-      required: [id, status, rejectReason, title, city, nationwide, category, formats, access, minViews, rewardKopecks, publishBy, publishTime, deadlineAt, blocks, cover, photos, createdAt, updatedAt, submittedAt, publishedAt]
+      required: [id, status, rejectReason, title, city, nationwide, categories, formats, access, minViews, rewardKopecks, publishBy, publishTime, deadlineAt, blocks, cover, photos, createdAt, updatedAt, submittedAt, publishedAt]
       properties:
         id: { type: integer, format: int64 }
         status: { $ref: "#/components/schemas/Status" }
@@ -1277,9 +1316,9 @@ components:
         title: { type: string }
         city: { type: string }
         nationwide: { type: boolean }
-        category: { type: string }
-        categoryTitle: { type: string, description: Только в ленте }
-        formats: { type: array, items: { $ref: "#/components/schemas/TaskFormat" } }
+        categories: { type: array, items: { type: string } }
+        categoryTitles: { type: array, items: { type: string }, description: Названия сфер по порядку (только в ленте и на странице задания) }
+        formats: { type: array, items: { type: string }, description: Slug формата списка или своё название }
         access: { type: string, enum: [open, approval] }
         minViews: { type: integer, format: int64 }
         rewardKopecks: { type: integer, format: int64 }

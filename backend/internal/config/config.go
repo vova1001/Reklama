@@ -83,6 +83,10 @@ type Config struct {
 	DraftBurst    int     // RATE_LIMIT_DRAFT_BURST, 30
 	Moderation    string  // MODERATION_MODE: auto (сразу публикуется) | manual (ждёт модератора), auto
 
+	// KEEPALIVE_URL — публичный адрес сайта для самопинга (GET …/healthz раз в 10 минут через прокси хостинга,
+	// чтобы бесплатный сервис не засыпал); пусто — выключено.
+	KeepAliveURL string
+
 	MediaStore      string  // MEDIA_STORE: postgres | s3 (postgres)
 	StorageEndpoint string  // STORAGE_ENDPOINT — https://… (R2, Яндекс Object Storage, MinIO)
 	StorageBucket   string  // STORAGE_BUCKET
@@ -342,6 +346,12 @@ func load(get func(string) string) (Config, error) {
 		}
 	default:
 		errs = append(errs, errors.New("MEDIA_STORE: postgres или s3"))
+	}
+	c.KeepAliveURL = strings.TrimRight(strings.TrimSpace(get("KEEPALIVE_URL")), "/")
+	if c.KeepAliveURL != "" {
+		if u, err := url.Parse(c.KeepAliveURL); err != nil || u.Host == "" || (u.Scheme != "http" && u.Scheme != "https") || u.User != nil || (u.Path != "" && u.Path != "/") {
+			errs = append(errs, errors.New("KEEPALIVE_URL: адрес вида https://example.ru без пути (обычно = PUBLIC_URL) или пусто"))
+		}
 	}
 	c.RedisURL = strings.TrimSpace(get("REDIS_URL"))
 	if c.RedisURL != "" && !strings.HasPrefix(c.RedisURL, "redis://") && !strings.HasPrefix(c.RedisURL, "rediss://") {

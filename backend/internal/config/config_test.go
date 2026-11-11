@@ -154,3 +154,21 @@ func TestLimitsAndRedis(t *testing.T) {
 		}
 	}
 }
+
+func TestKeepAlive(t *testing.T) {
+	base := map[string]string{"DATABASE_URL": "postgres://x"}
+	if cfg, err := load(env(base)); err != nil || cfg.KeepAliveURL != "" {
+		t.Fatalf("по умолчанию выключено: %v %q", err, cfg.KeepAliveURL)
+	}
+	with := func(v string) map[string]string {
+		return map[string]string{"DATABASE_URL": "postgres://x", "KEEPALIVE_URL": v}
+	}
+	if cfg, err := load(env(with(" https://ohvat.onrender.com/ "))); err != nil || cfg.KeepAliveURL != "https://ohvat.onrender.com" {
+		t.Errorf("адрес: %v %q", err, cfg.KeepAliveURL)
+	}
+	for _, v := range []string{"ohvat.ru", "ftp://ohvat.ru", "https://ohvat.ru/healthz", "https://u:p@ohvat.ru"} {
+		if _, err := load(env(with(v))); err == nil || !strings.Contains(err.Error(), "KEEPALIVE_URL") {
+			t.Errorf("%q: %v", v, err)
+		}
+	}
+}

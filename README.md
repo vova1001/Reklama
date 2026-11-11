@@ -60,3 +60,7 @@ project/    бриф, ТЗ, макет, задачи (handoff/), architecture.md
 Лимиты фото и заданий — `MEDIA_*`, `RATE_LIMIT_UPLOAD_*`, `TASKS_MAX_PER_USER`, `MODERATION_SUBMITS_PER_DAY`.
 Redis (`REDIS_URL`; локально — сервис `redis` в docker-compose, на Render — Key Value `ohvat-kv`) — лимиты и черновики
 форм редактора; без него — память процесса и PostgreSQL. Проверка заданий и анкет — `MODERATION_MODE`: `auto` (по умолчанию, сразу публикуются) или `manual` (ждут модератора).
+
+Бесплатный Render усыпляет сервис через 15 минут без запросов: `KEEPALIVE_URL` (= `PUBLIC_URL`) включает самопинг —
+бэкенд раз в 10 минут запрашивает `KEEPALIVE_URL/healthz` через публичный адрес (в журнал — только ошибки); пусто —
+выключено. Workflow `.github/workflows/keepalive.yml` — запасной.
