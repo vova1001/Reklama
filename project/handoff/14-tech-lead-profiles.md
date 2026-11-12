@@ -14,3 +14,36 @@
 4. Видео: проверка типа и размера, без перекодирования (пока), хранение через тот же Storage, постер-кадр по возможности; встраивание YouTube/VK — только по белому списку доменов, безопасный iframe.
 5. Slug: латиница/цифры/дефис, уникальный, по умолчанию из названия/имени, можно изменить, старый — редирект.
 - Go три слоя, интерфейсы, миграция, OpenAPI, тесты (-race), e2e (бизнес собирает страницу с блоками и фото → публикуется → виден по ссылке; автор — профиль с каналами). Экономно: коммиты по частям, полный e2e один раз, без скриншотов. Не пушить. Отчёт 3 строки + дерево по слоям.
+
+## Отчёт (техлид)
+- **Сделано:** страница бизнеса `/b/<slug>` и профиль автора `/c/<slug>` — конструктор блоков в том же полноэкранном редакторе (добавить / перетащить / удалить с возвратом, черновик без потерь, «Как увидят»): бизнес — «О компании», «Фото», «Видео», «Адрес и контакты», «Факты», «Заголовок + текст», шапка (обложка 3:1, логотип, название, сферы, город) и открытые задания; автор — «О себе», подтверждённые каналы (сами), «Что могу рекламировать», «Примеры работ» (фото, видео, ссылки), «Отзывы» (заглушка), «Анкета» (сама). Проверка как у анкет (auto — сразу; правка — новая версия, старая видна; в админке — «Страница» / «Правка страницы»). Видео — MP4/WebM по содержимому до `VIDEO_MAX_MB` без перекодирования, заставка — кадр из браузера; YouTube/VK — только белый список, iframe строит сервер, `sandbox`. Адрес — латиница, уникальный, из названия, меняется, прежний → 301. Ссылки: задание (страница и лента) → бизнес, анкета (лента и страница) → профиль; «Страницы» в профиле, «Моя страница» в меню. Миграция 00014, OpenAPI 0.11.0.
+- **Проверено:** `make test` (-race, PostgreSQL + Redis, миграции up/down/up) — зелёные, покрытие 84,3%; `astro check` — 0 ошибок; e2e один полный прогон 1440/768/375 — 123 пройдено, 2 пропущены по замыслу, 1 падение — давний нестабильный `social.spec` (ожидание ответа бота, при повторе проходит); новые: бизнес собирает страницу с фото и видео → публикуется → виден гостю по ссылке, адрес меняется (301), со страницы задания — на страницу бизнеса; автор — профиль с подтверждённым каналом. Скриншоты не делались.
+- **Вопросы / сверх задачи:** 1) профиль автора открыт всем по ссылке без входа (как страница бизнеса), а анкеты — только после входа: так подходит? 2) видео с iPhone (MOV) не принимается — только MP4/WebM, как в задаче; принимать MOV? 3) на Render `VIDEO_MAX_MB=30` (база маленькая; для видео лучше S3 — `MEDIA_STORE=s3`). Сверх: телефон в «Адресе и контактах»; адрес можно менять не больше 10 раз (прежние за страницей навсегда); у правки страницы — замечания модератора по полям, как у анкеты.
+
+### Изменения по слоям
+```
+backend/
+  migrations/00014_profile_pages.sql  profile_pages (шапка, блоки jsonb, media[], правка), page_slugs (все адреса),
+                                      назначения и предмет «page» у media, moderation_log, review_decisions; review_queue + page, page_revision
+  queries/pages.sql нов.; media.sql (кому видно файлы страницы) → store/pages.sql.go (sqlc)
+  domain/   page.go нов. (виды и блоки, видео, ParseVideoLink/EmbedURL — белый список, SlugFrom, ValidPageSlug, PageMedia);
+            media.go (page_logo/page_cover/page_photo/video_poster/page_video, VideoKey); admin.go (KindPage, KindPageRevision, поля замечаний);
+            listing.go (Task.BrandSlug, CreatorCard.PageSlug)
+  repository/pages.go нов. (страница, адреса, статусы и правка в транзакции, прикрепление файлов, публичная, адреса для ленты, открытые задания)
+  service/  pages.go, pages_check.go нов. (Pages за PageRepository: редактор, адрес, отправка, снятие, правка, публичный вид; проверка блоков);
+            media.go (UploadVideo: тип по содержимому, слоты, квота; видео в Open/очистке); moderation.go (WithPages); review.go (страницы в очереди,
+            карточке, уведомлении); tasks.go/cards.go (PageLinker → brandSlug/pageSlug); drafts.go (page-business, page-creator); notices.go, bot_texts.go
+  transport/http/ pages.go, pages_dto.go нов. (/api/me/pages/{kind}[/slug|/submit|/withdraw|/revision], GET /api/pages/{kind}/{slug},
+            POST /api/me/media/video); media.go (GET /media/{id}/video с Range); server.go; admin.go (page, livePage); listing_dto.go
+  config — VIDEO_MAX_MB; cmd/server — сборка Pages, PageLinks, модерация и проверка страниц; api/openapi.yaml 0.11.0
+  тесты: domain/page_test, service/pages_test (+ фейки), repository/pages_test (PostgreSQL), transport/http/pages_test
+frontend/src/
+  pages/app/page.astro нов. (редактор / вид с действиями); pages/b/[slug].astro, pages/c/[slug].astro нов.; layouts/Showcase.astro нов.
+  components/page/PageView.astro, PageMissing.astro нов.; components/app/PageForm.astro нов.; TaskPage, TaskTile, CreatorPage, CreatorTile
+    (ссылки на страницы), AccountMenu («Моя страница»); pages/app/profile.astro («Страницы»); pages/admin/review/[kind]/[id].astro
+  scripts/page-editor.ts нов.; scripts/editor/page-blocks.ts, video.ts нов.; editor/dom.ts (иконки)
+  content/app.ts (блоки, правила, пути); lib/auth.ts (fetchMyPage, fetchPublicPage); lib/admin.ts; lib/api.gen.ts; styles/app.css
+  tests/e2e/pages.spec.ts нов.
+окружение: .env.example, docker-compose*.yml, render.yaml (VIDEO_MAX_MB), deploy/nginx.conf, deploy/render/nginx.conf.template,
+  deploy/Caddyfile (загрузка видео); project/architecture.md, project/design/tokens.md
+```
