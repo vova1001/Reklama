@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: Охват API
-  version: 0.9.0
+  version: 0.10.0
   description: |
     API площадки «Охват»: данные главной, регистрация и вход (почта с кодом, Telegram, Google), приложение после входа:
     один аккаунт — два режима («Бизнес» и «Автор»), профили режимов заполняются, когда понадобятся.
@@ -21,10 +21,19 @@ info:
     (с причиной). Черновик сохраняется неполным; полноту сервер проверяет при отправке на проверку
     (ошибки — в `fields`, у блоков — `blocks.<n>`). Отправок на проверку — до
     `MODERATION_SUBMITS_PER_DAY` в сутки (429 `rate_limited`), заданий — до `TASKS_MAX_PER_USER` (409 `tasks_limit`).
-    Решение модератора — сервисный метод (админки пока нет); каждая смена статуса пишется в журнал.
+    Модератор (админка `/api/admin/*`) публикует, отклоняет с причиной или возвращает на доработку (`changes_requested`,
+    замечания по полям — `reviewNotes`); каждая смена статуса пишется в журнал. Решение применяется через 10 с (отмена).
     `MODERATION_MODE=auto` (по умолчанию) — отправленное сразу публикуется: в журнале «на проверке» от владельца и
     «опубликовано» от системы с пометкой «одобрено автоматически», ответ отправки — уже `published`;
-    `manual` — ждёт модератора. Опубликованное владелец может снять в черновик (`…/withdraw`), чтобы изменить.
+    `manual` — ждёт модератора. Режим переключает администратор (хранится в базе; переменная — значение по умолчанию).
+    Опубликованное можно изменить без снятия: `PUT` сохраняет правку (`revision`), `…/submit` отправляет её на проверку,
+    опубликованная версия видна всем до одобрения; `…/withdraw` снимает с публикации (черновиком становится правка).
+
+    Админка: роли `moderator` (проверка, жалобы, пользователи, блокировка) и `admin` (всё + роли, режим, журнал, сброс 2FA);
+    первые администраторы — `ADMIN_EMAILS`. Не сотрудник — 404. Доступ — только после 2FA (TOTP) в этой сессии не раньше
+    12 часов назад: иначе 403 `2fa_setup_required` или `2fa_required` (кроме `/api/admin/me` и `/api/admin/2fa/*`).
+    Нет права — 403 `forbidden`. Все действия — в неизменяемом журнале (`/api/admin/audit`). Лимиты — `RATE_LIMIT_ADMIN_*`,
+    2FA — `RATE_LIMIT_2FA_*`, жалобы — `RATE_LIMIT_COMPLAINT_*`.
 servers:
   - url: http://localhost:8000
 paths:
@@ -1028,6 +1037,430 @@ paths:
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
+  /api/me/tasks/{id}/revision:
+    parameters: [{ $ref: "#/components/parameters/TaskID" }]
+    delete:
+      summary: Удалить правку опубликованного задания (опубликованное остаётся как было)
+      operationId: discardTaskRevision
+      tags: [tasks]
+      security: [{ session: [] }]
+      parameters: [{ $ref: "#/components/parameters/CSRF" }]
+      responses:
+        "200": { description: Задание без правки, content: { application/json: { schema: { $ref: "#/components/schemas/Task" } } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+  /api/me/card/revision:
+    delete:
+      summary: Удалить правку опубликованной анкеты
+      operationId: discardCardRevision
+      tags: [cards]
+      security: [{ session: [] }]
+      parameters: [{ $ref: "#/components/parameters/CSRF" }]
+      responses:
+        "200": { description: Анкета без правки, content: { application/json: { schema: { $ref: "#/components/schemas/CardResult" } } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "409": { $ref: "#/components/responses/Conflict" }
+  /api/complaints:
+    post:
+      summary: Пожаловаться на задание, анкету или профиль
+      description: Не на своё; до 20 в сутки (429 rate_limited, reason complaints_daily). Повтор открытой жалобы — 200, created=false.
+      operationId: createComplaint
+      tags: [complaints]
+      security: [{ session: [] }]
+      parameters: [{ $ref: "#/components/parameters/CSRF" }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/ComplaintInput" } } }
+      responses:
+        "201": { description: Жалоба принята, content: { application/json: { schema: { $ref: "#/components/schemas/ComplaintCreated" } } } }
+        "200": { description: Такая жалоба уже есть, content: { application/json: { schema: { $ref: "#/components/schemas/ComplaintCreated" } } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { description: self_action — на своё, content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "429": { $ref: "#/components/responses/TooMany" }
+  /api/admin/me:
+    get:
+      summary: Админка — кто я, права, 2FA, справочники карточки проверки
+      description: Доступно без подтверждения 2FA (по нему интерфейс ведёт на настройку или ввод кода). Не сотрудник — 404.
+      operationId: adminMe
+      tags: [admin]
+      security: [{ session: [] }]
+      responses:
+        "200": { description: Сотрудник, content: { application/json: { schema: { $ref: "#/components/schemas/AdminMe" } } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /api/admin/2fa/setup:
+    post:
+      summary: Новый секрет TOTP и QR-код (пока 2FA не включена)
+      operationId: adminTwoFactorSetup
+      tags: [admin]
+      security: [{ session: [] }]
+      parameters: [{ $ref: "#/components/parameters/CSRF" }]
+      responses:
+        "200": { description: Секрет, content: { application/json: { schema: { $ref: "#/components/schemas/TwoFactorSetup" } } } }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "429": { $ref: "#/components/responses/TooMany" }
+  /api/admin/2fa/confirm:
+    post:
+      summary: Первый код из приложения — 2FA включена, резервные коды (показываются один раз)
+      operationId: adminTwoFactorConfirm
+      tags: [admin]
+      security: [{ session: [] }]
+      parameters: [{ $ref: "#/components/parameters/CSRF" }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/CodeInput" } } } }
+      responses:
+        "200": { description: Резервные коды, content: { application/json: { schema: { $ref: "#/components/schemas/BackupCodes" } } } }
+        "400": { description: 2fa_invalid — неверный код, content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "429": { $ref: "#/components/responses/TooMany" }
+  /api/admin/2fa/verify:
+    post:
+      summary: Подтвердить вход в админку кодом или резервным кодом (на 12 часов)
+      description: Повтор того же кода не проходит; 5 неверных подряд — блокировка на 15 минут (429, reason 2fa_locked).
+      operationId: adminTwoFactorVerify
+      tags: [admin]
+      security: [{ session: [] }]
+      parameters: [{ $ref: "#/components/parameters/CSRF" }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/CodeInput" } } } }
+      responses:
+        "204": { description: Подтверждено }
+        "400": { description: 2fa_invalid, content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "403": { description: 2fa_setup_required, content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "429": { $ref: "#/components/responses/TooMany" }
+  /api/admin/2fa/backup-codes:
+    post:
+      summary: Новые резервные коды (прежние перестают действовать)
+      operationId: adminBackupCodes
+      tags: [admin]
+      security: [{ session: [] }]
+      parameters: [{ $ref: "#/components/parameters/CSRF" }]
+      responses:
+        "200": { description: Резервные коды, content: { application/json: { schema: { $ref: "#/components/schemas/BackupCodes" } } } }
+        "403": { $ref: "#/components/responses/AdminForbidden" }
+  /api/admin/dashboard:
+    get:
+      summary: Сводка — очередь по видам, решения за сегодня и неделю, среднее время проверки, новые пользователи
+      operationId: adminDashboard
+      tags: [admin]
+      security: [{ session: [] }]
+      responses:
+        "200": { description: Сводка, content: { application/json: { schema: { $ref: "#/components/schemas/Dashboard" } } } }
+        "403": { $ref: "#/components/responses/AdminForbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /api/admin/queue:
+    get:
+      summary: Очередь проверки (без взятых другими и без ждущих применения решений)
+      operationId: adminQueue
+      tags: [admin]
+      security: [{ session: [] }]
+      parameters:
+        - { name: type, in: query, schema: { type: array, items: { $ref: "#/components/schemas/ReviewKind" } }, explode: true }
+        - { name: category, in: query, schema: { type: array, items: { type: string } }, explode: true }
+        - { name: city, in: query, schema: { type: string } }
+        - { name: from, in: query, schema: { type: string, format: date } }
+        - { name: to, in: query, schema: { type: string, format: date } }
+        - { name: q, in: query, schema: { type: string } }
+        - { name: sort, in: query, schema: { type: string, enum: [oldest, newest] } }
+        - { name: limit, in: query, schema: { type: integer } }
+        - { name: offset, in: query, schema: { type: integer } }
+      responses:
+        "200": { description: Очередь, content: { application/json: { schema: { $ref: "#/components/schemas/Queue" } } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "403": { $ref: "#/components/responses/AdminForbidden" }
+  /api/admin/queue/next:
+    post:
+      summary: Взять следующий по отбору (skip — текущий, отпускается)
+      operationId: adminQueueNext
+      tags: [admin]
+      security: [{ session: [] }]
+      parameters: [{ $ref: "#/components/parameters/CSRF" }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/NextInput" } } } }
+      responses:
+        "200": { description: Взят в работу, content: { application/json: { schema: { $ref: "#/components/schemas/QueueItem" } } } }
+        "204": { description: Очередь пуста }
+        "403": { $ref: "#/components/responses/AdminForbidden" }
+  /api/admin/review/{kind}/{id}:
+    parameters:
+      - { name: kind, in: path, required: true, schema: { $ref: "#/components/schemas/ReviewKind" } }
+      - { name: id, in: path, required: true, schema: { type: string }, description: "id задания, автора, категории или ключ формата" }
+    get:
+      summary: Карточка проверки — как увидят пользователи, все поля, фото, соцсети, история владельца
+      operationId: adminReviewItem
+      tags: [admin]
+      security: [{ session: [] }]
+      responses:
+        "200": { description: Карточка, content: { application/json: { schema: { $ref: "#/components/schemas/ReviewItem" } } } }
+        "403": { $ref: "#/components/responses/AdminForbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /api/admin/review/{kind}/{id}/claim:
+    parameters:
+      - { name: kind, in: path, required: true, schema: { $ref: "#/components/schemas/ReviewKind" } }
+      - { name: id, in: path, required: true, schema: { type: string } }
+    post:
+      summary: Взять в работу на 10 минут (своё — продлить)
+      operationId: adminClaim
+      tags: [admin]
+      security: [{ session: [] }]
+      parameters: [{ $ref: "#/components/parameters/CSRF" }]
+      responses:
+        "200": { description: Аренда, content: { application/json: { schema: { $ref: "#/components/schemas/Lease" } } } }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { description: lease_held — у другого модератора, content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+  /api/admin/review/{kind}/{id}/release:
+    parameters:
+      - { name: kind, in: path, required: true, schema: { $ref: "#/components/schemas/ReviewKind" } }
+      - { name: id, in: path, required: true, schema: { type: string } }
+    post:
+      summary: Отпустить
+      operationId: adminRelease
+      tags: [admin]
+      security: [{ session: [] }]
+      parameters: [{ $ref: "#/components/parameters/CSRF" }]
+      responses:
+        "204": { description: Отпущено }
+  /api/admin/review/{kind}/{id}/decision:
+    parameters:
+      - { name: kind, in: path, required: true, schema: { type: string, enum: [task, task_revision, card, card_revision] } }
+      - { name: id, in: path, required: true, schema: { type: string } }
+    post:
+      summary: Решение — применится через 10 с (до этого — отмена); затем уведомление владельцу (почта + Telegram)
+      operationId: adminDecide
+      tags: [admin]
+      security: [{ session: [] }]
+      parameters: [{ $ref: "#/components/parameters/CSRF" }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/DecisionInput" } } } }
+      responses:
+        "202": { description: Принято, ждёт применения, content: { application/json: { schema: { $ref: "#/components/schemas/Decision" } } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "409": { description: "lease_held | lease_lost | wrong_status", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+  /api/admin/decisions/{id}/undo:
+    parameters: [{ $ref: "#/components/parameters/TaskID" }]
+    post:
+      summary: Отменить своё решение в течение 10 с
+      operationId: adminUndo
+      tags: [admin]
+      security: [{ session: [] }]
+      parameters: [{ $ref: "#/components/parameters/CSRF" }]
+      responses:
+        "200": { description: Отменено, content: { application/json: { schema: { $ref: "#/components/schemas/Decision" } } } }
+        "409": { description: undo_expired, content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+  /api/admin/categories/{id}/decision:
+    parameters: [{ $ref: "#/components/parameters/TaskID" }]
+    post:
+      summary: Своя категория — одобрить в общие, объединить с общей, отклонить
+      operationId: adminCategoryDecision
+      tags: [admin]
+      security: [{ session: [] }]
+      parameters: [{ $ref: "#/components/parameters/CSRF" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [action]
+              properties:
+                action: { type: string, enum: [approve, merge, reject] }
+                into: { type: string, description: slug общей категории (merge) }
+                reason: { type: string, description: причина (reject) }
+      responses:
+        "204": { description: Решено }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "409": { $ref: "#/components/responses/Conflict" }
+  /api/admin/formats/decision:
+    post:
+      summary: Свой формат — одобрить в общие подсказки, объединить с форматом из списка, отклонить
+      operationId: adminFormatDecision
+      tags: [admin]
+      security: [{ session: [] }]
+      parameters: [{ $ref: "#/components/parameters/CSRF" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [norm, action]
+              properties:
+                norm: { type: string, description: ключ формата из очереди }
+                action: { type: string, enum: [approve, merge, reject] }
+                into: { type: string }
+      responses:
+        "204": { description: Решено }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "409": { $ref: "#/components/responses/Conflict" }
+  /api/admin/complaints:
+    get:
+      summary: Очередь жалоб — предметы с открытыми жалобами, старые первыми
+      operationId: adminComplaints
+      tags: [admin]
+      security: [{ session: [] }]
+      parameters:
+        - { name: subject, in: query, schema: { type: string, enum: [task, creator_card, user] } }
+        - { name: limit, in: query, schema: { type: integer } }
+        - { name: offset, in: query, schema: { type: integer } }
+      responses:
+        "200": { description: Жалобы, content: { application/json: { schema: { $ref: "#/components/schemas/ComplaintGroups" } } } }
+        "403": { $ref: "#/components/responses/AdminForbidden" }
+  /api/admin/complaints/{subject}/{id}:
+    parameters:
+      - { name: subject, in: path, required: true, schema: { type: string, enum: [task, creator_card, user] } }
+      - { $ref: "#/components/parameters/TaskID" }
+    get:
+      summary: Жалобы на предмет и сам предмет
+      operationId: adminComplaintCase
+      tags: [admin]
+      security: [{ session: [] }]
+      responses:
+        "200": { description: Жалобы, content: { application/json: { schema: { $ref: "#/components/schemas/ComplaintCase" } } } }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /api/admin/complaints/{subject}/{id}/resolve:
+    parameters:
+      - { name: subject, in: path, required: true, schema: { type: string, enum: [task, creator_card, user] } }
+      - { $ref: "#/components/parameters/TaskID" }
+    post:
+      summary: Решение по жалобам — отклонить (dismiss), снять с публикации (hide), заблокировать владельца (block)
+      operationId: adminResolveComplaints
+      tags: [admin]
+      security: [{ session: [] }]
+      parameters: [{ $ref: "#/components/parameters/CSRF" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [action]
+              properties:
+                action: { type: string, enum: [dismiss, hide, block] }
+                note: { type: string, description: "Причина (для hide и block — 5–500 символов, её увидит владелец)" }
+      responses:
+        "200": { description: Закрыто жалоб, content: { application/json: { schema: { type: object, required: [closed], properties: { closed: { type: integer } } } } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "409": { $ref: "#/components/responses/Conflict" }
+  /api/admin/users:
+    get:
+      summary: Поиск пользователей (id, почта, имя, названия профилей)
+      operationId: adminUsers
+      tags: [admin]
+      security: [{ session: [] }]
+      parameters:
+        - { name: q, in: query, schema: { type: string } }
+        - { name: staff, in: query, schema: { type: string, enum: ["1"] } }
+        - { name: blocked, in: query, schema: { type: string, enum: ["1"] } }
+        - { name: limit, in: query, schema: { type: integer } }
+        - { name: offset, in: query, schema: { type: integer } }
+      responses:
+        "200":
+          description: Пользователи
+          content: { application/json: { schema: { type: object, required: [items], properties: { items: { type: array, items: { $ref: "#/components/schemas/AdminUser" } } } } } }
+        "403": { $ref: "#/components/responses/AdminForbidden" }
+  /api/admin/users/{id}:
+    parameters: [{ $ref: "#/components/parameters/TaskID" }]
+    get:
+      summary: Карточка пользователя — профили, способы входа, задания, анкета, соцсети, входы, решения, жалобы
+      operationId: adminUserCard
+      tags: [admin]
+      security: [{ session: [] }]
+      responses:
+        "200": { description: Карточка, content: { application/json: { schema: { $ref: "#/components/schemas/UserCard" } } } }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /api/admin/users/{id}/block:
+    parameters: [{ $ref: "#/components/parameters/TaskID" }]
+    post:
+      summary: Заблокировать — вход закрыт, все сеансы завершены, контент скрыт (сотрудника — только администратор)
+      operationId: adminBlockUser
+      tags: [admin]
+      security: [{ session: [] }]
+      parameters: [{ $ref: "#/components/parameters/CSRF" }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/ReasonInput" } } } }
+      responses:
+        "200": { description: Заблокирован, content: { application/json: { schema: { $ref: "#/components/schemas/AdminUser" } } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "403": { $ref: "#/components/responses/AdminForbidden" }
+        "409": { description: "wrong_status | self_action | last_admin", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+  /api/admin/users/{id}/unblock:
+    parameters: [{ $ref: "#/components/parameters/TaskID" }]
+    post:
+      summary: Разблокировать
+      operationId: adminUnblockUser
+      tags: [admin]
+      security: [{ session: [] }]
+      parameters: [{ $ref: "#/components/parameters/CSRF" }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/ReasonInput" } } } }
+      responses:
+        "200": { description: Разблокирован, content: { application/json: { schema: { $ref: "#/components/schemas/AdminUser" } } } }
+        "403": { $ref: "#/components/responses/AdminForbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
+  /api/admin/users/{id}/role:
+    parameters: [{ $ref: "#/components/parameters/TaskID" }]
+    put:
+      summary: Назначить модератором или администратором или снять роль (только администратор)
+      operationId: adminSetRole
+      tags: [admin]
+      security: [{ session: [] }]
+      parameters: [{ $ref: "#/components/parameters/CSRF" }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, required: [role], properties: { role: { type: string, enum: ["", moderator, admin] } } } } }
+      responses:
+        "200": { description: Роль, content: { application/json: { schema: { $ref: "#/components/schemas/AdminUser" } } } }
+        "403": { $ref: "#/components/responses/AdminForbidden" }
+        "409": { description: "self_action | last_admin", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+  /api/admin/users/{id}/reset-2fa:
+    parameters: [{ $ref: "#/components/parameters/TaskID" }]
+    post:
+      summary: Сбросить 2FA сотрудника (потерян телефон) — только администратор
+      operationId: adminResetTwoFactor
+      tags: [admin]
+      security: [{ session: [] }]
+      parameters: [{ $ref: "#/components/parameters/CSRF" }]
+      responses:
+        "204": { description: Сброшено }
+        "403": { $ref: "#/components/responses/AdminForbidden" }
+  /api/admin/audit:
+    get:
+      summary: Журнал действий (только администратор), новые сверху; записи не изменяются и не удаляются
+      operationId: adminAudit
+      tags: [admin]
+      security: [{ session: [] }]
+      parameters:
+        - { name: q, in: query, schema: { type: string } }
+        - { name: actor, in: query, schema: { type: integer, format: int64 } }
+        - { name: action, in: query, schema: { type: string } }
+        - { name: subject, in: query, schema: { type: string } }
+        - { name: subjectId, in: query, schema: { type: string } }
+        - { name: from, in: query, schema: { type: string, format: date } }
+        - { name: to, in: query, schema: { type: string, format: date } }
+        - { name: before, in: query, schema: { type: integer, format: int64 }, description: курсор — id последней записи }
+        - { name: limit, in: query, schema: { type: integer } }
+      responses:
+        "200": { description: Записи, content: { application/json: { schema: { $ref: "#/components/schemas/AuditPage" } } } }
+        "403": { $ref: "#/components/responses/AdminForbidden" }
+  /api/admin/settings:
+    get:
+      summary: Настройки (только администратор)
+      operationId: adminSettings
+      tags: [admin]
+      security: [{ session: [] }]
+      responses:
+        "200": { description: Настройки, content: { application/json: { schema: { $ref: "#/components/schemas/AdminSettings" } } } }
+        "403": { $ref: "#/components/responses/AdminForbidden" }
+    put:
+      summary: Режим проверки — auto | manual (хранится в базе; MODERATION_MODE — значение по умолчанию)
+      operationId: adminSetSettings
+      tags: [admin]
+      security: [{ session: [] }]
+      parameters: [{ $ref: "#/components/parameters/CSRF" }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, required: [moderationMode], properties: { moderationMode: { type: string, enum: [auto, manual] } } } } }
+      responses:
+        "200": { description: Настройки, content: { application/json: { schema: { $ref: "#/components/schemas/AdminSettings" } } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "403": { $ref: "#/components/responses/AdminForbidden" }
   /media/{id}/{size}.webp:
     get:
       summary: Файл фото
@@ -1099,6 +1532,11 @@ components:
           schema: { $ref: "#/components/schemas/Error" }
     Conflict:
       description: "wrong_status — статус уже другой | tasks_limit | media_quota"
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    AdminForbidden:
+      description: "forbidden — нет права | 2fa_setup_required | 2fa_required"
       content:
         application/json:
           schema: { $ref: "#/components/schemas/Error" }
@@ -1320,6 +1758,7 @@ components:
         city: { type: string }
         mode: { $ref: "#/components/schemas/Mode" }
         onboarded: { type: boolean, description: Общие данные профиля сохранялись }
+        staffRole: { $ref: "#/components/schemas/AdminRole" }
     LoginResult:
       type: object
       required: [user, next, created]
@@ -1354,8 +1793,8 @@ components:
         completion: { type: integer, minimum: 0, maximum: 100, description: "Прогресс заполнения для активного режима, %" }
     Status:
       type: string
-      enum: [draft, pending_review, published, rejected, expired]
-      description: "Черновик | на проверке | опубликовано | отклонено (с причиной) | завершено (срок публикации прошёл, только задания)"
+      enum: [draft, pending_review, published, rejected, expired, changes_requested]
+      description: "Черновик | на проверке | опубликовано | отклонено (с причиной) | завершено (срок публикации прошёл, только задания) | на доработке (замечания в reviewNotes)"
     Block:
       type: object
       required: [kind, title, items]
@@ -1438,6 +1877,12 @@ components:
         updatedAt: { type: string, format: date-time }
         submittedAt: { type: string, format: date-time, nullable: true }
         publishedAt: { type: string, format: date-time, nullable: true }
+        reviewNotes: { $ref: "#/components/schemas/ReviewNotes" }
+        revision:
+          description: Правка опубликованного (только владельцу)
+          allOf:
+            - { $ref: "#/components/schemas/Revision" }
+            - { type: object, required: [task], properties: { task: { $ref: "#/components/schemas/Task" } } }
     TaskList:
       type: object
       required: [tasks]
@@ -1528,6 +1973,12 @@ components:
         updatedAt: { type: string, format: date-time }
         submittedAt: { type: string, format: date-time, nullable: true }
         publishedAt: { type: string, format: date-time, nullable: true }
+        reviewNotes: { $ref: "#/components/schemas/ReviewNotes" }
+        revision:
+          description: Правка опубликованной анкеты (только владельцу)
+          allOf:
+            - { $ref: "#/components/schemas/Revision" }
+            - { type: object, required: [card], properties: { card: { $ref: "#/components/schemas/Card" } } }
     DraftResult:
       type: object
       required: [draft]
@@ -1585,3 +2036,313 @@ components:
             purpose: { $ref: "#/components/schemas/MediaPurpose" }
             width: { type: integer }
             height: { type: integer }
+    Revision:
+      type: object
+      required: [status, rejectReason, submittedAt]
+      properties:
+        status: { type: string, enum: [draft, pending_review, rejected, changes_requested] }
+        rejectReason: { type: string }
+        submittedAt: { type: string, format: date-time, nullable: true }
+    ReviewNotes:
+      type: object
+      additionalProperties: { type: string }
+      description: "Замечания модератора «на доработку»: поле формы (title, blocks, photos…, general) → текст"
+    ComplaintInput:
+      type: object
+      required: [subject, id, reason]
+      properties:
+        subject: { type: string, enum: [task, creator_card, user] }
+        id: { type: integer, format: int64, description: "id задания, id автора анкеты или пользователя" }
+        reason: { type: string, enum: [spam, fraud, offensive, illegal, fake, other] }
+        comment: { type: string, maxLength: 1000, description: "Для other — от 5 символов" }
+    ComplaintCreated:
+      type: object
+      required: [created]
+      properties: { created: { type: boolean } }
+    AdminRole: { type: string, enum: [moderator, admin] }
+    ReviewKind: { type: string, enum: [task, task_revision, card, card_revision, category, format] }
+    AdminMe:
+      type: object
+      required: [user, role, permissions, twoFactor, rejectTemplates, reviewFields, undoSeconds]
+      properties:
+        user: { $ref: "#/components/schemas/User" }
+        role: { $ref: "#/components/schemas/AdminRole" }
+        permissions: { type: array, items: { type: string } }
+        twoFactor:
+          type: object
+          required: [enabled, verified, verifiedUntil, backupLeft]
+          properties:
+            enabled: { type: boolean }
+            verified: { type: boolean, description: Подтверждена в этой сессии не раньше 12 часов назад }
+            verifiedUntil: { type: string, format: date-time, nullable: true }
+            backupLeft: { type: integer }
+        rejectTemplates:
+          type: array
+          items: { type: object, required: [id, text], properties: { id: { type: string }, text: { type: string } } }
+        reviewFields: { type: object, additionalProperties: { type: string }, description: Поле → название (замечания) }
+        undoSeconds: { type: integer }
+    TwoFactorSetup:
+      type: object
+      required: [secret, uri]
+      properties:
+        secret: { type: string, description: Ключ base32 для ручного ввода }
+        uri: { type: string, description: otpauth://totp/… }
+        qr: { type: string, description: "data:image/png;base64,… (QR строится на сервере)" }
+    CodeInput:
+      type: object
+      required: [code]
+      properties: { code: { type: string, description: "6 цифр из приложения или резервный код xxxxx-xxxxx" } }
+    BackupCodes:
+      type: object
+      required: [backupCodes]
+      properties: { backupCodes: { type: array, items: { type: string } } }
+    Dashboard:
+      type: object
+      required: [queue, decidedToday, decidedWeek, avgReviewSeconds, usersToday, usersWeek, openComplaints]
+      properties:
+        queue:
+          type: array
+          items:
+            type: object
+            required: [type, total, oldest]
+            properties:
+              type: { $ref: "#/components/schemas/ReviewKind" }
+              total: { type: integer }
+              oldest: { type: string, format: date-time, nullable: true }
+        decidedToday: { type: integer }
+        decidedWeek: { type: integer }
+        avgReviewSeconds: { type: integer, description: Среднее ожидание до решения за 7 дней }
+        usersToday: { type: integer }
+        usersWeek: { type: integer }
+        openComplaints: { type: integer }
+    QueueItem:
+      type: object
+      required: [type, id, title, ownerId, ownerName, categories, city, waitingSince, mine]
+      properties:
+        type: { $ref: "#/components/schemas/ReviewKind" }
+        id: { type: string }
+        title: { type: string }
+        ownerId: { type: integer, format: int64 }
+        ownerName: { type: string }
+        categories: { type: array, items: { type: string } }
+        city: { type: string }
+        waitingSince: { type: string, format: date-time }
+        mine: { type: boolean, description: Взято в работу мной }
+    Queue:
+      type: object
+      required: [items, total, oldest]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/QueueItem" } }
+        total: { type: integer }
+        oldest: { type: string, format: date-time, nullable: true }
+    NextInput:
+      type: object
+      properties:
+        type: { type: array, items: { $ref: "#/components/schemas/ReviewKind" } }
+        category: { type: array, items: { type: string } }
+        city: { type: string }
+        q: { type: string }
+        from: { type: string, format: date }
+        to: { type: string, format: date }
+        sort: { type: string, enum: [oldest, newest] }
+        skipType: { type: string }
+        skipId: { type: string }
+    Lease:
+      type: object
+      required: [moderatorId, mine, expiresAt]
+      properties:
+        moderatorId: { type: integer, format: int64 }
+        mine: { type: boolean }
+        expiresAt: { type: string, format: date-time }
+    DecisionInput:
+      type: object
+      required: [action]
+      properties:
+        action: { type: string, enum: [approve, reject, rework] }
+        reason: { type: string, description: Причина отказа 5–500 символов (шаблон + свой текст) }
+        notes: { $ref: "#/components/schemas/ReviewNotes" }
+    Decision:
+      type: object
+      required: [id, type, itemId, action, reason, notes, state, applyAt, createdAt]
+      properties:
+        id: { type: integer, format: int64 }
+        type: { $ref: "#/components/schemas/ReviewKind" }
+        itemId: { type: integer, format: int64 }
+        action: { type: string, enum: [approve, reject, rework] }
+        reason: { type: string }
+        notes: { $ref: "#/components/schemas/ReviewNotes" }
+        state: { type: string, enum: [pending, applied, undone, failed] }
+        moderator: { type: string }
+        applyAt: { type: string, format: date-time }
+        createdAt: { type: string, format: date-time }
+    AdminUser:
+      type: object
+      required: [id, name, email, city, avatarUrl, role, businessName, creatorName, blocked, blockedAt, blockedReason, createdAt, lastLoginAt]
+      properties:
+        id: { type: integer, format: int64 }
+        name: { type: string }
+        email: { type: string }
+        city: { type: string }
+        avatarUrl: { type: string }
+        role: { type: string, enum: ["", moderator, admin] }
+        businessName: { type: string }
+        creatorName: { type: string }
+        blocked: { type: boolean }
+        blockedAt: { type: string, format: date-time, nullable: true }
+        blockedReason: { type: string }
+        createdAt: { type: string, format: date-time }
+        lastLoginAt: { type: string, format: date-time, nullable: true }
+    Complaint:
+      type: object
+      required: [id, subject, subjectId, reporterId, reason, comment, status, action, resolution, resolvedAt, createdAt]
+      properties:
+        id: { type: integer, format: int64 }
+        subject: { type: string }
+        subjectId: { type: integer, format: int64 }
+        reporter: { type: string }
+        reporterId: { type: integer, format: int64 }
+        reason: { type: string }
+        comment: { type: string }
+        status: { type: string, enum: [open, resolved, dismissed] }
+        action: { type: string }
+        resolution: { type: string }
+        resolvedAt: { type: string, format: date-time, nullable: true }
+        createdAt: { type: string, format: date-time }
+    StatusChange:
+      type: object
+      required: [from, to, reason, actorId, auto, at]
+      properties:
+        from: { type: string }
+        to: { type: string }
+        reason: { type: string }
+        actorId: { type: integer, format: int64 }
+        auto: { type: boolean }
+        at: { type: string, format: date-time }
+    AdminCategory:
+      type: object
+      required: [id, slug, title, status, authorId]
+      properties:
+        id: { type: integer, format: int64 }
+        slug: { type: string }
+        title: { type: string }
+        status: { type: string }
+        authorId: { type: integer, format: int64 }
+    ReviewItem:
+      type: object
+      required: [type, id, inQueue, waitingSince, lease, owner, history, decisions, complaints]
+      properties:
+        type: { $ref: "#/components/schemas/ReviewKind" }
+        id: { type: string }
+        inQueue: { type: boolean }
+        waitingSince: { type: string, format: date-time, nullable: true }
+        lease: { nullable: true, allOf: [{ $ref: "#/components/schemas/Lease" }] }
+        task: { $ref: "#/components/schemas/Task" }
+        liveTask: { $ref: "#/components/schemas/Task" }
+        card: { $ref: "#/components/schemas/Card" }
+        liveCard: { $ref: "#/components/schemas/Card" }
+        category: { $ref: "#/components/schemas/AdminCategory" }
+        usage: { type: object, properties: { tasks: { type: integer }, cards: { type: integer } } }
+        targets: { type: array, items: { $ref: "#/components/schemas/AdminCategory" } }
+        format: { type: object, properties: { norm: { type: string }, title: { type: string }, tasks: { type: integer } } }
+        formats: { type: array, items: { type: string } }
+        owner: { nullable: true, allOf: [{ $ref: "#/components/schemas/AdminUser" }] }
+        history: { type: array, items: { $ref: "#/components/schemas/StatusChange" } }
+        decisions: { type: array, items: { $ref: "#/components/schemas/Decision" } }
+        complaints: { type: array, items: { $ref: "#/components/schemas/Complaint" } }
+    ComplaintGroups:
+      type: object
+      required: [items, total]
+      properties:
+        total: { type: integer }
+        items:
+          type: array
+          items:
+            type: object
+            required: [subject, subjectId, targetId, targetName, total, reasons, firstAt]
+            properties:
+              subject: { type: string }
+              subjectId: { type: integer, format: int64 }
+              targetId: { type: integer, format: int64 }
+              targetName: { type: string }
+              total: { type: integer }
+              reasons: { type: array, items: { type: string } }
+              firstAt: { type: string, format: date-time }
+    ComplaintCase:
+      type: object
+      required: [subject, id, complaints, target]
+      properties:
+        subject: { type: string }
+        id: { type: integer, format: int64 }
+        complaints: { type: array, items: { $ref: "#/components/schemas/Complaint" } }
+        task: { $ref: "#/components/schemas/Task" }
+        card: { $ref: "#/components/schemas/Card" }
+        target: { nullable: true, allOf: [{ $ref: "#/components/schemas/AdminUser" }] }
+    ReasonInput:
+      type: object
+      required: [reason]
+      properties: { reason: { type: string, description: 5–500 символов } }
+    UserCard:
+      type: object
+      required: [user, providers, business, creator, tasks, card, socials, logins, decisions, complaints]
+      properties:
+        user: { $ref: "#/components/schemas/AdminUser" }
+        providers: { type: array, items: { type: string } }
+        business: { nullable: true, allOf: [{ $ref: "#/components/schemas/BusinessProfile" }] }
+        creator: { nullable: true, allOf: [{ $ref: "#/components/schemas/CreatorProfile" }] }
+        tasks: { type: array, items: { $ref: "#/components/schemas/Task" } }
+        card: { nullable: true, allOf: [{ $ref: "#/components/schemas/Card" }] }
+        socials:
+          type: array
+          items:
+            type: object
+            required: [platform, type, title, handle, url, status, followers, verifiedAt]
+            properties:
+              platform: { type: string }
+              type: { type: string }
+              title: { type: string }
+              handle: { type: string }
+              url: { type: string }
+              status: { type: string }
+              followers: { type: integer, format: int64 }
+              verifiedAt: { type: string, format: date-time, nullable: true }
+        logins:
+          type: array
+          items:
+            type: object
+            required: [method, ip, device, at]
+            properties:
+              method: { type: string }
+              ip: { type: string }
+              device: { type: string }
+              at: { type: string, format: date-time }
+        decisions: { type: array, items: { $ref: "#/components/schemas/Decision" } }
+        complaints: { type: array, items: { $ref: "#/components/schemas/Complaint" } }
+    AuditEntry:
+      type: object
+      required: [id, actorId, actorLabel, actorRole, action, subject, subjectId, before, after, reason, ip, device, at]
+      properties:
+        id: { type: integer, format: int64 }
+        actorId: { type: integer, format: int64 }
+        actorLabel: { type: string }
+        actorRole: { type: string }
+        action: { type: string }
+        subject: { type: string }
+        subjectId: { type: string }
+        before: { nullable: true, description: Состояние до (JSON) }
+        after: { nullable: true, description: Состояние после (JSON) }
+        reason: { type: string }
+        ip: { type: string }
+        device: { type: string }
+        at: { type: string, format: date-time }
+    AuditPage:
+      type: object
+      required: [items, next]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/AuditEntry" } }
+        next: { type: integer, format: int64, nullable: true, description: Курсор следующей страницы (before) }
+    AdminSettings:
+      type: object
+      required: [moderationMode, moderationDefault]
+      properties:
+        moderationMode: { type: string, enum: [auto, manual] }
+        moderationDefault: { type: string, enum: [auto, manual], description: Из MODERATION_MODE }

@@ -60,6 +60,7 @@ type TaskService interface {
 	Delete(ctx context.Context, u domain.User, id int64) error
 	Submit(ctx context.Context, u domain.User, id int64) (domain.Task, error)
 	Withdraw(ctx context.Context, u domain.User, id int64) (domain.Task, error)
+	DiscardRevision(ctx context.Context, u domain.User, id int64) (domain.Task, error)
 	Feed(ctx context.Context, q service.FeedQuery) (service.FeedPage, error)
 	Public(ctx context.Context, id int64) (domain.Task, error)
 }
@@ -70,6 +71,7 @@ type CardService interface {
 	Save(ctx context.Context, u domain.User, in service.CardInput) (domain.CreatorCard, error)
 	Submit(ctx context.Context, u domain.User) (domain.CreatorCard, error)
 	Withdraw(ctx context.Context, u domain.User) (domain.CreatorCard, error)
+	DiscardRevision(ctx context.Context, u domain.User) (domain.CreatorCard, error)
 	Feed(ctx context.Context, q service.FeedQuery) (service.CardPage, error)
 	Public(ctx context.Context, userID int64) (domain.CreatorCard, error)
 }
@@ -101,6 +103,8 @@ type MediaService interface {
 	Delete(ctx context.Context, u domain.User, id string) error
 	SetAvatar(ctx context.Context, u domain.User, id string) (string, error)
 	Open(ctx context.Context, viewerID int64, id string, size int) (service.Blob, bool, error)
+	// OpenForReview — фото на проверке для сотрудника (право media.private).
+	OpenForReview(ctx context.Context, viewer domain.User, id string, size int) (service.Blob, error)
 }
 
 // Services — сервисы, которые обслуживает транспорт.
@@ -116,6 +120,14 @@ type Services struct {
 	Media      MediaService
 	Drafts     DraftService
 	Social     SocialService // nil — подтверждение соцсетей выключено
+	// Админка (nil TwoFactor — админка выключена).
+	TwoFactor  TwoFactorService
+	Review     ReviewService
+	Complaints ComplaintService
+	StaffUsers StaffUserService
+	Audit      AuditService
+	Settings   SettingsService
+	Dashboard  DashboardService
 }
 
 // Options — настройки транспорта (из config).
@@ -131,7 +143,12 @@ type Options struct {
 	UploadLimiter Limiter
 	// DraftLimiter — сохранения черновиков форм по пользователю.
 	DraftLimiter Limiter
-	BotWait      time.Duration // сколько ждать подтверждения в боте в одном запросе (long-poll), 25 с
+	// AdminLimiter — запросы к админке по пользователю; MFALimiter — попытки 2FA (строже); ComplaintLimiter —
+	// жалобы по пользователю.
+	AdminLimiter     Limiter
+	MFALimiter       Limiter
+	ComplaintLimiter Limiter
+	BotWait          time.Duration // сколько ждать подтверждения в боте в одном запросе (long-poll), 25 с
 	// TelegramWebhook — приём обновлений бота (transport/telegram); nil — бот выключен.
 	// Свой секрет вместо CSRF и свой лимит, поэтому вне группы /api.
 	TelegramWebhook http.Handler
@@ -150,6 +167,13 @@ type Server struct {
 	media      MediaService
 	drafts     DraftService
 	social     SocialService
+	twoFactor  TwoFactorService
+	review     ReviewService
+	complaints ComplaintService
+	staffUsers StaffUserService
+	audit      AuditService
+	settings   SettingsService
+	dashboard  DashboardService
 	opt        Options
 }
 
@@ -160,7 +184,9 @@ func New(svc Services, opt Options) *Server {
 	}
 	return &Server{
 		home: svc.Home, health: svc.Health, auth: svc.Auth, profiles: svc.Profiles, tasks: svc.Tasks, cards: svc.Cards,
-		categories: svc.Categories, formats: svc.Formats, media: svc.Media, drafts: svc.Drafts, social: svc.Social, opt: opt,
+		categories: svc.Categories, formats: svc.Formats, media: svc.Media, drafts: svc.Drafts, social: svc.Social,
+		twoFactor: svc.TwoFactor, review: svc.Review, complaints: svc.Complaints, staffUsers: svc.StaffUsers, audit: svc.Audit,
+		settings: svc.Settings, dashboard: svc.Dashboard, opt: opt,
 	}
 }
 
@@ -201,6 +227,12 @@ func (s *Server) Routes() http.Handler {
 		if s.social != nil {
 			r.With(noStore).Get("/social/{platform}/callback", s.getSocialCallback)
 		}
+		if s.complaints != nil {
+			r.With(noStore, s.requireUser, limit(s.opt.ComplaintLimiter, byUser("complaint:"))).Post("/complaints", s.postComplaint)
+		}
+		if s.twoFactor != nil {
+			r.Route("/admin", s.adminRoutes)
+		}
 		r.Route("/me", func(r chi.Router) {
 			r.Use(noStore, s.requireUser, limit(s.opt.UserLimiter, byUser("user:")))
 			r.Get("/", s.getMe)
@@ -220,11 +252,13 @@ func (s *Server) Routes() http.Handler {
 			r.Delete("/tasks/{id}", s.deleteTask)
 			r.Post("/tasks/{id}/submit", s.submitTask)
 			r.Post("/tasks/{id}/withdraw", s.withdrawTask)
+			r.Delete("/tasks/{id}/revision", s.discardTaskRevision)
 
 			r.Get("/card", s.getCard)
 			r.Put("/card", s.putCard)
 			r.Post("/card/submit", s.submitCard)
 			r.Post("/card/withdraw", s.withdrawCard)
+			r.Delete("/card/revision", s.discardCardRevision)
 
 			r.Get("/categories", s.getCategories)
 			r.Get("/categories/similar", s.getSimilarCategories)

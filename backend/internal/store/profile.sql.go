@@ -60,7 +60,7 @@ func (q *Queries) GetCreatorProfile(ctx context.Context, userID int64) (CreatorP
 const setUserMode = `-- name: SetUserMode :one
 
 UPDATE users SET active_mode = $2, updated_at = now() WHERE id = $1
-RETURNING id, name, email, avatar_url, city, onboarded_at, created_at, updated_at, last_login_at, active_mode
+RETURNING id, name, email, avatar_url, city, onboarded_at, created_at, updated_at, last_login_at, active_mode, staff_role, blocked_at, blocked_reason
 `
 
 type SetUserModeParams struct {
@@ -83,6 +83,9 @@ func (q *Queries) SetUserMode(ctx context.Context, arg SetUserModeParams) (User,
 		&i.UpdatedAt,
 		&i.LastLoginAt,
 		&i.ActiveMode,
+		&i.StaffRole,
+		&i.BlockedAt,
+		&i.BlockedReason,
 	)
 	return i, err
 }

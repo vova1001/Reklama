@@ -20,14 +20,18 @@ func ValidMode(m string) bool { return m == ModeBusiness || m == ModeCreator }
 
 // User — пользователь площадки.
 type User struct {
-	ID          int64
-	Name        string
-	Email       string // "" — нет подтверждённой почты
-	AvatarURL   string
-	City        string
-	ActiveMode  string     // ModeBusiness | ModeCreator
-	OnboardedAt *time.Time // когда впервые сохранены общие данные
-	CreatedAt   time.Time
+	ID            int64
+	Name          string
+	Email         string // "" — нет подтверждённой почты
+	AvatarURL     string
+	City          string
+	ActiveMode    string     // ModeBusiness | ModeCreator
+	OnboardedAt   *time.Time // когда впервые сохранены общие данные
+	CreatedAt     time.Time
+	LastLoginAt   *time.Time
+	StaffRole     StaffRole  // роль в админке; "" — обычный пользователь
+	BlockedAt     *time.Time // заблокирован (вход закрыт, контент скрыт)
+	BlockedReason string
 }
 
 // Onboarded — общие данные профиля сохранялись хотя бы раз.

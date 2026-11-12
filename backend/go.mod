@@ -11,6 +11,7 @@ require (
 	github.com/redis/go-redis/v9 v9.14.1
 	golang.org/x/image v0.30.0
 	golang.org/x/sync v0.22.0
+	rsc.io/qr v0.2.0
 )
 
 require (

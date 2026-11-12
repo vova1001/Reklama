@@ -11,6 +11,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"ohvat/backend/internal/domain"
 	"ohvat/backend/internal/service"
 )
 
@@ -145,13 +146,18 @@ func (s *Server) getMedia(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	var viewer int64
+	var viewer domain.User
 	if c, err := r.Cookie(sessionCookie); err == nil && c.Value != "" {
 		if u, err := s.auth.Session(r.Context(), c.Value); err == nil {
-			viewer = u.ID
+			viewer = u
 		}
 	}
-	b, public, err := s.media.Open(r.Context(), viewer, id, size)
+	b, public, err := s.media.Open(r.Context(), viewer.ID, id, size)
+	// фото на проверке видит сотрудник с подтверждённой 2FA (карточка проверки)
+	if isNotFound(err) && viewer.Staff() && s.twoFactor != nil && s.twoFactor.Require(r.Context(), viewer, sessionToken(r)) == nil {
+		b, err = s.media.OpenForReview(r.Context(), viewer, id, size)
+		public = false
+	}
 	if err != nil {
 		var code int
 		switch {

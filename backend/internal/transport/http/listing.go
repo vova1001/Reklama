@@ -112,6 +112,30 @@ func (s *Server) withdrawTask(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, toTaskDTO(t))
 }
 
+// DELETE /api/me/tasks/{id}/revision — удалить правку опубликованного.
+func (s *Server) discardTaskRevision(w http.ResponseWriter, r *http.Request) {
+	id, ok := pathID(w, r)
+	if !ok {
+		return
+	}
+	t, err := s.tasks.DiscardRevision(r.Context(), currentUser(r), id)
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, toTaskDTO(t))
+}
+
+// DELETE /api/me/card/revision — удалить правку опубликованной анкеты.
+func (s *Server) discardCardRevision(w http.ResponseWriter, r *http.Request) {
+	c, err := s.cards.DiscardRevision(r.Context(), currentUser(r))
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, cardOut{Card: toCardDTO(&c)})
+}
+
 // GET /api/tasks — лента опубликованных (cursor, limit 1–50; отбор: category и format — повторяются, city).
 func (s *Server) getFeed(w http.ResponseWriter, r *http.Request) {
 	q, ok := feedQuery(w, r)

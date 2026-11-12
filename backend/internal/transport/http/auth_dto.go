@@ -57,6 +57,7 @@ type userDTO struct {
 	City      string  `json:"city"`
 	Mode      string  `json:"mode"`
 	Onboarded bool    `json:"onboarded"`
+	StaffRole string  `json:"staffRole,omitempty"` // moderator | admin — есть доступ к /admin
 }
 
 type loginDTO struct {
@@ -66,7 +67,7 @@ type loginDTO struct {
 }
 
 func toUserDTO(u domain.User) userDTO {
-	out := userDTO{ID: u.ID, Name: u.Name, AvatarURL: u.AvatarURL, City: u.City, Mode: u.ActiveMode, Onboarded: u.Onboarded()}
+	out := userDTO{ID: u.ID, Name: u.Name, AvatarURL: u.AvatarURL, City: u.City, Mode: u.ActiveMode, Onboarded: u.Onboarded(), StaffRole: string(u.StaffRole)}
 	if out.Mode == "" {
 		out.Mode = domain.ModeBusiness
 	}

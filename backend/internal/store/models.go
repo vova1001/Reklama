@@ -8,6 +8,29 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+type AppSetting struct {
+	Key       string
+	Value     string
+	UpdatedBy pgtype.Int8
+	UpdatedAt pgtype.Timestamptz
+}
+
+type AuditLog struct {
+	ID         int64
+	ActorID    pgtype.Int8
+	ActorLabel string
+	ActorRole  string
+	Action     string
+	Subject    string
+	SubjectID  string
+	Before     []byte
+	After      []byte
+	Reason     string
+	Ip         string
+	UserAgent  string
+	CreatedAt  pgtype.Timestamptz
+}
+
 type BusinessProfile struct {
 	UserID    int64
 	Name      string
@@ -18,33 +41,55 @@ type BusinessProfile struct {
 }
 
 type Category struct {
-	ID        int64
-	Slug      string
-	Title     string
-	Icon      string
-	Position  int32
-	IsActive  bool
-	CreatedAt pgtype.Timestamptz
-	Status    string
-	AuthorID  pgtype.Int8
-	Norm      string
+	ID         int64
+	Slug       string
+	Title      string
+	Icon       string
+	Position   int32
+	IsActive   bool
+	CreatedAt  pgtype.Timestamptz
+	Status     string
+	AuthorID   pgtype.Int8
+	Norm       string
+	MergedInto pgtype.Text
+}
+
+type Complaint struct {
+	ID           int64
+	ReporterID   int64
+	Subject      string
+	SubjectID    int64
+	TargetUserID int64
+	Reason       string
+	Comment      string
+	Status       string
+	Action       string
+	Resolution   string
+	ResolvedBy   pgtype.Int8
+	ResolvedAt   pgtype.Timestamptz
+	CreatedAt    pgtype.Timestamptz
 }
 
 type CreatorCard struct {
-	UserID       int64
-	Status       string
-	RejectReason string
-	Name         string
-	City         string
-	Topics       []string
-	Platforms    []byte
-	Blocks       []byte
-	Avatar       pgtype.Text
-	Works        []string
-	CreatedAt    pgtype.Timestamptz
-	UpdatedAt    pgtype.Timestamptz
-	SubmittedAt  pgtype.Timestamptz
-	PublishedAt  pgtype.Timestamptz
+	UserID              int64
+	Status              string
+	RejectReason        string
+	Name                string
+	City                string
+	Topics              []string
+	Platforms           []byte
+	Blocks              []byte
+	Avatar              pgtype.Text
+	Works               []string
+	CreatedAt           pgtype.Timestamptz
+	UpdatedAt           pgtype.Timestamptz
+	SubmittedAt         pgtype.Timestamptz
+	PublishedAt         pgtype.Timestamptz
+	ReviewNotes         []byte
+	Revision            []byte
+	RevisionStatus      pgtype.Text
+	RevisionReason      string
+	RevisionSubmittedAt pgtype.Timestamptz
 }
 
 type CreatorProfile struct {
@@ -73,6 +118,15 @@ type FormDraft struct {
 	SavedAt pgtype.Timestamptz
 }
 
+type FormatDecision struct {
+	Norm       string
+	Title      string
+	Status     string
+	MergedInto string
+	DecidedBy  pgtype.Int8
+	DecidedAt  pgtype.Timestamptz
+}
+
 type Identity struct {
 	ID         int64
 	UserID     int64
@@ -92,6 +146,15 @@ type LoginCode struct {
 	CreatedAt  pgtype.Timestamptz
 	ExpiresAt  pgtype.Timestamptz
 	ConsumedAt pgtype.Timestamptz
+}
+
+type LoginEvent struct {
+	ID        int64
+	UserID    int64
+	Method    string
+	Ip        string
+	UserAgent string
+	CreatedAt pgtype.Timestamptz
 }
 
 type MediaBlob struct {
@@ -146,6 +209,42 @@ type PlanFeature struct {
 	Text     string
 }
 
+type ReviewDecision struct {
+	ID           int64
+	Kind         string
+	ItemID       int64
+	OwnerID      int64
+	ModeratorID  int64
+	Action       string
+	Reason       string
+	Notes        []byte
+	WaitingSince pgtype.Timestamptz
+	State        string
+	ApplyAt      pgtype.Timestamptz
+	LockUntil    pgtype.Timestamptz
+	AppliedAt    pgtype.Timestamptz
+	Error        string
+	CreatedAt    pgtype.Timestamptz
+}
+
+type ReviewLease struct {
+	Kind        string
+	ItemID      string
+	ModeratorID int64
+	TakenAt     pgtype.Timestamptz
+	ExpiresAt   pgtype.Timestamptz
+}
+
+type ReviewQueue struct {
+	Kind         string
+	ItemID       string
+	Title        string
+	OwnerID      int64
+	Categories   []string
+	City         string
+	WaitingSince pgtype.Timestamptz
+}
+
 type Session struct {
 	ID         int64
 	UserID     int64
@@ -153,6 +252,7 @@ type Session struct {
 	CreatedAt  pgtype.Timestamptz
 	ExpiresAt  pgtype.Timestamptz
 	LastSeenAt pgtype.Timestamptz
+	MfaAt      pgtype.Timestamptz
 }
 
 type SocialAccount struct {
@@ -212,29 +312,53 @@ type SocialStatsHistory struct {
 	Likes     pgtype.Int8
 }
 
+type StaffBackupCode struct {
+	ID        int64
+	UserID    int64
+	CodeHash  []byte
+	UsedAt    pgtype.Timestamptz
+	CreatedAt pgtype.Timestamptz
+}
+
+type StaffTotp struct {
+	UserID      int64
+	Secret      []byte
+	ConfirmedAt pgtype.Timestamptz
+	LastStep    int64
+	Failures    int32
+	LockedUntil pgtype.Timestamptz
+	CreatedAt   pgtype.Timestamptz
+	UpdatedAt   pgtype.Timestamptz
+}
+
 type Task struct {
-	ID            int64
-	OwnerID       int64
-	Status        string
-	RejectReason  string
-	Title         string
-	City          string
-	Nationwide    bool
-	Formats       []string
-	Access        string
-	MinViews      int64
-	RewardKopecks int64
-	PublishBy     pgtype.Date
-	Blocks        []byte
-	Cover         pgtype.Text
-	Photos        []string
-	CreatedAt     pgtype.Timestamptz
-	UpdatedAt     pgtype.Timestamptz
-	SubmittedAt   pgtype.Timestamptz
-	PublishedAt   pgtype.Timestamptz
-	PublishTime   pgtype.Time
-	DeadlineAt    pgtype.Timestamptz
-	Categories    []string
+	ID                  int64
+	OwnerID             int64
+	Status              string
+	RejectReason        string
+	Title               string
+	City                string
+	Nationwide          bool
+	Formats             []string
+	Access              string
+	MinViews            int64
+	RewardKopecks       int64
+	PublishBy           pgtype.Date
+	Blocks              []byte
+	Cover               pgtype.Text
+	Photos              []string
+	CreatedAt           pgtype.Timestamptz
+	UpdatedAt           pgtype.Timestamptz
+	SubmittedAt         pgtype.Timestamptz
+	PublishedAt         pgtype.Timestamptz
+	PublishTime         pgtype.Time
+	DeadlineAt          pgtype.Timestamptz
+	Categories          []string
+	ReviewNotes         []byte
+	Revision            []byte
+	RevisionStatus      pgtype.Text
+	RevisionReason      string
+	RevisionSubmittedAt pgtype.Timestamptz
 }
 
 type TelegramChannel struct {
@@ -273,16 +397,19 @@ type TelegramLogin struct {
 }
 
 type User struct {
-	ID          int64
-	Name        string
-	Email       pgtype.Text
-	AvatarUrl   string
-	City        string
-	OnboardedAt pgtype.Timestamptz
-	CreatedAt   pgtype.Timestamptz
-	UpdatedAt   pgtype.Timestamptz
-	LastLoginAt pgtype.Timestamptz
-	ActiveMode  string
+	ID            int64
+	Name          string
+	Email         pgtype.Text
+	AvatarUrl     string
+	City          string
+	OnboardedAt   pgtype.Timestamptz
+	CreatedAt     pgtype.Timestamptz
+	UpdatedAt     pgtype.Timestamptz
+	LastLoginAt   pgtype.Timestamptz
+	ActiveMode    string
+	StaffRole     pgtype.Text
+	BlockedAt     pgtype.Timestamptz
+	BlockedReason string
 }
 
 type UserDevice struct {

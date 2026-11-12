@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 	"unicode/utf8"
 
@@ -32,6 +33,21 @@ type TaskRepository interface {
 	PublishedTask(ctx context.Context, id int64) (domain.Task, error)
 	// ExpireTasks — опубликованные со сроком не позже now — в «завершено» (с журналом); id завершённых.
 	ExpireTasks(ctx context.Context, now time.Time) ([]int64, error)
+	// Правка опубликованного: сохранить, сменить статус, удалить, заменить ею опубликованное (с цепочкой смен).
+	SaveTaskRevision(ctx context.Context, ownerID, id int64, rev domain.Task) (domain.Task, error)
+	SetTaskRevision(ctx context.Context, ch domain.StatusChange) (domain.Task, error)
+	DropTaskRevision(ctx context.Context, ownerID, id int64) (domain.Task, error)
+	ApplyTaskRevision(ctx context.Context, id int64, revStatus domain.Status, log domain.StatusChange, chain ...domain.StatusChange) (domain.Task, error)
+}
+
+// ModeSource — режим проверки из настроек админки (в базе); переменная окружения — значение по умолчанию.
+type ModeSource interface {
+	ModerationMode(ctx context.Context) domain.ModerationMode
+}
+
+// FormatPolicy — решения модератора по своим форматам: rejected — не принимается, merged — заменяется на into.
+type FormatPolicy interface {
+	FormatStatus(ctx context.Context, norm string) (status, into string, err error)
 }
 
 // SubmitCounter — сколько раз пользователь отправлял на проверку с момента since и когда впервые.
@@ -96,9 +112,53 @@ type ListingDeps struct {
 	Clock      Clock          // nil — системное время
 	Limits     ListingLimits
 	// Mode — проверка отправленного: auto — сразу публикуется (журнал: «одобрено автоматически»),
-	// manual (и пусто) — ждёт модератора.
-	Mode domain.ModerationMode
+	// manual (и пусто) — ждёт модератора. Modes (если задан) — текущий режим из админки, Mode — по умолчанию.
+	Mode  domain.ModerationMode
+	Modes ModeSource
+	// FormatRules — решения по своим форматам (nil — свои форматы без проверки).
+	FormatRules FormatPolicy
 }
+
+// mode — текущий режим проверки.
+func (d *ListingDeps) mode(ctx context.Context) domain.ModerationMode {
+	if d.Modes != nil {
+		if m := d.Modes.ModerationMode(ctx); m == domain.ModerationAuto || m == domain.ModerationManual {
+			return m
+		}
+	}
+	return d.Mode
+}
+
+// applyFormatRules — свои форматы по решениям модератора: отклонённый — ошибка поля, объединённый — заменяется.
+func (d *ListingDeps) applyFormatRules(ctx context.Context, formats []string) ([]string, error) {
+	if d.FormatRules == nil {
+		return formats, nil
+	}
+	out := make([]string, 0, len(formats))
+	for _, f := range formats {
+		if _, ok := builtinFormat(f); ok {
+			out = append(out, f)
+			continue
+		}
+		st, into, err := d.FormatRules.FormatStatus(ctx, FormatNorm(f))
+		if err != nil {
+			return nil, err
+		}
+		switch st {
+		case "rejected":
+			return nil, &ValidationError{Fields: map[string]string{"formats": "Формат «" + f + "» не подходит — выберите другой"}}
+		case "merged":
+			f = into
+		}
+		if !contains(out, f) {
+			out = append(out, f)
+		}
+	}
+	return out, nil
+}
+
+// FormatNorm — ключ своего формата для решений модератора: нижний регистр, ё → е (так же считает база).
+func FormatNorm(f string) string { return strings.ReplaceAll(strings.ToLower(f), "ё", "е") }
 
 func (d *ListingDeps) defaults() {
 	if d.Clock == nil {
@@ -163,15 +223,31 @@ func (s *Tasks) Update(ctx context.Context, u domain.User, id int64, in TaskInpu
 	if err != nil {
 		return domain.Task{}, err
 	}
-	if !cur.Status.Editable() {
+	revision := cur.Status == domain.StatusPublished
+	if !cur.Status.Editable() && !(revision && domain.RevisionEditable(cur.RevisionStatus)) {
 		return domain.Task{}, ErrWrongStatus
 	}
 	t, err := s.shape(ctx, u.ID, id, in)
 	if err != nil {
 		return domain.Task{}, err
 	}
+	if revision { // правка опубликованного: новая версия ждёт проверки, опубликованная видна всем
+		out, err := s.repo.SaveTaskRevision(ctx, u.ID, id, t)
+		return out, conflictToStatus(err)
+	}
 	t.ID, t.OwnerID = id, u.ID
 	out, err := s.repo.UpdateTask(ctx, t)
+	return out, conflictToStatus(err)
+}
+
+// DiscardRevision — удалить правку опубликованного (опубликованное остаётся как было).
+func (s *Tasks) DiscardRevision(ctx context.Context, u domain.User, id int64) (domain.Task, error) {
+	out, err := s.repo.DropTaskRevision(ctx, u.ID, id)
+	if errors.Is(err, domain.ErrConflict) {
+		if _, gerr := s.repo.OwnTask(ctx, u.ID, id); gerr != nil {
+			return domain.Task{}, gerr
+		}
+	}
 	return out, conflictToStatus(err)
 }
 
@@ -194,6 +270,9 @@ func (s *Tasks) Submit(ctx context.Context, u domain.User, id int64) (domain.Tas
 	if err != nil {
 		return domain.Task{}, err
 	}
+	if cur.Status == domain.StatusPublished && cur.Revision != nil {
+		return s.submitRevision(ctx, u, cur)
+	}
 	if !domain.CanTransition(cur.Status, domain.StatusPending, domain.ActorOwner) {
 		return domain.Task{}, ErrWrongStatus
 	}
@@ -203,7 +282,27 @@ func (s *Tasks) Submit(ctx context.Context, u domain.User, id int64) (domain.Tas
 	if err := checkSubmitQuota(ctx, s.Submits, s.Clock, u.ID, s.Limits.SubmitsPerDay); err != nil {
 		return domain.Task{}, err
 	}
-	out, err := s.repo.SetTaskStatus(ctx, domain.SubmitChain(s.Mode, domain.SubjectTask, id, cur.Status, u.ID)...)
+	out, err := s.repo.SetTaskStatus(ctx, domain.SubmitChain(s.mode(ctx), domain.SubjectTask, id, cur.Status, u.ID)...)
+	return out, conflictToStatus(err)
+}
+
+// submitRevision — правку опубликованного — на проверку; в автоматическом режиме — сразу заменяет опубликованное.
+func (s *Tasks) submitRevision(ctx context.Context, u domain.User, cur domain.Task) (domain.Task, error) {
+	if !domain.RevisionTransition(cur.RevisionStatus, domain.StatusPending, domain.ActorOwner) {
+		return domain.Task{}, ErrWrongStatus
+	}
+	if err := s.complete(*cur.Revision); err != nil {
+		return domain.Task{}, err
+	}
+	if err := checkSubmitQuota(ctx, s.Submits, s.Clock, u.ID, s.Limits.SubmitsPerDay); err != nil {
+		return domain.Task{}, err
+	}
+	out, err := s.repo.SetTaskRevision(ctx, domain.StatusChange{Subject: domain.SubjectTask, SubjectID: cur.ID, From: cur.RevisionStatus, To: domain.StatusPending, ActorID: u.ID})
+	if err != nil || s.mode(ctx) != domain.ModerationAuto {
+		return out, conflictToStatus(err)
+	}
+	out, err = s.repo.ApplyTaskRevision(ctx, cur.ID, domain.StatusPending,
+		domain.StatusChange{Subject: domain.SubjectTask, SubjectID: cur.ID, From: domain.StatusPending, To: domain.StatusPublished, Reason: domain.AutoApproveNote, Auto: true})
 	return out, conflictToStatus(err)
 }
 
@@ -216,7 +315,14 @@ func (s *Tasks) Withdraw(ctx context.Context, u domain.User, id int64) (domain.T
 	if !domain.CanTransition(cur.Status, domain.StatusDraft, domain.ActorOwner) {
 		return domain.Task{}, ErrWrongStatus
 	}
-	out, err := s.repo.SetTaskStatus(ctx, domain.StatusChange{Subject: domain.SubjectTask, SubjectID: id, From: cur.Status, To: domain.StatusDraft, ActorID: u.ID})
+	ch := domain.StatusChange{Subject: domain.SubjectTask, SubjectID: id, From: cur.Status, To: domain.StatusDraft, ActorID: u.ID}
+	if cur.Status == domain.StatusPublished && cur.Revision != nil {
+		// снять с публикации с правкой: черновиком становится новая версия (её больше никто не видит)
+		out, err := s.repo.ApplyTaskRevision(ctx, id, cur.RevisionStatus,
+			domain.StatusChange{Subject: domain.SubjectTask, SubjectID: id, From: cur.RevisionStatus, To: domain.StatusDraft, ActorID: u.ID}, ch)
+		return out, conflictToStatus(err)
+	}
+	out, err := s.repo.SetTaskStatus(ctx, ch)
 	return out, conflictToStatus(err)
 }
 
@@ -306,6 +412,18 @@ func (s *Tasks) shape(ctx context.Context, userID, id int64, in TaskInput) (doma
 	maxLen(ve, "city", t.City, 80, "Город — до 80 символов")
 	t.Categories = checkSlugs(ve, "categories", in.Categories, "сфер", "Выберите сферу из списка")
 	t.Formats = checkFormats(ve, in.Formats)
+	if len(ve.Fields) == 0 {
+		f, err := s.applyFormatRules(ctx, t.Formats)
+		var fe *ValidationError
+		switch {
+		case errors.As(err, &fe):
+			ve.add("formats", fe.Fields["formats"])
+		case err != nil:
+			return domain.Task{}, err
+		default:
+			t.Formats = f
+		}
+	}
 	switch t.Access {
 	case "":
 		t.Access = domain.AccessOpen

@@ -223,10 +223,11 @@ func userOf(u store.User) domain.User {
 		ID: u.ID, Name: u.Name, Email: u.Email.String, AvatarURL: u.AvatarUrl, City: u.City,
 		ActiveMode: u.ActiveMode, CreatedAt: u.CreatedAt.Time,
 	}
-	if u.OnboardedAt.Valid {
-		t := u.OnboardedAt.Time
-		out.OnboardedAt = &t
-	}
+	out.OnboardedAt = tsPtr(u.OnboardedAt)
+	out.LastLoginAt = tsPtr(u.LastLoginAt)
+	out.StaffRole = domain.StaffRole(u.StaffRole.String)
+	out.BlockedAt = tsPtr(u.BlockedAt)
+	out.BlockedReason = u.BlockedReason
 	return out
 }
 
@@ -238,4 +239,55 @@ func nonNil(s []string) []string {
 		return []string{}
 	}
 	return s
+}
+
+// ===== 2FA в сессии, входы, первый администратор =====
+
+// SessionMFA — когда в этой сессии подтверждена 2FA (nil — не подтверждена); сессии нет — ErrNotFound.
+func (r *Auth) SessionMFA(ctx context.Context, tokenHash []byte, now time.Time) (*time.Time, error) {
+	row, err := r.q.GetSessionMFA(ctx, store.GetSessionMFAParams{TokenHash: tokenHash, Now: ts(now)})
+	if err != nil {
+		return nil, dbErr("2FA сессии", err)
+	}
+	return tsPtr(row.MfaAt), nil
+}
+
+// SetSessionMFA — отметить подтверждение 2FA в сессии; сессии нет — ErrNotFound.
+func (r *Auth) SetSessionMFA(ctx context.Context, tokenHash []byte, at, now time.Time) error {
+	n, err := r.q.SetSessionMFA(ctx, store.SetSessionMFAParams{TokenHash: tokenHash, MfaAt: ts(at), Now: ts(now)})
+	if err != nil {
+		return dbErr("2FA сессии", err)
+	}
+	if n == 0 {
+		return domain.ErrNotFound
+	}
+	return nil
+}
+
+// AddLoginEvent — запомнить вход (способ, адрес, браузер) для карточки пользователя в админке.
+func (r *Auth) AddLoginEvent(ctx context.Context, userID int64, method, ip, ua string) error {
+	return dbErr("вход в журнал", r.q.AddLoginEvent(ctx, store.AddLoginEventParams{UserID: userID, Method: method, Ip: ip, UserAgent: ua}))
+}
+
+// DeleteLoginEventsBefore — удалить старые входы (хранятся 180 дней).
+func (r *Auth) DeleteLoginEventsBefore(ctx context.Context, before time.Time) (int64, error) {
+	n, err := r.q.DeleteOldLoginEvents(ctx, ts(before))
+	return n, dbErr("очистка входов", err)
+}
+
+// GrantBootstrapAdmin — роль администратора (из ADMIN_EMAILS) и запись в журнал — одной транзакцией;
+// уже администратор — ErrNotFound (ничего не меняется).
+func (r *Auth) GrantBootstrapAdmin(ctx context.Context, userID int64, e domain.AuditEntry) (domain.User, error) {
+	var row store.User
+	err := r.inTx(ctx, func(q *store.Queries) error {
+		var err error
+		if row, err = q.GrantBootstrapAdmin(ctx, userID); err != nil {
+			return err
+		}
+		return insertAudit(ctx, q, e)
+	})
+	if err != nil {
+		return domain.User{}, dbErr("первый администратор", err)
+	}
+	return userOf(row), nil
 }

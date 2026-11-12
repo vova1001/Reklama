@@ -11,6 +11,27 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const addLoginEvent = `-- name: AddLoginEvent :exec
+INSERT INTO login_events (user_id, method, ip, user_agent) VALUES ($1, $2, $3, $4)
+`
+
+type AddLoginEventParams struct {
+	UserID    int64
+	Method    string
+	Ip        string
+	UserAgent string
+}
+
+func (q *Queries) AddLoginEvent(ctx context.Context, arg AddLoginEventParams) error {
+	_, err := q.db.Exec(ctx, addLoginEvent,
+		arg.UserID,
+		arg.Method,
+		arg.Ip,
+		arg.UserAgent,
+	)
+	return err
+}
+
 const codeStatsByEmail = `-- name: CodeStatsByEmail :one
 SELECT count(*)::int AS sent, COALESCE(max(created_at), 'epoch'::timestamptz)::timestamptz AS last_at,
        COALESCE(min(created_at), 'epoch'::timestamptz)::timestamptz AS first_at
@@ -154,7 +175,7 @@ func (q *Queries) CreateSession(ctx context.Context, arg CreateSessionParams) er
 const createUser = `-- name: CreateUser :one
 INSERT INTO users (name, email, avatar_url)
 VALUES ($1, $2, $3)
-RETURNING id, name, email, avatar_url, city, onboarded_at, created_at, updated_at, last_login_at, active_mode
+RETURNING id, name, email, avatar_url, city, onboarded_at, created_at, updated_at, last_login_at, active_mode, staff_role, blocked_at, blocked_reason
 `
 
 type CreateUserParams struct {
@@ -177,6 +198,9 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, e
 		&i.UpdatedAt,
 		&i.LastLoginAt,
 		&i.ActiveMode,
+		&i.StaffRole,
+		&i.BlockedAt,
+		&i.BlockedReason,
 	)
 	return i, err
 }
@@ -199,6 +223,18 @@ DELETE FROM login_codes WHERE created_at < $1
 
 func (q *Queries) DeleteOldCodes(ctx context.Context, createdAt pgtype.Timestamptz) (int64, error) {
 	result, err := q.db.Exec(ctx, deleteOldCodes, createdAt)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const deleteOldLoginEvents = `-- name: DeleteOldLoginEvents :execrows
+DELETE FROM login_events WHERE created_at < $1
+`
+
+func (q *Queries) DeleteOldLoginEvents(ctx context.Context, before pgtype.Timestamptz) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteOldLoginEvents, before)
 	if err != nil {
 		return 0, err
 	}
@@ -242,11 +278,33 @@ func (q *Queries) GetActiveCode(ctx context.Context, arg GetActiveCodeParams) (L
 	return i, err
 }
 
+const getSessionMFA = `-- name: GetSessionMFA :one
+SELECT id, mfa_at FROM sessions WHERE token_hash = $1 AND expires_at > $2
+`
+
+type GetSessionMFAParams struct {
+	TokenHash []byte
+	Now       pgtype.Timestamptz
+}
+
+type GetSessionMFARow struct {
+	ID    int64
+	MfaAt pgtype.Timestamptz
+}
+
+// 2FA в сессии: когда подтверждена (доступ к админке — не старше 12 часов).
+func (q *Queries) GetSessionMFA(ctx context.Context, arg GetSessionMFAParams) (GetSessionMFARow, error) {
+	row := q.db.QueryRow(ctx, getSessionMFA, arg.TokenHash, arg.Now)
+	var i GetSessionMFARow
+	err := row.Scan(&i.ID, &i.MfaAt)
+	return i, err
+}
+
 const getSessionUser = `-- name: GetSessionUser :one
-SELECT u.id, u.name, u.email, u.avatar_url, u.city, u.onboarded_at, u.created_at, u.updated_at, u.last_login_at, u.active_mode
+SELECT u.id, u.name, u.email, u.avatar_url, u.city, u.onboarded_at, u.created_at, u.updated_at, u.last_login_at, u.active_mode, u.staff_role, u.blocked_at, u.blocked_reason
 FROM sessions s
 JOIN users u ON u.id = s.user_id
-WHERE s.token_hash = $1 AND s.expires_at > $2
+WHERE s.token_hash = $1 AND s.expires_at > $2 AND u.blocked_at IS NULL
 `
 
 type GetSessionUserParams struct {
@@ -268,12 +326,15 @@ func (q *Queries) GetSessionUser(ctx context.Context, arg GetSessionUserParams) 
 		&i.UpdatedAt,
 		&i.LastLoginAt,
 		&i.ActiveMode,
+		&i.StaffRole,
+		&i.BlockedAt,
+		&i.BlockedReason,
 	)
 	return i, err
 }
 
 const getUser = `-- name: GetUser :one
-SELECT id, name, email, avatar_url, city, onboarded_at, created_at, updated_at, last_login_at, active_mode FROM users WHERE id = $1
+SELECT id, name, email, avatar_url, city, onboarded_at, created_at, updated_at, last_login_at, active_mode, staff_role, blocked_at, blocked_reason FROM users WHERE id = $1
 `
 
 func (q *Queries) GetUser(ctx context.Context, id int64) (User, error) {
@@ -290,12 +351,15 @@ func (q *Queries) GetUser(ctx context.Context, id int64) (User, error) {
 		&i.UpdatedAt,
 		&i.LastLoginAt,
 		&i.ActiveMode,
+		&i.StaffRole,
+		&i.BlockedAt,
+		&i.BlockedReason,
 	)
 	return i, err
 }
 
 const getUserByEmail = `-- name: GetUserByEmail :one
-SELECT id, name, email, avatar_url, city, onboarded_at, created_at, updated_at, last_login_at, active_mode FROM users WHERE email = $1
+SELECT id, name, email, avatar_url, city, onboarded_at, created_at, updated_at, last_login_at, active_mode, staff_role, blocked_at, blocked_reason FROM users WHERE email = $1
 `
 
 func (q *Queries) GetUserByEmail(ctx context.Context, email pgtype.Text) (User, error) {
@@ -312,12 +376,15 @@ func (q *Queries) GetUserByEmail(ctx context.Context, email pgtype.Text) (User, 
 		&i.UpdatedAt,
 		&i.LastLoginAt,
 		&i.ActiveMode,
+		&i.StaffRole,
+		&i.BlockedAt,
+		&i.BlockedReason,
 	)
 	return i, err
 }
 
 const getUserByIdentity = `-- name: GetUserByIdentity :one
-SELECT u.id, u.name, u.email, u.avatar_url, u.city, u.onboarded_at, u.created_at, u.updated_at, u.last_login_at, u.active_mode
+SELECT u.id, u.name, u.email, u.avatar_url, u.city, u.onboarded_at, u.created_at, u.updated_at, u.last_login_at, u.active_mode, u.staff_role, u.blocked_at, u.blocked_reason
 FROM identities i
 JOIN users u ON u.id = i.user_id
 WHERE i.provider = $1 AND i.subject = $2
@@ -342,6 +409,36 @@ func (q *Queries) GetUserByIdentity(ctx context.Context, arg GetUserByIdentityPa
 		&i.UpdatedAt,
 		&i.LastLoginAt,
 		&i.ActiveMode,
+		&i.StaffRole,
+		&i.BlockedAt,
+		&i.BlockedReason,
+	)
+	return i, err
+}
+
+const grantBootstrapAdmin = `-- name: GrantBootstrapAdmin :one
+UPDATE users SET staff_role = 'admin', updated_at = now() WHERE id = $1 AND staff_role IS DISTINCT FROM 'admin'
+RETURNING id, name, email, avatar_url, city, onboarded_at, created_at, updated_at, last_login_at, active_mode, staff_role, blocked_at, blocked_reason
+`
+
+// Первый админ из ADMIN_EMAILS: роль назначается, только если её ещё нет (понижать роль так нельзя).
+func (q *Queries) GrantBootstrapAdmin(ctx context.Context, id int64) (User, error) {
+	row := q.db.QueryRow(ctx, grantBootstrapAdmin, id)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Email,
+		&i.AvatarUrl,
+		&i.City,
+		&i.OnboardedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.LastLoginAt,
+		&i.ActiveMode,
+		&i.StaffRole,
+		&i.BlockedAt,
+		&i.BlockedReason,
 	)
 	return i, err
 }
@@ -389,6 +486,24 @@ func (q *Queries) ListUserProviders(ctx context.Context, userID int64) ([]string
 	return items, nil
 }
 
+const setSessionMFA = `-- name: SetSessionMFA :execrows
+UPDATE sessions SET mfa_at = $1 WHERE token_hash = $2 AND expires_at > $3
+`
+
+type SetSessionMFAParams struct {
+	MfaAt     pgtype.Timestamptz
+	TokenHash []byte
+	Now       pgtype.Timestamptz
+}
+
+func (q *Queries) SetSessionMFA(ctx context.Context, arg SetSessionMFAParams) (int64, error) {
+	result, err := q.db.Exec(ctx, setSessionMFA, arg.MfaAt, arg.TokenHash, arg.Now)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const setUserEmailIfEmpty = `-- name: SetUserEmailIfEmpty :exec
 UPDATE users SET email = $2, updated_at = now() WHERE id = $1 AND email IS NULL
 `
@@ -431,7 +546,7 @@ const updateUserBasics = `-- name: UpdateUserBasics :one
 UPDATE users
 SET name = $2, city = $3, onboarded_at = COALESCE(onboarded_at, now()), updated_at = now()
 WHERE id = $1
-RETURNING id, name, email, avatar_url, city, onboarded_at, created_at, updated_at, last_login_at, active_mode
+RETURNING id, name, email, avatar_url, city, onboarded_at, created_at, updated_at, last_login_at, active_mode, staff_role, blocked_at, blocked_reason
 `
 
 type UpdateUserBasicsParams struct {
@@ -455,6 +570,9 @@ func (q *Queries) UpdateUserBasics(ctx context.Context, arg UpdateUserBasicsPara
 		&i.UpdatedAt,
 		&i.LastLoginAt,
 		&i.ActiveMode,
+		&i.StaffRole,
+		&i.BlockedAt,
+		&i.BlockedReason,
 	)
 	return i, err
 }

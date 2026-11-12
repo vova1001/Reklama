@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"strconv"
+	"strings"
 	"time"
 
 	"ohvat/backend/internal/domain"
@@ -99,6 +101,11 @@ type AuthConfig struct {
 	BotLoginPerIP   int           // запусков входа через бота с адреса в час, 30
 	EmailEnabled    bool          // вход по почте доступен (есть способ отправки)
 	CodeRetention   time.Duration // сколько хранить строки кодов (для лимитов), 24 ч
+	// AdminEmails — ADMIN_EMAILS: подтверждённая почта из списка при входе получает роль администратора
+	// (только назначает; снять роль — в админке).
+	AdminEmails []string
+	// LoginRetention — сколько хранить журнал входов, 180 дней.
+	LoginRetention time.Duration
 }
 
 func (c *AuthConfig) defaults() {
@@ -134,6 +141,9 @@ func (c *AuthConfig) defaults() {
 	}
 	if c.CodeRetention == 0 {
 		c.CodeRetention = 24 * time.Hour
+	}
+	if c.LoginRetention == 0 {
+		c.LoginRetention = 180 * 24 * time.Hour
 	}
 }
 
@@ -196,6 +206,7 @@ type AuthDeps struct {
 	Google    GoogleProvider          // nil — вход через Google выключен
 	BotLogins TelegramLoginRepository // nil — вход через бота выключен
 	Devices   DeviceRepository        // nil — устройства не запоминаются (уведомление о каждом входе)
+	Staff     StaffAccessRepository   // nil — без журнала входов и первого администратора (тесты)
 	Notifier  Notifier                // nil — уведомления не отправляются
 	Clock     Clock                   // nil — SystemClock
 	Random    io.Reader               // nil — crypto/rand
@@ -211,6 +222,7 @@ type Auth struct {
 	google   GoogleProvider
 	tgLogins TelegramLoginRepository
 	devices  DeviceRepository
+	staff    StaffAccessRepository
 	notifier Notifier
 	signals  *signalHub
 	clock    Clock
@@ -244,7 +256,7 @@ func NewAuth(d AuthDeps, cfg AuthConfig) *Auth {
 	}
 	return &Auth{
 		users: d.Users, codes: d.Codes, sessions: d.Sessions, mailer: d.Mailer, google: d.Google,
-		tgLogins: d.BotLogins, devices: d.Devices, notifier: d.Notifier, signals: newSignalHub(),
+		tgLogins: d.BotLogins, devices: d.Devices, staff: d.Staff, notifier: d.Notifier, signals: newSignalHub(),
 		clock: d.Clock, rnd: d.Random, log: d.Log, cfg: cfg,
 	}
 }
@@ -282,8 +294,20 @@ func (s *Auth) login(ctx context.Context, id domain.Identity, emailVerified bool
 	if err != nil {
 		return LoginResult{}, err
 	}
+	if u.Blocked() {
+		return LoginResult{}, ErrBlocked
+	}
+	if u, err = s.bootstrapAdmin(ctx, u); err != nil {
+		return LoginResult{}, err
+	}
 	if err := s.users.TouchLogin(ctx, u.ID, id); err != nil {
 		return LoginResult{}, err
+	}
+	if s.staff != nil {
+		ci := clientFrom(ctx)
+		if err := s.staff.AddLoginEvent(ctx, u.ID, id.Provider, ci.IP, clip(ci.UserAgent, 300)); err != nil {
+			s.log.WarnContext(ctx, "вход не записан в журнал входов", "user", u.ID, "err", err)
+		}
 	}
 	tok, exp, err := s.newSession(ctx, u.ID)
 	if err != nil {
@@ -366,14 +390,19 @@ func (s *Auth) Cleanup(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("очистка сессий: %w", err)
 	}
-	var tg int64
+	var tg, logins int64
+	if s.staff != nil {
+		if logins, err = s.staff.DeleteLoginEventsBefore(ctx, now.Add(-s.cfg.LoginRetention)); err != nil {
+			return fmt.Errorf("очистка журнала входов: %w", err)
+		}
+	}
 	if s.tgLogins != nil {
 		if tg, err = s.tgLogins.DeleteTelegramLoginsBefore(ctx, now.Add(-s.cfg.CodeRetention)); err != nil {
 			return fmt.Errorf("очистка входов через бота: %w", err)
 		}
 	}
-	if codes+sess+tg > 0 {
-		s.log.InfoContext(ctx, "очистка входа", "codes", codes, "sessions", sess, "telegram_logins", tg)
+	if codes+sess+tg+logins > 0 {
+		s.log.InfoContext(ctx, "очистка входа", "codes", codes, "sessions", sess, "telegram_logins", tg, "login_events", logins)
 	}
 	return nil
 }
@@ -397,4 +426,39 @@ func (s *Auth) RunCleanup(ctx context.Context, every time.Duration) {
 func hashToken(t string) []byte {
 	h := sha256.Sum256([]byte(t))
 	return h[:]
+}
+
+// StaffAccessRepository — журнал входов и роль первого администратора.
+type StaffAccessRepository interface {
+	AddLoginEvent(ctx context.Context, userID int64, method, ip, ua string) error
+	DeleteLoginEventsBefore(ctx context.Context, before time.Time) (int64, error)
+	// GrantBootstrapAdmin — роль администратора с записью в журнал; уже администратор — domain.ErrNotFound.
+	GrantBootstrapAdmin(ctx context.Context, userID int64, e domain.AuditEntry) (domain.User, error)
+}
+
+// bootstrapAdmin — подтверждённая почта из ADMIN_EMAILS получает роль администратора (один раз, в журнал).
+func (s *Auth) bootstrapAdmin(ctx context.Context, u domain.User) (domain.User, error) {
+	if s.staff == nil || u.Email == "" || u.StaffRole == domain.RoleAdmin {
+		return u, nil
+	}
+	email := strings.ToLower(u.Email)
+	for _, a := range s.cfg.AdminEmails {
+		if a != email {
+			continue
+		}
+		e := auditFor(ctx, domain.User{ID: 0, Name: "ADMIN_EMAILS"}, domain.AuditRoleBootstrap, "user", strconv.FormatInt(u.ID, 10))
+		e.ActorLabel = "система (ADMIN_EMAILS)"
+		e.Before = map[string]string{"role": string(u.StaffRole)}
+		e.After = map[string]string{"role": string(domain.RoleAdmin)}
+		out, err := s.staff.GrantBootstrapAdmin(ctx, u.ID, e)
+		if errors.Is(err, domain.ErrNotFound) {
+			return u, nil
+		}
+		if err != nil {
+			return u, err
+		}
+		s.log.InfoContext(ctx, "роль администратора из ADMIN_EMAILS", "user", u.ID)
+		return out, nil
+	}
+	return u, nil
 }

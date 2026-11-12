@@ -177,8 +177,49 @@ func (t botTexts) notification(chat, userID int64, n Notification) (BotMessage, 
 		}
 		return BotMessage{ChatID: chat, Text: "<b>Выплата " + FormatRub(n.AmountKopecks) + "</b> " + status + ".",
 			Buttons: rows(t.link("Открыть приложение", pathOr(n.Path, "/app")))}, true
+	case NotifyModeration:
+		head := moderationHeads[n.Subject][domain.ReviewAction(n.Status)]
+		if head == "" {
+			return BotMessage{}, false
+		}
+		var b strings.Builder
+		b.WriteString("<b>" + head + "</b>")
+		if n.Title != "" {
+			b.WriteString("\n«" + esc(n.Title) + "»")
+		}
+		if domain.ReviewAction(n.Status) == domain.ActionReject && n.Reason != "" {
+			b.WriteString("\n\nПричина: " + esc(n.Reason))
+		}
+		if domain.ReviewAction(n.Status) == domain.ActionRework {
+			b.WriteString("\n")
+			for _, x := range n.Notes {
+				b.WriteString("\n• " + esc(x.Field) + ": " + esc(x.Note))
+			}
+		}
+		btn := "Открыть"
+		if domain.ReviewAction(n.Status) != domain.ActionApprove {
+			btn = "Исправить"
+		}
+		return BotMessage{ChatID: chat, Text: b.String(), Buttons: rows(t.link(btn, pathOr(n.Path, "/app")))}, true
 	}
 	return BotMessage{}, false
+}
+
+// moderationHeads — заголовок уведомления о решении: вид → решение → текст.
+var moderationHeads = map[string]map[domain.ReviewAction]string{
+	string(domain.KindTask): {domain.ActionApprove: "Задание опубликовано", domain.ActionReject: "Задание не прошло проверку",
+		domain.ActionRework: "Задание вернули на доработку"},
+	string(domain.KindTaskRevision): {domain.ActionApprove: "Изменения задания опубликованы",
+		domain.ActionReject: "Изменения задания не прошли проверку", domain.ActionRework: "Изменения задания нужно поправить"},
+	string(domain.KindCard): {domain.ActionApprove: "Анкета опубликована", domain.ActionReject: "Анкета не прошла проверку",
+		domain.ActionRework: "Анкету вернули на доработку"},
+	string(domain.KindCardRevision): {domain.ActionApprove: "Изменения анкеты опубликованы",
+		domain.ActionReject: "Изменения анкеты не прошли проверку", domain.ActionRework: "Изменения анкеты нужно поправить"},
+}
+
+// ModerationHead — заголовок решения (для письма).
+func ModerationHead(kind domain.ReviewKind, a domain.ReviewAction) string {
+	return moderationHeads[string(kind)][a]
 }
 
 func pathOr(p, def string) string {

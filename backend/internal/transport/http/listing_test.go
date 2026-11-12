@@ -68,6 +68,10 @@ func (f *fakeListings) Submit(_ context.Context, _ domain.User, id int64) (domai
 func (f *fakeListings) Withdraw(_ context.Context, _ domain.User, id int64) (domain.Task, error) {
 	return sampleTask(id, domain.StatusDraft), f.err
 }
+func (f *fakeListings) DiscardRevision(_ context.Context, _ domain.User, id int64) (domain.Task, error) {
+	f.put("discard", id)
+	return sampleTask(id, domain.StatusPublished), f.err
+}
 func (f *fakeListings) Feed(_ context.Context, q service.FeedQuery) (service.FeedPage, error) {
 	f.put("feed", q.After)
 	f.put("filter", q.Filter)
@@ -98,6 +102,10 @@ func (c fakeCards) Submit(context.Context, domain.User) (domain.CreatorCard, err
 }
 func (c fakeCards) Withdraw(context.Context, domain.User) (domain.CreatorCard, error) {
 	return domain.CreatorCard{Status: domain.StatusDraft}, c.f.err
+}
+
+func (c fakeCards) DiscardRevision(context.Context, domain.User) (domain.CreatorCard, error) {
+	return domain.CreatorCard{Status: domain.StatusPublished}, c.f.err
 }
 
 func (c fakeCards) Feed(_ context.Context, q service.FeedQuery) (service.CardPage, error) {
@@ -161,6 +169,14 @@ func (m fakeMedia) Open(_ context.Context, viewer int64, id string, size int) (s
 		return service.Blob{}, false, domain.ErrNotFound
 	}
 	return service.Blob{ContentType: "image/webp", Data: []byte("RIFFwebp")}, m.f.public, m.f.err
+}
+
+func (m fakeMedia) OpenForReview(_ context.Context, viewer domain.User, id string, _ int) (service.Blob, error) {
+	m.f.put("reviewer", viewer.ID)
+	if err := service.Authorize(viewer, domain.PermViewPrivates); err != nil {
+		return service.Blob{}, domain.ErrNotFound
+	}
+	return service.Blob{ContentType: "image/webp", Data: []byte("RIFFprivate")}, nil
 }
 
 func listSrv(f *fakeListings, opt Options) *Server {

@@ -20,6 +20,8 @@ const (
 	NotifyNewTask     NotificationKind = "task_new"
 	NotifyNewResponse NotificationKind = "response_new"
 	NotifyPayout      NotificationKind = "payout"
+	// NotifyModeration — решение модератора по заданию или анкете (опубликовано, отклонено, на доработку).
+	NotifyModeration NotificationKind = "moderation"
 )
 
 // Статусы выплаты.
@@ -47,7 +49,12 @@ type Notification struct {
 
 	// выплата
 	AmountKopecks int64
-	Status        string
+	Status        string // статус выплаты; у решения модератора — approve | reject | rework
+
+	// решение модератора
+	Subject string      // task | task_revision | card | card_revision
+	Reason  string      // причина отказа
+	Notes   []FieldNote // замечания по полям
 }
 
 // Notifier — доставка уведомлений пользователю сайта. Нет канала (не привязан Telegram, уведомления выключены) —

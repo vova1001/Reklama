@@ -76,6 +76,24 @@ type taskDTO struct {
 	UpdatedAt      time.Time  `json:"updatedAt"`
 	SubmittedAt    *time.Time `json:"submittedAt"`
 	PublishedAt    *time.Time `json:"publishedAt"`
+	// ReviewNotes — замечания модератора по полям (на доработке); Revision — правка опубликованного.
+	ReviewNotes map[string]string `json:"reviewNotes,omitempty"`
+	Revision    *taskRevisionDTO  `json:"revision,omitempty"`
+}
+
+// taskRevisionDTO — правка опубликованного задания: новая версия ждёт проверки, опубликованная видна всем.
+type taskRevisionDTO struct {
+	Status       string     `json:"status"`
+	RejectReason string     `json:"rejectReason"`
+	SubmittedAt  *time.Time `json:"submittedAt"`
+	Task         taskDTO    `json:"task"`
+}
+
+type cardRevisionDTO struct {
+	Status       string     `json:"status"`
+	RejectReason string     `json:"rejectReason"`
+	SubmittedAt  *time.Time `json:"submittedAt"`
+	Card         cardDTO    `json:"card"`
 }
 
 type tasksOut struct {
@@ -101,20 +119,22 @@ type platformDTO struct {
 }
 
 type cardDTO struct {
-	ID           int64         `json:"id"` // id автора — адрес страницы анкеты
-	Status       string        `json:"status"`
-	RejectReason string        `json:"rejectReason"`
-	Name         string        `json:"name"`
-	City         string        `json:"city"`
-	Topics       []string      `json:"topics"`
-	TopicTitles  []string      `json:"topicTitles,omitempty"`
-	Platforms    []platformDTO `json:"platforms"`
-	Blocks       []blockDTO    `json:"blocks"`
-	Avatar       *photoDTO     `json:"avatar"`
-	Works        []photoDTO    `json:"works"`
-	UpdatedAt    time.Time     `json:"updatedAt"`
-	SubmittedAt  *time.Time    `json:"submittedAt"`
-	PublishedAt  *time.Time    `json:"publishedAt"`
+	ID           int64             `json:"id"` // id автора — адрес страницы анкеты
+	Status       string            `json:"status"`
+	RejectReason string            `json:"rejectReason"`
+	Name         string            `json:"name"`
+	City         string            `json:"city"`
+	Topics       []string          `json:"topics"`
+	TopicTitles  []string          `json:"topicTitles,omitempty"`
+	Platforms    []platformDTO     `json:"platforms"`
+	Blocks       []blockDTO        `json:"blocks"`
+	Avatar       *photoDTO         `json:"avatar"`
+	Works        []photoDTO        `json:"works"`
+	UpdatedAt    time.Time         `json:"updatedAt"`
+	SubmittedAt  *time.Time        `json:"submittedAt"`
+	PublishedAt  *time.Time        `json:"publishedAt"`
+	ReviewNotes  map[string]string `json:"reviewNotes,omitempty"`
+	Revision     *cardRevisionDTO  `json:"revision,omitempty"`
 }
 
 type cardOut struct {
@@ -227,13 +247,24 @@ func toTaskDTO(t domain.Task) taskDTO {
 		s := t.PublishBy.Format(time.DateOnly)
 		by = &s
 	}
-	return taskDTO{
+	out := taskDTO{
 		ID: t.ID, Status: string(t.Status), RejectReason: t.RejectReason, Title: t.Title, City: t.City, Nationwide: t.Nationwide,
 		Categories: nonNilStr(t.Categories), CategoryTitles: t.CategoryTitles, Formats: nonNilStr(t.Formats), Access: t.Access,
 		MinViews: t.MinViews, RewardKopecks: t.RewardKopecks, PublishBy: by, PublishTime: t.PublishTime, DeadlineAt: utcPtr(t.DeadlineAt), Blocks: toBlocksDTO(t.Blocks),
 		Cover: photo(t.Cover), Photos: photos(t.Photos), Brand: t.Brand,
 		CreatedAt: t.CreatedAt.UTC(), UpdatedAt: t.UpdatedAt.UTC(), SubmittedAt: utcPtr(t.SubmittedAt), PublishedAt: utcPtr(t.PublishedAt),
 	}
+	if len(t.ReviewNotes) > 0 {
+		out.ReviewNotes = t.ReviewNotes
+	}
+	if t.Revision != nil {
+		rev := *t.Revision
+		rev.ID, rev.OwnerID, rev.Status = t.ID, t.OwnerID, t.RevisionStatus
+		rev.CreatedAt, rev.UpdatedAt = t.CreatedAt, t.UpdatedAt
+		out.Revision = &taskRevisionDTO{Status: string(t.RevisionStatus), RejectReason: t.RevisionReason,
+			SubmittedAt: utcPtr(t.RevisionSubmittedAt), Task: toTaskDTO(rev)}
+	}
+	return out
 }
 
 func toTasksDTO(ts []domain.Task) []taskDTO {
@@ -253,12 +284,22 @@ func toCardDTO(c *domain.CreatorCard) *cardDTO {
 		ps = append(ps, platformDTO{Kind: p.Kind, Type: p.Type, Handle: p.Handle, Title: p.Title, URL: p.URL,
 			Followers: p.Followers, FollowersHidden: p.FollowersHidden, Verified: p.Verified, RefreshedAt: utcPtr(p.RefreshedAt)})
 	}
-	return &cardDTO{
+	out := &cardDTO{
 		ID: c.UserID, TopicTitles: c.TopicTitles, PublishedAt: utcPtr(c.PublishedAt),
 		Status: string(c.Status), RejectReason: c.RejectReason, Name: c.Name, City: c.City, Topics: nonNilStr(c.Topics),
 		Platforms: ps, Blocks: toBlocksDTO(c.Blocks), Avatar: photo(c.Avatar), Works: photos(c.Works),
 		UpdatedAt: c.UpdatedAt.UTC(), SubmittedAt: utcPtr(c.SubmittedAt),
 	}
+	if len(c.ReviewNotes) > 0 {
+		out.ReviewNotes = c.ReviewNotes
+	}
+	if c.Revision != nil {
+		rev := *c.Revision
+		rev.UserID, rev.Status, rev.Platforms, rev.UpdatedAt = c.UserID, c.RevisionStatus, c.Platforms, c.UpdatedAt
+		out.Revision = &cardRevisionDTO{Status: string(c.RevisionStatus), RejectReason: c.RevisionReason,
+			SubmittedAt: utcPtr(c.RevisionSubmittedAt), Card: *toCardDTO(&rev)}
+	}
+	return out
 }
 
 func toCategoryItems(cs []domain.CategoryInfo) []categoryItemDTO {

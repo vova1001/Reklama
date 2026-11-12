@@ -164,7 +164,7 @@ func (r *Listings) SetTaskStatus(ctx context.Context, chain ...domain.StatusChan
 		for _, ch := range chain {
 			var err error
 			row, err = q.SetTaskStatus(ctx, store.SetTaskStatusParams{
-				ID: ch.SubjectID, FromStatus: string(ch.From), ToStatus: string(ch.To), Reason: ch.Reason,
+				ID: ch.SubjectID, FromStatus: string(ch.From), ToStatus: string(ch.To), Reason: ch.Reason, Notes: notesJSON(ch.Notes),
 			})
 			if err != nil {
 				return err
@@ -280,7 +280,7 @@ func (r *Listings) SetCardStatus(ctx context.Context, chain ...domain.StatusChan
 		for _, ch := range chain {
 			var err error
 			row, err = q.SetCardStatus(ctx, store.SetCardStatusParams{
-				UserID: ch.SubjectID, FromStatus: string(ch.From), ToStatus: string(ch.To), Reason: ch.Reason,
+				UserID: ch.SubjectID, FromStatus: string(ch.From), ToStatus: string(ch.To), Reason: ch.Reason, Notes: notesJSON(ch.Notes),
 			})
 			if err != nil {
 				return err
@@ -420,6 +420,15 @@ func taskOf(t store.Task) (domain.Task, error) {
 		d := t.PublishBy.Time.UTC()
 		out.PublishBy = &d
 	}
+	out.ReviewNotes = notesOf(t.ReviewNotes)
+	if t.RevisionStatus.Valid && len(t.Revision) > 0 {
+		rev, err := taskRevisionOf(t.Revision)
+		if err != nil {
+			return domain.Task{}, err
+		}
+		out.Revision, out.RevisionStatus = &rev, domain.Status(t.RevisionStatus.String)
+		out.RevisionReason, out.RevisionSubmittedAt = t.RevisionReason, tsPtr(t.RevisionSubmittedAt)
+	}
 	return out, nil
 }
 
@@ -432,7 +441,15 @@ func cardOf(c store.CreatorCard) (domain.CreatorCard, error) {
 		UserID: c.UserID, Status: domain.Status(c.Status), RejectReason: c.RejectReason, Name: c.Name, City: c.City,
 		Topics: nonNil(c.Topics), Platforms: []domain.Platform{}, Blocks: blocks,
 		Avatar: c.Avatar.String, Works: nonNil(c.Works), CreatedAt: c.CreatedAt.Time, UpdatedAt: c.UpdatedAt.Time,
-		SubmittedAt: tsPtr(c.SubmittedAt), PublishedAt: tsPtr(c.PublishedAt),
+		SubmittedAt: tsPtr(c.SubmittedAt), PublishedAt: tsPtr(c.PublishedAt), ReviewNotes: notesOf(c.ReviewNotes),
+	}
+	if c.RevisionStatus.Valid && len(c.Revision) > 0 {
+		rev, err := cardRevisionOf(c.Revision)
+		if err != nil {
+			return domain.CreatorCard{}, err
+		}
+		out.Revision, out.RevisionStatus = &rev, domain.Status(c.RevisionStatus.String)
+		out.RevisionReason, out.RevisionSubmittedAt = c.RevisionReason, tsPtr(c.RevisionSubmittedAt)
 	}
 	return out, nil
 }

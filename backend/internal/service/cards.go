@@ -21,6 +21,11 @@ type CardRepository interface {
 	PublishedCards(ctx context.Context, f domain.FeedFilter, after *domain.FeedCursor, limit int) ([]domain.CreatorCard, error)
 	// PublishedCard — опубликованная анкета; нет или не опубликована — domain.ErrNotFound.
 	PublishedCard(ctx context.Context, userID int64) (domain.CreatorCard, error)
+	// Правка опубликованной анкеты (как у задания).
+	SaveCardRevision(ctx context.Context, userID int64, rev domain.CreatorCard) (domain.CreatorCard, error)
+	SetCardRevision(ctx context.Context, ch domain.StatusChange) (domain.CreatorCard, error)
+	DropCardRevision(ctx context.Context, userID int64) (domain.CreatorCard, error)
+	ApplyCardRevision(ctx context.Context, userID int64, revStatus domain.Status, log domain.StatusChange, chain ...domain.StatusChange) (domain.CreatorCard, error)
 }
 
 // PlatformSource — подтверждённые соцсети авторов (сервис Social): в анкете только они, цифры — от площадок.
@@ -92,9 +97,11 @@ func (s *Cards) withPlatforms(ctx context.Context, cs []*domain.CreatorCard) err
 // Save — сохранить черновик (или правку отклонённой анкеты; статус не меняется).
 func (s *Cards) Save(ctx context.Context, u domain.User, in CardInput) (domain.CreatorCard, error) {
 	cur, err := s.repo.Card(ctx, u.ID)
+	revision := false
 	switch {
 	case err == nil:
-		if !cur.Status.Editable() {
+		revision = cur.Status == domain.StatusPublished
+		if !cur.Status.Editable() && !(revision && domain.RevisionEditable(cur.RevisionStatus)) {
 			return domain.CreatorCard{}, ErrWrongStatus
 		}
 	case !errors.Is(err, domain.ErrNotFound):
@@ -106,7 +113,12 @@ func (s *Cards) Save(ctx context.Context, u domain.User, in CardInput) (domain.C
 		return domain.CreatorCard{}, err
 	}
 	c.UserID = u.ID
-	out, err := s.repo.SaveCard(ctx, c)
+	var out domain.CreatorCard
+	if revision { // правка опубликованной анкеты: бизнесу видна прежняя, пока правку не одобрят
+		out, err = s.repo.SaveCardRevision(ctx, u.ID, c)
+	} else {
+		out, err = s.repo.SaveCard(ctx, c)
+	}
 	if err != nil {
 		return out, conflictToStatus(err)
 	}
@@ -120,6 +132,9 @@ func (s *Cards) Submit(ctx context.Context, u domain.User) (domain.CreatorCard, 
 	if err != nil {
 		return domain.CreatorCard{}, err
 	}
+	if cur.Status == domain.StatusPublished && cur.Revision != nil {
+		return s.submitRevision(ctx, u, cur)
+	}
 	if !domain.CanTransition(cur.Status, domain.StatusPending, domain.ActorOwner) {
 		return domain.CreatorCard{}, ErrWrongStatus
 	}
@@ -132,7 +147,7 @@ func (s *Cards) Submit(ctx context.Context, u domain.User) (domain.CreatorCard, 
 	if err := checkSubmitQuota(ctx, s.Submits, s.Clock, u.ID, s.Limits.SubmitsPerDay); err != nil {
 		return domain.CreatorCard{}, err
 	}
-	out, err := s.repo.SetCardStatus(ctx, domain.SubmitChain(s.Mode, domain.SubjectCard, u.ID, cur.Status, u.ID)...)
+	out, err := s.repo.SetCardStatus(ctx, domain.SubmitChain(s.mode(ctx), domain.SubjectCard, u.ID, cur.Status, u.ID)...)
 	if err != nil {
 		return out, conflictToStatus(err)
 	}
@@ -148,7 +163,14 @@ func (s *Cards) Withdraw(ctx context.Context, u domain.User) (domain.CreatorCard
 	if !domain.CanTransition(cur.Status, domain.StatusDraft, domain.ActorOwner) {
 		return domain.CreatorCard{}, ErrWrongStatus
 	}
-	out, err := s.repo.SetCardStatus(ctx, domain.StatusChange{Subject: domain.SubjectCard, SubjectID: u.ID, From: cur.Status, To: domain.StatusDraft, ActorID: u.ID})
+	ch := domain.StatusChange{Subject: domain.SubjectCard, SubjectID: u.ID, From: cur.Status, To: domain.StatusDraft, ActorID: u.ID}
+	var out domain.CreatorCard
+	if cur.Status == domain.StatusPublished && cur.Revision != nil {
+		out, err = s.repo.ApplyCardRevision(ctx, u.ID, cur.RevisionStatus,
+			domain.StatusChange{Subject: domain.SubjectCard, SubjectID: u.ID, From: cur.RevisionStatus, To: domain.StatusDraft, ActorID: u.ID}, ch)
+	} else {
+		out, err = s.repo.SetCardStatus(ctx, ch)
+	}
 	if err != nil {
 		return out, conflictToStatus(err)
 	}
@@ -241,4 +263,45 @@ func cardComplete(c domain.CreatorCard) error {
 		ve.add("platforms", "Подтвердите хотя бы одну соцсеть")
 	}
 	return ve.orNil()
+}
+
+// submitRevision — правку опубликованной анкеты — на проверку; в автоматическом режиме — сразу заменяет опубликованную.
+func (s *Cards) submitRevision(ctx context.Context, u domain.User, cur domain.CreatorCard) (domain.CreatorCard, error) {
+	if !domain.RevisionTransition(cur.RevisionStatus, domain.StatusPending, domain.ActorOwner) {
+		return domain.CreatorCard{}, ErrWrongStatus
+	}
+	rev := *cur.Revision
+	rev.UserID = u.ID
+	if err := s.withPlatforms(ctx, []*domain.CreatorCard{&rev}); err != nil {
+		return domain.CreatorCard{}, err
+	}
+	if err := cardComplete(rev); err != nil {
+		return domain.CreatorCard{}, err
+	}
+	if err := checkSubmitQuota(ctx, s.Submits, s.Clock, u.ID, s.Limits.SubmitsPerDay); err != nil {
+		return domain.CreatorCard{}, err
+	}
+	out, err := s.repo.SetCardRevision(ctx, domain.StatusChange{Subject: domain.SubjectCard, SubjectID: u.ID, From: cur.RevisionStatus, To: domain.StatusPending, ActorID: u.ID})
+	if err == nil && s.mode(ctx) == domain.ModerationAuto {
+		out, err = s.repo.ApplyCardRevision(ctx, u.ID, domain.StatusPending,
+			domain.StatusChange{Subject: domain.SubjectCard, SubjectID: u.ID, From: domain.StatusPending, To: domain.StatusPublished, Reason: domain.AutoApproveNote, Auto: true})
+	}
+	if err != nil {
+		return out, conflictToStatus(err)
+	}
+	return out, s.withPlatforms(ctx, []*domain.CreatorCard{&out})
+}
+
+// DiscardRevision — удалить правку опубликованной анкеты.
+func (s *Cards) DiscardRevision(ctx context.Context, u domain.User) (domain.CreatorCard, error) {
+	out, err := s.repo.DropCardRevision(ctx, u.ID)
+	if err != nil {
+		if errors.Is(err, domain.ErrConflict) {
+			if _, gerr := s.repo.Card(ctx, u.ID); gerr != nil {
+				return domain.CreatorCard{}, gerr
+			}
+		}
+		return out, conflictToStatus(err)
+	}
+	return out, s.withPlatforms(ctx, []*domain.CreatorCard{&out})
 }

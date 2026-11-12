@@ -8,6 +8,8 @@ import (
 	"log/slog"
 	"sync"
 	"time"
+
+	"ohvat/backend/internal/service"
 )
 
 // Message — письмо.
@@ -96,6 +98,11 @@ func (q *Queue) Enqueue(m Message) error {
 // SendLoginCode — письмо с кодом входа (service.Mailer).
 func (q *Queue) SendLoginCode(_ context.Context, to, code string) error {
 	return q.Enqueue(LoginCodeMessage(to, code))
+}
+
+// SendDecision ставит в очередь письмо о решении модератора (реализует service.DecisionMailer).
+func (q *Queue) SendDecision(_ context.Context, to string, m service.DecisionMail) error {
+	return q.Enqueue(DecisionMessage(to, m))
 }
 
 // Run запускает воркеров и ждёт отмены ctx; затем закрывает очередь, дожидается отправки оставшихся писем

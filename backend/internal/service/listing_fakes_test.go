@@ -117,12 +117,17 @@ func (m *memListings) SetTaskStatus(_ context.Context, chain ...domain.StatusCha
 			return domain.Task{}, domain.ErrConflict // всё или ничего, как транзакция
 		}
 		now := m.clock.Now()
-		next.Status, next.RejectReason = ch.To, ""
+		next.Status, next.RejectReason, next.ReviewNotes = ch.To, "", nil
 		if ch.To == domain.StatusRejected {
 			next.RejectReason = ch.Reason
 		}
+		if ch.To == domain.StatusChangesRequested {
+			next.ReviewNotes = ch.Notes
+		}
 		if ch.To == domain.StatusPublished {
 			next.PublishedAt = &now
+		} else {
+			next.Revision, next.RevisionStatus = nil, ""
 		}
 		ch.Subject, ch.At = domain.SubjectTask, now
 		logs = append(logs, ch)
@@ -215,12 +220,17 @@ func (m *memListings) SetCardStatus(_ context.Context, chain ...domain.StatusCha
 			return domain.CreatorCard{}, domain.ErrConflict
 		}
 		now := m.clock.Now()
-		next.Status, next.RejectReason = ch.To, ""
+		next.Status, next.RejectReason, next.ReviewNotes = ch.To, "", nil
 		if ch.To == domain.StatusRejected {
 			next.RejectReason = ch.Reason
 		}
+		if ch.To == domain.StatusChangesRequested {
+			next.ReviewNotes = ch.Notes
+		}
 		if ch.To == domain.StatusPublished {
 			next.PublishedAt = &now
+		} else {
+			next.Revision, next.RevisionStatus = nil, ""
 		}
 		ch.Subject, ch.At = domain.SubjectCard, now
 		logs = append(logs, ch)

@@ -12,6 +12,8 @@ const (
 	StatusPublished Status = "published"
 	StatusRejected  Status = "rejected"
 	StatusExpired   Status = "expired" // срок публикации прошёл (только задания; переводит система)
+	// StatusChangesRequested — модератор вернул на доработку с замечаниями по полям.
+	StatusChangesRequested Status = "changes_requested"
 )
 
 // Actor — кто меняет статус (битовая маска: переход может быть разрешён нескольким).
@@ -26,12 +28,28 @@ const (
 
 // transitions — разрешённые переходы и кто их делает. Всё, чего здесь нет, — запрещено.
 // Опубликованное владелец может снять в черновик (чтобы изменить) — затем снова на проверку.
+// Модератор может снять опубликованное (жалоба подтвердилась) — «отклонено» с причиной.
 var transitions = map[Status]map[Status]Actor{
-	StatusDraft:     {StatusPending: ActorOwner},
-	StatusPending:   {StatusPublished: ActorModerator | ActorSystem, StatusRejected: ActorModerator, StatusDraft: ActorOwner},
-	StatusRejected:  {StatusPending: ActorOwner},
-	StatusPublished: {StatusDraft: ActorOwner, StatusExpired: ActorSystem},
-	StatusExpired:   {StatusDraft: ActorOwner},
+	StatusDraft: {StatusPending: ActorOwner},
+	StatusPending: {StatusPublished: ActorModerator | ActorSystem, StatusRejected: ActorModerator,
+		StatusChangesRequested: ActorModerator, StatusDraft: ActorOwner},
+	StatusRejected:         {StatusPending: ActorOwner},
+	StatusChangesRequested: {StatusPending: ActorOwner},
+	StatusPublished:        {StatusDraft: ActorOwner, StatusExpired: ActorSystem, StatusRejected: ActorModerator},
+	StatusExpired:          {StatusDraft: ActorOwner},
+}
+
+// RevisionTransition — переходы правки опубликованного: владелец отправляет, модератор решает.
+func RevisionTransition(from, to Status, by Actor) bool {
+	switch {
+	case by == ActorOwner:
+		return to == StatusPending && (from == StatusDraft || from == StatusRejected || from == StatusChangesRequested)
+	case by == ActorModerator:
+		return from == StatusPending && (to == StatusPublished || to == StatusRejected || to == StatusChangesRequested)
+	case by == ActorSystem:
+		return from == StatusPending && to == StatusPublished
+	}
+	return false
 }
 
 // CanTransition — можно ли перевести из from в to.
@@ -52,8 +70,16 @@ const (
 // AutoApproveNote — пометка в журнале при автоматическом одобрении.
 const AutoApproveNote = "одобрено автоматически"
 
-// Editable — владелец может менять содержимое: черновик или отклонённое (после правки — снова на проверку).
-func (s Status) Editable() bool { return s == StatusDraft || s == StatusRejected }
+// Editable — владелец может менять содержимое: черновик, отклонённое или возвращённое на доработку (после правки —
+// снова на проверку).
+func (s Status) Editable() bool {
+	return s == StatusDraft || s == StatusRejected || s == StatusChangesRequested
+}
+
+// RevisionEditable — правку опубликованного можно менять (новую, отклонённую или возвращённую).
+func RevisionEditable(s Status) bool {
+	return s == "" || s == StatusDraft || s == StatusRejected || s == StatusChangesRequested
+}
 
 // Subject — что модерируется (для журнала смен статуса).
 type Subject string
@@ -111,6 +137,12 @@ type Task struct {
 	UpdatedAt      time.Time
 	SubmittedAt    *time.Time
 	PublishedAt    *time.Time
+	ReviewNotes    map[string]string // замечания модератора по полям (на доработке)
+	// Правка опубликованного: новая версия (только содержимое) и её статус; nil — правки нет.
+	Revision            *Task
+	RevisionStatus      Status
+	RevisionReason      string
+	RevisionSubmittedAt *time.Time
 }
 
 // Platform — подтверждённая соцсеть автора в анкете. Берётся только из social_accounts (цифры — от площадки),
@@ -144,6 +176,12 @@ type CreatorCard struct {
 	UpdatedAt    time.Time
 	SubmittedAt  *time.Time
 	PublishedAt  *time.Time
+	ReviewNotes  map[string]string
+	// Правка опубликованной анкеты (как у задания).
+	Revision            *CreatorCard
+	RevisionStatus      Status
+	RevisionReason      string
+	RevisionSubmittedAt *time.Time
 }
 
 // StatusChange — запись журнала смен статуса.
@@ -152,9 +190,10 @@ type StatusChange struct {
 	SubjectID int64
 	From      Status
 	To        Status
-	Reason    string // причина отказа (или AutoApproveNote в журнале)
-	ActorID   int64  // кто сменил; 0 — система
-	Auto      bool   // автоматическое решение (MODERATION_MODE=auto)
+	Reason    string            // причина отказа (или AutoApproveNote в журнале)
+	ActorID   int64             // кто сменил; 0 — система
+	Auto      bool              // автоматическое решение (MODERATION_MODE=auto)
+	Notes     map[string]string // замечания по полям (на доработку)
 	At        time.Time
 }
 

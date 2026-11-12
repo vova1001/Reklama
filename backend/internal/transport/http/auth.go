@@ -293,6 +293,30 @@ func (s *Server) fail(w http.ResponseWriter, r *http.Request, err error) {
 	case errors.Is(err, service.ErrSocialUnavailable):
 		w.Header().Set("Retry-After", "60")
 		writeJSON(w, http.StatusServiceUnavailable, errorDTO{Error: errorBody{Code: "social_unavailable", Message: "Площадка не ответила. Попробуйте через минуту — проверим и сами.", RetryAfter: 60}})
+	case errors.Is(err, service.ErrNotStaff):
+		writeError(w, http.StatusNotFound, "not_found", "Такого адреса нет.")
+	case errors.Is(err, service.ErrForbidden):
+		writeError(w, http.StatusForbidden, "forbidden", "Это действие доступно только администратору.")
+	case errors.Is(err, service.ErrTwoFactorSetup):
+		writeError(w, http.StatusForbidden, "2fa_setup_required", "Настройте двухфакторную защиту, чтобы открыть админку.")
+	case errors.Is(err, service.ErrTwoFactorRequired):
+		writeError(w, http.StatusForbidden, "2fa_required", "Подтвердите вход кодом из приложения.")
+	case errors.Is(err, service.ErrTwoFactorInvalid):
+		writeJSON(w, http.StatusBadRequest, errorDTO{Error: errorBody{Code: "2fa_invalid", Message: "Неверный код. Проверьте время на телефоне и введите код ещё раз.",
+			Fields: map[string]string{"code": "Неверный код"}}})
+	case errors.Is(err, service.ErrLeaseHeld):
+		writeError(w, http.StatusConflict, "lease_held", "Это уже проверяет другой модератор.")
+	case errors.Is(err, service.ErrLeaseLost):
+		writeError(w, http.StatusConflict, "lease_lost", "Время на проверку вышло. Откройте элемент снова.")
+	case errors.Is(err, service.ErrUndoExpired):
+		writeError(w, http.StatusConflict, "undo_expired", "Решение уже применено — отменить нельзя.")
+	case errors.Is(err, service.ErrLastAdmin):
+		writeError(w, http.StatusConflict, "last_admin", "Нельзя оставить сайт без администратора.")
+	case errors.Is(err, service.ErrSelfAction):
+		writeError(w, http.StatusConflict, "self_action", "Это действие нельзя выполнить для себя.")
+	case errors.Is(err, service.ErrBlocked):
+		s.clearCookie(w, sessionCookie, "/")
+		writeError(w, http.StatusForbidden, "blocked", "Аккаунт заблокирован. Если это ошибка — напишите в поддержку.")
 	case isNotFound(err):
 		writeError(w, http.StatusNotFound, "not_found", "Не найдено. Обновите страницу.")
 	case errors.Is(err, service.ErrWrongStatus):
@@ -334,6 +358,10 @@ func limitMessage(reason string, sec int) string {
 		return fmt.Sprintf("Цифры только что обновлены. Проверить снова можно через %s.", minutes(sec))
 	case "email_hourly":
 		return fmt.Sprintf("На эту почту ушло много писем. Попробуйте через %s или войдите другим способом.", minutes(sec))
+	case "2fa_locked":
+		return fmt.Sprintf("Слишком много неверных кодов. Попробуйте через %s.", minutes(sec))
+	case "complaints_daily":
+		return "Жалоб на сегодня достаточно. Мы разберём уже отправленные."
 	default:
 		return fmt.Sprintf("Слишком много запросов с вашего адреса. Попробуйте через %s.", minutes(sec))
 	}

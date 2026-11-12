@@ -4,6 +4,8 @@ package main
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/base64"
 	"errors"
 	"log/slog"
 	"net/http"
@@ -25,6 +27,7 @@ import (
 	"ohvat/backend/internal/gateway/platforms/httpx"
 	tgverify "ohvat/backend/internal/gateway/platforms/telegram"
 	"ohvat/backend/internal/gateway/platforms/youtube"
+	"ohvat/backend/internal/gateway/qrcode"
 	"ohvat/backend/internal/gateway/storage"
 	tggw "ohvat/backend/internal/gateway/telegram"
 	"ohvat/backend/internal/logx"
@@ -104,10 +107,11 @@ func run(log *slog.Logger) error {
 	}
 
 	auth := service.NewAuth(service.AuthDeps{
-		Users: authRepo, Codes: authRepo, Sessions: authRepo,
+		Users: authRepo, Codes: authRepo, Sessions: authRepo, Staff: authRepo,
 		Mailer: mailer, Google: gp, BotLogins: botRepo, Devices: tgRepo, Notifier: notifier, Log: log,
 	}, service.AuthConfig{
-		Secret: []byte(cfg.AuthSecret), CodeTTL: cfg.CodeTTL, MaxAttempts: cfg.CodeAttempts, ResendAfter: cfg.CodeResend,
+		AdminEmails: cfg.AdminEmails,
+		Secret:      []byte(cfg.AuthSecret), CodeTTL: cfg.CodeTTL, MaxAttempts: cfg.CodeAttempts, ResendAfter: cfg.CodeResend,
 		PerEmailHour: cfg.CodePerEmail, PerIPHour: cfg.CodePerIP, SessionTTL: cfg.SessionTTL,
 		TelegramToken: cfg.TelegramBotToken, TelegramBotName: cfg.TelegramBotName, EmailEnabled: mailer != nil,
 		TelegramBot: cfg.BotEnabled(), BotLoginTTL: cfg.TelegramLoginTTL, BotLoginPerIP: cfg.TelegramLoginPerIP,
@@ -128,16 +132,23 @@ func run(log *slog.Logger) error {
 	if err != nil {
 		return err
 	}
+	// админка: режим проверки — в базе (MODERATION_MODE — по умолчанию), решения по своим форматам
+	adminRepo := repository.NewAdmin(pool)
+	settings := service.NewSettings(adminRepo, domain.ModerationMode(cfg.Moderation), nil, log)
 	deps := service.ListingDeps{
 		Categories: catRepo, Submits: listRepo, Media: mediaRepo, Platforms: social,
 		Limits: service.ListingLimits{MaxTasks: cfg.TasksMax, SubmitsPerDay: cfg.SubmitsPerDay},
-		Mode:   domain.ModerationMode(cfg.Moderation),
+		Mode:   domain.ModerationMode(cfg.Moderation), Modes: settings, FormatRules: adminRepo,
 	}
-	log.Info("проверка заданий и анкет", "mode", cfg.Moderation)
+	log.Info("проверка заданий и анкет", "default_mode", cfg.Moderation, "admins_from_env", len(cfg.AdminEmails))
 	tasks := service.NewTasks(listRepo, deps)
 	cards := service.NewCards(listRepo, deps)
-	// модерация — без админки: сервис готов, транспорт появится вместе с ней
-	_ = service.NewModeration(moderationRepo{listRepo, catRepo})
+	content := moderationRepo{listRepo, catRepo}
+	moderation := service.NewModeration(content)
+	adm, err := newAdmin(cfg, pool, adminRepo, authRepo, content, moderation, social, queue, notifier, log)
+	if err != nil {
+		return err
+	}
 
 	// лимиты: Redis (REDIS_URL) — общие для всех серверов, при сбое Redis — в памяти; без Redis — в памяти
 	lims := newLimiters(ctx, cfg, log)
@@ -158,6 +169,7 @@ func run(log *slog.Logger) error {
 	opts := httpapi.Options{
 		Origin: cfg.Origin(), SecureCookies: cfg.SecureCookies(),
 		APILimiter: lims.api, AuthLimiter: lims.auth, UserLimiter: lims.user, UploadLimiter: lims.upload, DraftLimiter: lims.draft,
+		AdminLimiter: lims.admin, MFALimiter: lims.mfa, ComplaintLimiter: lims.complaint,
 	}
 	if cfg.BotEnabled() {
 		bot = service.NewBot(service.BotDeps{Auth: auth, Users: authRepo, Chats: tgRepo, Messenger: outbox, Social: social, Log: log},
@@ -168,6 +180,8 @@ func run(log *slog.Logger) error {
 	api := httpapi.New(httpapi.Services{
 		Home: service.NewHome(repository.NewHome(pool)), Health: service.NewHealth(repository.NewHealth(pool)),
 		Auth: auth, Profiles: profiles, Tasks: tasks, Cards: cards, Categories: service.NewCategories(catRepo), Formats: service.NewFormats(listRepo), Media: media, Drafts: drafts, Social: social,
+		TwoFactor: adm.twoFactor, Review: adm.review, Complaints: adm.complaints, StaffUsers: adm.users, Audit: service.NewAuditLog(adminRepo),
+		Settings: settings, Dashboard: service.NewDashboard(adminRepo, nil),
 	}, opts)
 	srv := &http.Server{
 		Addr:              cfg.HTTPAddr,
@@ -202,6 +216,7 @@ func run(log *slog.Logger) error {
 	g.Go(func() error { tasks.RunExpiry(gctx, 5*time.Minute, log); return nil })
 	g.Go(func() error { drafts.RunCleanup(gctx, draftsPG, time.Hour, log); return nil })
 	g.Go(func() error { social.RunRefresher(gctx, 10*time.Minute); return nil })
+	g.Go(func() error { adm.review.Run(gctx); return nil })
 	if cfg.KeepAliveURL != "" { // самопинг через публичный адрес: бесплатный хостинг не усыпляет сервис
 		ka := service.KeepAlive{Prober: keepalive.New(cfg.KeepAliveURL), Every: 10 * time.Minute, Timeout: 30 * time.Second, Log: log}
 		g.Go(func() error { ka.Run(gctx); return nil })
@@ -229,6 +244,7 @@ func run(log *slog.Logger) error {
 // limiters — ограничители частоты по правилам; memory — бакеты в памяти (их чистит фоновая задача).
 type limiters struct {
 	api, auth, user, webhook, upload, draft ratelimit.Limiter
+	admin, mfa, complaint                   ratelimit.Limiter
 	memory                                  []*ratelimit.Memory
 	rdb                                     *redis.Client
 }
@@ -266,6 +282,9 @@ func newLimiters(ctx context.Context, cfg config.Config, log *slog.Logger) *limi
 	out.webhook = mk("tg:", ratelimit.Rate{RPS: cfg.WebhookRPS, Burst: cfg.WebhookBurst})
 	out.upload = mk("up:", ratelimit.Rate{RPS: cfg.UploadRPS, Burst: cfg.UploadBurst})
 	out.draft = mk("draft:", ratelimit.Rate{RPS: cfg.DraftRPS, Burst: cfg.DraftBurst})
+	out.admin = mk("adm:", ratelimit.Rate{RPS: cfg.AdminRPS, Burst: cfg.AdminBurst})
+	out.mfa = mk("mfa:", ratelimit.Rate{RPS: cfg.MFARPS, Burst: cfg.MFABurst})
+	out.complaint = mk("cmp:", ratelimit.Rate{RPS: cfg.ComplaintRPS, Burst: cfg.ComplaintBurst})
 	return out
 }
 
@@ -297,10 +316,90 @@ func newSocial(cfg config.Config, pool *pgxpool.Pool, users *repository.Auth, tg
 		service.SocialConfig{SiteURL: cfg.PublicURL, RefreshEvery: cfg.SocialRefresh, StartsPerHour: cfg.SocialPerHour}), nil
 }
 
-// moderationRepo — хранилище для модерации: задания и анкеты + категории.
+// moderationRepo — хранилище для модерации и карточки проверки: задания и анкеты + категории.
 type moderationRepo struct {
 	*repository.Listings
 	*repository.Categories
+}
+
+// admin — сервисы админки.
+type admin struct {
+	twoFactor  *service.TwoFactor
+	review     *service.Review
+	complaints *service.Complaints
+	users      *service.StaffUsers
+}
+
+// newAdmin — админка: 2FA (секреты — AES-256-GCM: TOKEN_ENC_KEY или ключ из AUTH_SECRET), очередь проверки с
+// решениями и уведомлениями (почта + Telegram), жалобы, пользователи.
+func newAdmin(cfg config.Config, pool *pgxpool.Pool, repo *repository.Admin, users *repository.Auth, content moderationRepo,
+	mod *service.Moderation, social *service.Social, queue *mail.Queue, bot service.Notifier, log *slog.Logger) (admin, error) {
+	key, old := cfg.TwoFactorKeys(service.TOTPKeyFromSecret)
+	if key == "" {
+		k := make([]byte, 32)
+		if _, err := rand.Read(k); err != nil {
+			return admin{}, err
+		}
+		key = base64.StdEncoding.EncodeToString(k)
+		log.Warn("2FA: нет TOKEN_ENC_KEY и AUTH_SECRET — ключ на время работы процесса, после перезапуска 2FA настраивается заново")
+	}
+	box, err := secretbox.New(key, old...)
+	if err != nil {
+		return admin{}, err
+	}
+	twoFA := service.NewTwoFactor(service.TwoFactorDeps{Repo: repo, Sessions: users, Cipher: box, QR: qrcode.PNG{}, Log: log},
+		service.TwoFactorConfig{Secret: []byte(cfg.AuthSecret)})
+	notices := &service.OwnerNotices{Users: users, Bot: bot, SiteURL: cfg.PublicURL, Log: log}
+	if queue != nil { // без способа отправки писем — только Telegram
+		notices.Mail = queue
+	}
+	review := service.NewReview(service.ReviewDeps{Repo: repo, Content: content, Moderator: mod, Platforms: social, Notifier: notices, Log: log},
+		service.ReviewConfig{})
+	staff := service.NewStaffUsers(repo, userContent{users: users, profiles: repository.NewProfiles(pool), listings: content.Listings,
+		social: repository.NewSocial(pool)}, nil, func(err error) bool { return errors.Is(err, repository.ErrLastAdmin) })
+	complaints := service.NewComplaints(repo, complaintTargets{content.Listings, repo}, mod, staff, nil, service.ComplaintsConfig{})
+	return admin{twoFactor: twoFA, review: review, complaints: complaints, users: staff}, nil
+}
+
+// complaintTargets — на что жалуются: опубликованное (задания и анкеты) и пользователи.
+type complaintTargets struct {
+	*repository.Listings
+	*repository.Admin
+}
+
+// userContent — всё о пользователе для карточки в админке.
+type userContent struct {
+	users    *repository.Auth
+	profiles *repository.Profiles
+	listings *repository.Listings
+	social   *repository.Social
+}
+
+func (c userContent) Providers(ctx context.Context, id int64) ([]string, error) {
+	return c.users.Providers(ctx, id)
+}
+func (c userContent) OwnTasks(ctx context.Context, id int64, n int) ([]domain.Task, error) {
+	return c.listings.OwnTasks(ctx, id, n)
+}
+func (c userContent) Card(ctx context.Context, id int64) (domain.CreatorCard, error) {
+	return c.listings.Card(ctx, id)
+}
+func (c userContent) Accounts(ctx context.Context, id int64) ([]domain.SocialAccount, error) {
+	return c.social.Accounts(ctx, id)
+}
+func (c userContent) Profiles(ctx context.Context, id int64) (domain.Profiles, error) {
+	var out domain.Profiles
+	if b, err := c.profiles.BusinessProfile(ctx, id); err == nil {
+		out.Business = &b
+	} else if !errors.Is(err, domain.ErrNotFound) {
+		return out, err
+	}
+	if p, err := c.profiles.CreatorProfile(ctx, id); err == nil {
+		out.Creator = &p
+	} else if !errors.Is(err, domain.ErrNotFound) {
+		return out, err
+	}
+	return out, nil
 }
 
 // newBlobStore — где лежат файлы фото: S3-совместимое (MEDIA_STORE=s3) или PostgreSQL (на хостинге без диска).

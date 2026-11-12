@@ -109,6 +109,15 @@ type Config struct {
 	SocialPerHour  int           // SOCIAL_STARTS_PER_HOUR — подключений на пользователя в час, 20
 	YouTubeConnect bool          // YOUTUBE_CONNECT: on | off (по умолчанию on, если есть ключи Google и TOKEN_ENC_KEY)
 
+	// Админка.
+	AdminEmails    []string // ADMIN_EMAILS — почты первых администраторов через запятую (роль — при входе)
+	AdminRPS       float64  // RATE_LIMIT_ADMIN_RPS — запросов к админке в секунду на сотрудника, 5
+	AdminBurst     int      // RATE_LIMIT_ADMIN_BURST, 60
+	MFARPS         float64  // RATE_LIMIT_2FA_RPS — попыток 2FA в секунду на сотрудника, 0.2
+	MFABurst       int      // RATE_LIMIT_2FA_BURST, 10
+	ComplaintRPS   float64  // RATE_LIMIT_COMPLAINT_RPS — жалоб в секунду на пользователя, 0.05
+	ComplaintBurst int      // RATE_LIMIT_COMPLAINT_BURST, 5
+
 	Warnings []string // некритичные замечания для журнала при запуске
 }
 
@@ -387,6 +396,26 @@ func load(get func(string) string) (Config, error) {
 	if c.GoogleEnabled() && c.YouTubeConnect && c.TokenEncKey == "" {
 		c.Warnings = append(c.Warnings, "TOKEN_ENC_KEY не задан — подключение YouTube выключено (токены негде хранить)")
 	}
+	for _, e := range strings.Split(get("ADMIN_EMAILS"), ",") {
+		e = strings.ToLower(strings.TrimSpace(e))
+		if e == "" {
+			continue
+		}
+		if !strings.Contains(e, "@") || strings.ContainsAny(e, " <>\"") || len(e) > 254 {
+			errs = append(errs, errors.New("ADMIN_EMAILS: почты через запятую (admin@example.ru,other@example.ru)"))
+			break
+		}
+		c.AdminEmails = append(c.AdminEmails, e)
+	}
+	c.AdminRPS = rate("RATE_LIMIT_ADMIN_RPS", 5)
+	c.AdminBurst = num("RATE_LIMIT_ADMIN_BURST", 60)
+	c.MFARPS = rate("RATE_LIMIT_2FA_RPS", 0.2)
+	c.MFABurst = num("RATE_LIMIT_2FA_BURST", 10)
+	c.ComplaintRPS = rate("RATE_LIMIT_COMPLAINT_RPS", 0.05)
+	c.ComplaintBurst = num("RATE_LIMIT_COMPLAINT_BURST", 5)
+	if c.Production() && c.TokenEncKey == "" && c.AuthSecret == "" {
+		c.Warnings = append(c.Warnings, "ни TOKEN_ENC_KEY, ни AUTH_SECRET не заданы — секреты 2FA не переживут перезапуск (админка потребует настройку заново)")
+	}
 	c.RedisURL = strings.TrimSpace(get("REDIS_URL"))
 	if c.RedisURL != "" && !strings.HasPrefix(c.RedisURL, "redis://") && !strings.HasPrefix(c.RedisURL, "rediss://") {
 		errs = append(errs, errors.New("REDIS_URL: адрес вида redis://… или rediss://…"))
@@ -440,4 +469,24 @@ func validBotName(s string) bool {
 		}
 	}
 	return true
+}
+
+// TwoFactorKeys — ключ шифрования секретов 2FA и прежние ключи (только расшифровка): TOKEN_ENC_KEY, иначе ключ из
+// AUTH_SECRET (его же — как прежний, когда TOKEN_ENC_KEY появится). "" — ключа нет (секреты — до перезапуска).
+func (c Config) TwoFactorKeys(derive func(string) string) (current string, old []string) {
+	var fromSecret string
+	if c.AuthSecret != "" {
+		fromSecret = derive(c.AuthSecret)
+	}
+	switch {
+	case c.TokenEncKey != "":
+		old = []string{c.TokenEncKeyOld}
+		if fromSecret != "" {
+			old = append(old, fromSecret)
+		}
+		return c.TokenEncKey, old
+	case fromSecret != "":
+		return fromSecret, nil
+	}
+	return "", nil
 }

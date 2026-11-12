@@ -214,8 +214,10 @@ const mediaAccess = `-- name: MediaAccess :one
 SELECT m.id, m.owner_id,
        (CASE
             WHEN m.subject = 'user' THEN true
-            WHEN m.subject = 'task' THEN EXISTS (SELECT 1 FROM tasks t WHERE t.id = m.subject_id AND t.status = 'published')
-            WHEN m.subject = 'creator_card' THEN EXISTS (SELECT 1 FROM creator_cards c WHERE c.user_id = m.subject_id AND c.status = 'published')
+            WHEN m.subject = 'task' THEN EXISTS (SELECT 1 FROM tasks t WHERE t.id = m.subject_id AND t.status = 'published'
+                                                   AND (t.cover = m.id OR m.id = ANY(t.photos)))
+            WHEN m.subject = 'creator_card' THEN EXISTS (SELECT 1 FROM creator_cards c WHERE c.user_id = m.subject_id AND c.status = 'published'
+                                                   AND (c.avatar = m.id OR m.id = ANY(c.works)))
             ELSE false
         END)::boolean AS public
 FROM media m WHERE m.id = $1

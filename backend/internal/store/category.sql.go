@@ -25,7 +25,7 @@ func (q *Queries) CountAuthorPendingCategories(ctx context.Context, authorID pgt
 const createCustomCategory = `-- name: CreateCustomCategory :one
 INSERT INTO categories (slug, title, icon, position, is_active, status, author_id, norm)
 VALUES ($1, $2, 'tag', 1000, false, 'pending_review', $3, $4)
-RETURNING id, slug, title, icon, position, is_active, created_at, status, author_id, norm
+RETURNING id, slug, title, icon, position, is_active, created_at, status, author_id, norm, merged_into
 `
 
 type CreateCustomCategoryParams struct {
@@ -54,12 +54,13 @@ func (q *Queries) CreateCustomCategory(ctx context.Context, arg CreateCustomCate
 		&i.Status,
 		&i.AuthorID,
 		&i.Norm,
+		&i.MergedInto,
 	)
 	return i, err
 }
 
 const findAuthorCategory = `-- name: FindAuthorCategory :one
-SELECT id, slug, title, icon, position, is_active, created_at, status, author_id, norm FROM categories WHERE author_id = $1 AND norm = $2 AND status = 'pending_review'
+SELECT id, slug, title, icon, position, is_active, created_at, status, author_id, norm, merged_into FROM categories WHERE author_id = $1 AND norm = $2 AND status = 'pending_review'
 `
 
 type FindAuthorCategoryParams struct {
@@ -81,12 +82,13 @@ func (q *Queries) FindAuthorCategory(ctx context.Context, arg FindAuthorCategory
 		&i.Status,
 		&i.AuthorID,
 		&i.Norm,
+		&i.MergedInto,
 	)
 	return i, err
 }
 
 const findCommonCategory = `-- name: FindCommonCategory :one
-SELECT id, slug, title, icon, position, is_active, created_at, status, author_id, norm FROM categories WHERE norm = $1 AND status = 'approved' AND is_active
+SELECT id, slug, title, icon, position, is_active, created_at, status, author_id, norm, merged_into FROM categories WHERE norm = $1 AND status = 'approved' AND is_active
 `
 
 func (q *Queries) FindCommonCategory(ctx context.Context, norm string) (Category, error) {
@@ -103,12 +105,13 @@ func (q *Queries) FindCommonCategory(ctx context.Context, norm string) (Category
 		&i.Status,
 		&i.AuthorID,
 		&i.Norm,
+		&i.MergedInto,
 	)
 	return i, err
 }
 
 const getCategory = `-- name: GetCategory :one
-SELECT id, slug, title, icon, position, is_active, created_at, status, author_id, norm FROM categories WHERE id = $1
+SELECT id, slug, title, icon, position, is_active, created_at, status, author_id, norm, merged_into FROM categories WHERE id = $1
 `
 
 func (q *Queries) GetCategory(ctx context.Context, id int64) (Category, error) {
@@ -125,12 +128,13 @@ func (q *Queries) GetCategory(ctx context.Context, id int64) (Category, error) {
 		&i.Status,
 		&i.AuthorID,
 		&i.Norm,
+		&i.MergedInto,
 	)
 	return i, err
 }
 
 const listAuthorCategories = `-- name: ListAuthorCategories :many
-SELECT id, slug, title, icon, position, is_active, created_at, status, author_id, norm FROM categories WHERE author_id = $1 AND status <> 'approved' ORDER BY created_at, id
+SELECT id, slug, title, icon, position, is_active, created_at, status, author_id, norm, merged_into FROM categories WHERE author_id = $1 AND status <> 'approved' ORDER BY created_at, id
 `
 
 func (q *Queries) ListAuthorCategories(ctx context.Context, authorID pgtype.Int8) ([]Category, error) {
@@ -153,6 +157,7 @@ func (q *Queries) ListAuthorCategories(ctx context.Context, authorID pgtype.Int8
 			&i.Status,
 			&i.AuthorID,
 			&i.Norm,
+			&i.MergedInto,
 		); err != nil {
 			return nil, err
 		}
@@ -166,7 +171,7 @@ func (q *Queries) ListAuthorCategories(ctx context.Context, authorID pgtype.Int8
 
 const listCommonCategories = `-- name: ListCommonCategories :many
 
-SELECT id, slug, title, icon, position, is_active, created_at, status, author_id, norm FROM categories WHERE status = 'approved' AND is_active ORDER BY position, id
+SELECT id, slug, title, icon, position, is_active, created_at, status, author_id, norm, merged_into FROM categories WHERE status = 'approved' AND is_active ORDER BY position, id
 `
 
 // Справочник категорий и свои категории пользователей.
@@ -190,6 +195,7 @@ func (q *Queries) ListCommonCategories(ctx context.Context) ([]Category, error) 
 			&i.Status,
 			&i.AuthorID,
 			&i.Norm,
+			&i.MergedInto,
 		); err != nil {
 			return nil, err
 		}
@@ -228,7 +234,7 @@ func (q *Queries) LogCategoryChange(ctx context.Context, arg LogCategoryChangePa
 const setCategoryStatus = `-- name: SetCategoryStatus :one
 UPDATE categories SET status = $1::text, is_active = ($1::text = 'approved')
 WHERE id = $2 AND status = $3::text
-RETURNING id, slug, title, icon, position, is_active, created_at, status, author_id, norm
+RETURNING id, slug, title, icon, position, is_active, created_at, status, author_id, norm, merged_into
 `
 
 type SetCategoryStatusParams struct {
@@ -252,6 +258,7 @@ func (q *Queries) SetCategoryStatus(ctx context.Context, arg SetCategoryStatusPa
 		&i.Status,
 		&i.AuthorID,
 		&i.Norm,
+		&i.MergedInto,
 	)
 	return i, err
 }

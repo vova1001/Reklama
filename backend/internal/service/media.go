@@ -350,3 +350,17 @@ func checkMedia(ctx context.Context, look MediaLookup, ve *ValidationError, owne
 	}
 	return ids, nil
 }
+
+// OpenForReview — любое фото для сотрудника с правом смотреть непубличное (карточка проверки, жалобы).
+func (s *Media) OpenForReview(ctx context.Context, viewer domain.User, id string, size int) (Blob, error) {
+	if err := authorize(viewer, domain.PermViewPrivates); err != nil {
+		return Blob{}, domain.ErrNotFound
+	}
+	if !validMediaID(id) || !domain.ValidMediaSize(size) {
+		return Blob{}, domain.ErrNotFound
+	}
+	if _, err := s.repo.Access(ctx, id); err != nil {
+		return Blob{}, err
+	}
+	return s.blobs.Get(ctx, domain.MediaKey(id, size))
+}

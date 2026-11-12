@@ -58,7 +58,7 @@ INSERT INTO tasks (owner_id, title, city, nationwide, categories, formats, acces
                    reward_kopecks, publish_by, publish_time, deadline_at, blocks, cover, photos)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8,
         $9, $10, $11, $12, $13, $14, $15)
-RETURNING id, owner_id, status, reject_reason, title, city, nationwide, formats, access, min_views, reward_kopecks, publish_by, blocks, cover, photos, created_at, updated_at, submitted_at, published_at, publish_time, deadline_at, categories
+RETURNING id, owner_id, status, reject_reason, title, city, nationwide, formats, access, min_views, reward_kopecks, publish_by, blocks, cover, photos, created_at, updated_at, submitted_at, published_at, publish_time, deadline_at, categories, review_notes, revision, revision_status, revision_reason, revision_submitted_at
 `
 
 type CreateTaskParams struct {
@@ -123,12 +123,17 @@ func (q *Queries) CreateTask(ctx context.Context, arg CreateTaskParams) (Task, e
 		&i.PublishTime,
 		&i.DeadlineAt,
 		&i.Categories,
+		&i.ReviewNotes,
+		&i.Revision,
+		&i.RevisionStatus,
+		&i.RevisionReason,
+		&i.RevisionSubmittedAt,
 	)
 	return i, err
 }
 
 const deleteOwnTask = `-- name: DeleteOwnTask :execrows
-DELETE FROM tasks WHERE id = $1 AND owner_id = $2 AND status IN ('draft', 'rejected', 'expired')
+DELETE FROM tasks WHERE id = $1 AND owner_id = $2 AND status IN ('draft', 'rejected', 'expired', 'changes_requested')
 `
 
 type DeleteOwnTaskParams struct {
@@ -161,9 +166,91 @@ func (q *Queries) DetachMedia(ctx context.Context, arg DetachMediaParams) error 
 	return err
 }
 
+const dropCardRevision = `-- name: DropCardRevision :one
+UPDATE creator_cards SET revision = NULL, revision_status = NULL, revision_reason = '', revision_submitted_at = NULL,
+                         review_notes = '{}', updated_at = now()
+WHERE user_id = $1 AND status = 'published' AND revision IS NOT NULL
+RETURNING user_id, status, reject_reason, name, city, topics, platforms, blocks, avatar, works, created_at, updated_at, submitted_at, published_at, review_notes, revision, revision_status, revision_reason, revision_submitted_at
+`
+
+func (q *Queries) DropCardRevision(ctx context.Context, userID int64) (CreatorCard, error) {
+	row := q.db.QueryRow(ctx, dropCardRevision, userID)
+	var i CreatorCard
+	err := row.Scan(
+		&i.UserID,
+		&i.Status,
+		&i.RejectReason,
+		&i.Name,
+		&i.City,
+		&i.Topics,
+		&i.Platforms,
+		&i.Blocks,
+		&i.Avatar,
+		&i.Works,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.SubmittedAt,
+		&i.PublishedAt,
+		&i.ReviewNotes,
+		&i.Revision,
+		&i.RevisionStatus,
+		&i.RevisionReason,
+		&i.RevisionSubmittedAt,
+	)
+	return i, err
+}
+
+const dropTaskRevision = `-- name: DropTaskRevision :one
+UPDATE tasks SET revision = NULL, revision_status = NULL, revision_reason = '', revision_submitted_at = NULL,
+                 review_notes = '{}', updated_at = now()
+WHERE id = $1 AND owner_id = $2 AND status = 'published' AND revision IS NOT NULL
+RETURNING id, owner_id, status, reject_reason, title, city, nationwide, formats, access, min_views, reward_kopecks, publish_by, blocks, cover, photos, created_at, updated_at, submitted_at, published_at, publish_time, deadline_at, categories, review_notes, revision, revision_status, revision_reason, revision_submitted_at
+`
+
+type DropTaskRevisionParams struct {
+	ID      int64
+	OwnerID int64
+}
+
+// Удалить правку (владелец передумал).
+func (q *Queries) DropTaskRevision(ctx context.Context, arg DropTaskRevisionParams) (Task, error) {
+	row := q.db.QueryRow(ctx, dropTaskRevision, arg.ID, arg.OwnerID)
+	var i Task
+	err := row.Scan(
+		&i.ID,
+		&i.OwnerID,
+		&i.Status,
+		&i.RejectReason,
+		&i.Title,
+		&i.City,
+		&i.Nationwide,
+		&i.Formats,
+		&i.Access,
+		&i.MinViews,
+		&i.RewardKopecks,
+		&i.PublishBy,
+		&i.Blocks,
+		&i.Cover,
+		&i.Photos,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.SubmittedAt,
+		&i.PublishedAt,
+		&i.PublishTime,
+		&i.DeadlineAt,
+		&i.Categories,
+		&i.ReviewNotes,
+		&i.Revision,
+		&i.RevisionStatus,
+		&i.RevisionReason,
+		&i.RevisionSubmittedAt,
+	)
+	return i, err
+}
+
 const expireTasks = `-- name: ExpireTasks :many
 WITH done AS (
-    UPDATE tasks SET status = 'expired', updated_at = now()
+    UPDATE tasks SET status = 'expired', updated_at = now(), revision = NULL, revision_status = NULL, revision_reason = ''
     WHERE status = 'published' AND deadline_at <= $1
     RETURNING id
 ), logged AS (
@@ -196,7 +283,7 @@ func (q *Queries) ExpireTasks(ctx context.Context, now pgtype.Timestamptz) ([]in
 
 const getCard = `-- name: GetCard :one
 
-SELECT user_id, status, reject_reason, name, city, topics, platforms, blocks, avatar, works, created_at, updated_at, submitted_at, published_at FROM creator_cards WHERE user_id = $1
+SELECT user_id, status, reject_reason, name, city, topics, platforms, blocks, avatar, works, created_at, updated_at, submitted_at, published_at, review_notes, revision, revision_status, revision_reason, revision_submitted_at FROM creator_cards WHERE user_id = $1
 `
 
 // ===== анкеты авторов =====
@@ -218,12 +305,17 @@ func (q *Queries) GetCard(ctx context.Context, userID int64) (CreatorCard, error
 		&i.UpdatedAt,
 		&i.SubmittedAt,
 		&i.PublishedAt,
+		&i.ReviewNotes,
+		&i.Revision,
+		&i.RevisionStatus,
+		&i.RevisionReason,
+		&i.RevisionSubmittedAt,
 	)
 	return i, err
 }
 
 const getOwnTask = `-- name: GetOwnTask :one
-SELECT id, owner_id, status, reject_reason, title, city, nationwide, formats, access, min_views, reward_kopecks, publish_by, blocks, cover, photos, created_at, updated_at, submitted_at, published_at, publish_time, deadline_at, categories FROM tasks WHERE id = $1 AND owner_id = $2
+SELECT id, owner_id, status, reject_reason, title, city, nationwide, formats, access, min_views, reward_kopecks, publish_by, blocks, cover, photos, created_at, updated_at, submitted_at, published_at, publish_time, deadline_at, categories, review_notes, revision, revision_status, revision_reason, revision_submitted_at FROM tasks WHERE id = $1 AND owner_id = $2
 `
 
 type GetOwnTaskParams struct {
@@ -257,33 +349,44 @@ func (q *Queries) GetOwnTask(ctx context.Context, arg GetOwnTaskParams) (Task, e
 		&i.PublishTime,
 		&i.DeadlineAt,
 		&i.Categories,
+		&i.ReviewNotes,
+		&i.Revision,
+		&i.RevisionStatus,
+		&i.RevisionReason,
+		&i.RevisionSubmittedAt,
 	)
 	return i, err
 }
 
 const getPublishedCard = `-- name: GetPublishedCard :one
-SELECT cc.user_id, cc.status, cc.reject_reason, cc.name, cc.city, cc.topics, cc.platforms, cc.blocks, cc.avatar, cc.works, cc.created_at, cc.updated_at, cc.submitted_at, cc.published_at, ARRAY(SELECT c.title FROM unnest(cc.topics) WITH ORDINALITY AS x(slug, n)
+SELECT cc.user_id, cc.status, cc.reject_reason, cc.name, cc.city, cc.topics, cc.platforms, cc.blocks, cc.avatar, cc.works, cc.created_at, cc.updated_at, cc.submitted_at, cc.published_at, cc.review_notes, cc.revision, cc.revision_status, cc.revision_reason, cc.revision_submitted_at, ARRAY(SELECT c.title FROM unnest(cc.topics) WITH ORDINALITY AS x(slug, n)
                    JOIN categories c ON c.slug = x.slug ORDER BY x.n)::text[] AS topic_titles
 FROM creator_cards cc
-WHERE cc.user_id = $1 AND cc.status = 'published'
+JOIN users u ON u.id = cc.user_id
+WHERE cc.user_id = $1 AND cc.status = 'published' AND u.blocked_at IS NULL
 `
 
 type GetPublishedCardRow struct {
-	UserID       int64
-	Status       string
-	RejectReason string
-	Name         string
-	City         string
-	Topics       []string
-	Platforms    []byte
-	Blocks       []byte
-	Avatar       pgtype.Text
-	Works        []string
-	CreatedAt    pgtype.Timestamptz
-	UpdatedAt    pgtype.Timestamptz
-	SubmittedAt  pgtype.Timestamptz
-	PublishedAt  pgtype.Timestamptz
-	TopicTitles  []string
+	UserID              int64
+	Status              string
+	RejectReason        string
+	Name                string
+	City                string
+	Topics              []string
+	Platforms           []byte
+	Blocks              []byte
+	Avatar              pgtype.Text
+	Works               []string
+	CreatedAt           pgtype.Timestamptz
+	UpdatedAt           pgtype.Timestamptz
+	SubmittedAt         pgtype.Timestamptz
+	PublishedAt         pgtype.Timestamptz
+	ReviewNotes         []byte
+	Revision            []byte
+	RevisionStatus      pgtype.Text
+	RevisionReason      string
+	RevisionSubmittedAt pgtype.Timestamptz
+	TopicTitles         []string
 }
 
 func (q *Queries) GetPublishedCard(ctx context.Context, userID int64) (GetPublishedCardRow, error) {
@@ -304,45 +407,55 @@ func (q *Queries) GetPublishedCard(ctx context.Context, userID int64) (GetPublis
 		&i.UpdatedAt,
 		&i.SubmittedAt,
 		&i.PublishedAt,
+		&i.ReviewNotes,
+		&i.Revision,
+		&i.RevisionStatus,
+		&i.RevisionReason,
+		&i.RevisionSubmittedAt,
 		&i.TopicTitles,
 	)
 	return i, err
 }
 
 const getPublishedTask = `-- name: GetPublishedTask :one
-SELECT t.id, t.owner_id, t.status, t.reject_reason, t.title, t.city, t.nationwide, t.formats, t.access, t.min_views, t.reward_kopecks, t.publish_by, t.blocks, t.cover, t.photos, t.created_at, t.updated_at, t.submitted_at, t.published_at, t.publish_time, t.deadline_at, t.categories, COALESCE(NULLIF(b.name, ''), NULLIF(u.name, ''), '')::text AS brand, ARRAY(SELECT c.title FROM unnest(t.categories) WITH ORDINALITY AS x(slug, n)
+SELECT t.id, t.owner_id, t.status, t.reject_reason, t.title, t.city, t.nationwide, t.formats, t.access, t.min_views, t.reward_kopecks, t.publish_by, t.blocks, t.cover, t.photos, t.created_at, t.updated_at, t.submitted_at, t.published_at, t.publish_time, t.deadline_at, t.categories, t.review_notes, t.revision, t.revision_status, t.revision_reason, t.revision_submitted_at, COALESCE(NULLIF(b.name, ''), NULLIF(u.name, ''), '')::text AS brand, ARRAY(SELECT c.title FROM unnest(t.categories) WITH ORDINALITY AS x(slug, n)
                    JOIN categories c ON c.slug = x.slug ORDER BY x.n)::text[] AS category_titles
 FROM tasks t
 JOIN users u ON u.id = t.owner_id
 LEFT JOIN business_profiles b ON b.user_id = t.owner_id
-WHERE t.id = $1 AND t.status = 'published' AND t.deadline_at > now()
+WHERE t.id = $1 AND t.status = 'published' AND t.deadline_at > now() AND u.blocked_at IS NULL
 `
 
 type GetPublishedTaskRow struct {
-	ID             int64
-	OwnerID        int64
-	Status         string
-	RejectReason   string
-	Title          string
-	City           string
-	Nationwide     bool
-	Formats        []string
-	Access         string
-	MinViews       int64
-	RewardKopecks  int64
-	PublishBy      pgtype.Date
-	Blocks         []byte
-	Cover          pgtype.Text
-	Photos         []string
-	CreatedAt      pgtype.Timestamptz
-	UpdatedAt      pgtype.Timestamptz
-	SubmittedAt    pgtype.Timestamptz
-	PublishedAt    pgtype.Timestamptz
-	PublishTime    pgtype.Time
-	DeadlineAt     pgtype.Timestamptz
-	Categories     []string
-	Brand          string
-	CategoryTitles []string
+	ID                  int64
+	OwnerID             int64
+	Status              string
+	RejectReason        string
+	Title               string
+	City                string
+	Nationwide          bool
+	Formats             []string
+	Access              string
+	MinViews            int64
+	RewardKopecks       int64
+	PublishBy           pgtype.Date
+	Blocks              []byte
+	Cover               pgtype.Text
+	Photos              []string
+	CreatedAt           pgtype.Timestamptz
+	UpdatedAt           pgtype.Timestamptz
+	SubmittedAt         pgtype.Timestamptz
+	PublishedAt         pgtype.Timestamptz
+	PublishTime         pgtype.Time
+	DeadlineAt          pgtype.Timestamptz
+	Categories          []string
+	ReviewNotes         []byte
+	Revision            []byte
+	RevisionStatus      pgtype.Text
+	RevisionReason      string
+	RevisionSubmittedAt pgtype.Timestamptz
+	Brand               string
+	CategoryTitles      []string
 }
 
 func (q *Queries) GetPublishedTask(ctx context.Context, id int64) (GetPublishedTaskRow, error) {
@@ -371,6 +484,11 @@ func (q *Queries) GetPublishedTask(ctx context.Context, id int64) (GetPublishedT
 		&i.PublishTime,
 		&i.DeadlineAt,
 		&i.Categories,
+		&i.ReviewNotes,
+		&i.Revision,
+		&i.RevisionStatus,
+		&i.RevisionReason,
+		&i.RevisionSubmittedAt,
 		&i.Brand,
 		&i.CategoryTitles,
 	)
@@ -378,7 +496,7 @@ func (q *Queries) GetPublishedTask(ctx context.Context, id int64) (GetPublishedT
 }
 
 const getTask = `-- name: GetTask :one
-SELECT id, owner_id, status, reject_reason, title, city, nationwide, formats, access, min_views, reward_kopecks, publish_by, blocks, cover, photos, created_at, updated_at, submitted_at, published_at, publish_time, deadline_at, categories FROM tasks WHERE id = $1
+SELECT id, owner_id, status, reject_reason, title, city, nationwide, formats, access, min_views, reward_kopecks, publish_by, blocks, cover, photos, created_at, updated_at, submitted_at, published_at, publish_time, deadline_at, categories, review_notes, revision, revision_status, revision_reason, revision_submitted_at FROM tasks WHERE id = $1
 `
 
 func (q *Queries) GetTask(ctx context.Context, id int64) (Task, error) {
@@ -407,12 +525,17 @@ func (q *Queries) GetTask(ctx context.Context, id int64) (Task, error) {
 		&i.PublishTime,
 		&i.DeadlineAt,
 		&i.Categories,
+		&i.ReviewNotes,
+		&i.Revision,
+		&i.RevisionStatus,
+		&i.RevisionReason,
+		&i.RevisionSubmittedAt,
 	)
 	return i, err
 }
 
 const listOwnTasks = `-- name: ListOwnTasks :many
-SELECT id, owner_id, status, reject_reason, title, city, nationwide, formats, access, min_views, reward_kopecks, publish_by, blocks, cover, photos, created_at, updated_at, submitted_at, published_at, publish_time, deadline_at, categories FROM tasks WHERE owner_id = $1 ORDER BY updated_at DESC, id DESC LIMIT $2
+SELECT id, owner_id, status, reject_reason, title, city, nationwide, formats, access, min_views, reward_kopecks, publish_by, blocks, cover, photos, created_at, updated_at, submitted_at, published_at, publish_time, deadline_at, categories, review_notes, revision, revision_status, revision_reason, revision_submitted_at FROM tasks WHERE owner_id = $1 ORDER BY updated_at DESC, id DESC LIMIT $2
 `
 
 type ListOwnTasksParams struct {
@@ -452,6 +575,11 @@ func (q *Queries) ListOwnTasks(ctx context.Context, arg ListOwnTasksParams) ([]T
 			&i.PublishTime,
 			&i.DeadlineAt,
 			&i.Categories,
+			&i.ReviewNotes,
+			&i.Revision,
+			&i.RevisionStatus,
+			&i.RevisionReason,
+			&i.RevisionSubmittedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -464,10 +592,11 @@ func (q *Queries) ListOwnTasks(ctx context.Context, arg ListOwnTasksParams) ([]T
 }
 
 const listPublishedCards = `-- name: ListPublishedCards :many
-SELECT cc.user_id, cc.status, cc.reject_reason, cc.name, cc.city, cc.topics, cc.platforms, cc.blocks, cc.avatar, cc.works, cc.created_at, cc.updated_at, cc.submitted_at, cc.published_at, ARRAY(SELECT c.title FROM unnest(cc.topics) WITH ORDINALITY AS x(slug, n)
+SELECT cc.user_id, cc.status, cc.reject_reason, cc.name, cc.city, cc.topics, cc.platforms, cc.blocks, cc.avatar, cc.works, cc.created_at, cc.updated_at, cc.submitted_at, cc.published_at, cc.review_notes, cc.revision, cc.revision_status, cc.revision_reason, cc.revision_submitted_at, ARRAY(SELECT c.title FROM unnest(cc.topics) WITH ORDINALITY AS x(slug, n)
                    JOIN categories c ON c.slug = x.slug ORDER BY x.n)::text[] AS topic_titles
 FROM creator_cards cc
-WHERE cc.status = 'published'
+JOIN users u ON u.id = cc.user_id
+WHERE cc.status = 'published' AND u.blocked_at IS NULL
   AND ($1::timestamptz IS NULL OR (cc.published_at, cc.user_id) < ($1::timestamptz, $2::bigint))
   AND (cardinality($3::text[]) = 0 OR cc.topics && $3::text[])
   AND ($4::text = '' OR lower(cc.city) = lower($4::text))
@@ -484,21 +613,26 @@ type ListPublishedCardsParams struct {
 }
 
 type ListPublishedCardsRow struct {
-	UserID       int64
-	Status       string
-	RejectReason string
-	Name         string
-	City         string
-	Topics       []string
-	Platforms    []byte
-	Blocks       []byte
-	Avatar       pgtype.Text
-	Works        []string
-	CreatedAt    pgtype.Timestamptz
-	UpdatedAt    pgtype.Timestamptz
-	SubmittedAt  pgtype.Timestamptz
-	PublishedAt  pgtype.Timestamptz
-	TopicTitles  []string
+	UserID              int64
+	Status              string
+	RejectReason        string
+	Name                string
+	City                string
+	Topics              []string
+	Platforms           []byte
+	Blocks              []byte
+	Avatar              pgtype.Text
+	Works               []string
+	CreatedAt           pgtype.Timestamptz
+	UpdatedAt           pgtype.Timestamptz
+	SubmittedAt         pgtype.Timestamptz
+	PublishedAt         pgtype.Timestamptz
+	ReviewNotes         []byte
+	Revision            []byte
+	RevisionStatus      pgtype.Text
+	RevisionReason      string
+	RevisionSubmittedAt pgtype.Timestamptz
+	TopicTitles         []string
 }
 
 // Лента анкет: опубликованные, новые сверху; курсор — (published_at, user_id); отбор — любая из тем, город.
@@ -533,6 +667,11 @@ func (q *Queries) ListPublishedCards(ctx context.Context, arg ListPublishedCards
 			&i.UpdatedAt,
 			&i.SubmittedAt,
 			&i.PublishedAt,
+			&i.ReviewNotes,
+			&i.Revision,
+			&i.RevisionStatus,
+			&i.RevisionReason,
+			&i.RevisionSubmittedAt,
 			&i.TopicTitles,
 		); err != nil {
 			return nil, err
@@ -546,12 +685,12 @@ func (q *Queries) ListPublishedCards(ctx context.Context, arg ListPublishedCards
 }
 
 const listPublishedTasks = `-- name: ListPublishedTasks :many
-SELECT t.id, t.owner_id, t.status, t.reject_reason, t.title, t.city, t.nationwide, t.formats, t.access, t.min_views, t.reward_kopecks, t.publish_by, t.blocks, t.cover, t.photos, t.created_at, t.updated_at, t.submitted_at, t.published_at, t.publish_time, t.deadline_at, t.categories, COALESCE(NULLIF(b.name, ''), NULLIF(u.name, ''), '')::text AS brand, ARRAY(SELECT c.title FROM unnest(t.categories) WITH ORDINALITY AS x(slug, n)
+SELECT t.id, t.owner_id, t.status, t.reject_reason, t.title, t.city, t.nationwide, t.formats, t.access, t.min_views, t.reward_kopecks, t.publish_by, t.blocks, t.cover, t.photos, t.created_at, t.updated_at, t.submitted_at, t.published_at, t.publish_time, t.deadline_at, t.categories, t.review_notes, t.revision, t.revision_status, t.revision_reason, t.revision_submitted_at, COALESCE(NULLIF(b.name, ''), NULLIF(u.name, ''), '')::text AS brand, ARRAY(SELECT c.title FROM unnest(t.categories) WITH ORDINALITY AS x(slug, n)
                    JOIN categories c ON c.slug = x.slug ORDER BY x.n)::text[] AS category_titles
 FROM tasks t
 JOIN users u ON u.id = t.owner_id
 LEFT JOIN business_profiles b ON b.user_id = t.owner_id
-WHERE t.status = 'published' AND t.deadline_at > now()
+WHERE t.status = 'published' AND t.deadline_at > now() AND u.blocked_at IS NULL
   AND ($1::timestamptz IS NULL OR (t.published_at, t.id) < ($1::timestamptz, $2::bigint))
   AND (cardinality($3::text[]) = 0 OR t.categories && $3::text[])
   AND ($4::text = '' OR t.nationwide OR lower(t.city) = lower($4::text))
@@ -570,30 +709,35 @@ type ListPublishedTasksParams struct {
 }
 
 type ListPublishedTasksRow struct {
-	ID             int64
-	OwnerID        int64
-	Status         string
-	RejectReason   string
-	Title          string
-	City           string
-	Nationwide     bool
-	Formats        []string
-	Access         string
-	MinViews       int64
-	RewardKopecks  int64
-	PublishBy      pgtype.Date
-	Blocks         []byte
-	Cover          pgtype.Text
-	Photos         []string
-	CreatedAt      pgtype.Timestamptz
-	UpdatedAt      pgtype.Timestamptz
-	SubmittedAt    pgtype.Timestamptz
-	PublishedAt    pgtype.Timestamptz
-	PublishTime    pgtype.Time
-	DeadlineAt     pgtype.Timestamptz
-	Categories     []string
-	Brand          string
-	CategoryTitles []string
+	ID                  int64
+	OwnerID             int64
+	Status              string
+	RejectReason        string
+	Title               string
+	City                string
+	Nationwide          bool
+	Formats             []string
+	Access              string
+	MinViews            int64
+	RewardKopecks       int64
+	PublishBy           pgtype.Date
+	Blocks              []byte
+	Cover               pgtype.Text
+	Photos              []string
+	CreatedAt           pgtype.Timestamptz
+	UpdatedAt           pgtype.Timestamptz
+	SubmittedAt         pgtype.Timestamptz
+	PublishedAt         pgtype.Timestamptz
+	PublishTime         pgtype.Time
+	DeadlineAt          pgtype.Timestamptz
+	Categories          []string
+	ReviewNotes         []byte
+	Revision            []byte
+	RevisionStatus      pgtype.Text
+	RevisionReason      string
+	RevisionSubmittedAt pgtype.Timestamptz
+	Brand               string
+	CategoryTitles      []string
 }
 
 // Лента: опубликованные, новые сверху; курсор — (published_at, id) последнего на прошлой странице.
@@ -637,6 +781,11 @@ func (q *Queries) ListPublishedTasks(ctx context.Context, arg ListPublishedTasks
 			&i.PublishTime,
 			&i.DeadlineAt,
 			&i.Categories,
+			&i.ReviewNotes,
+			&i.Revision,
+			&i.RevisionStatus,
+			&i.RevisionReason,
+			&i.RevisionSubmittedAt,
 			&i.Brand,
 			&i.CategoryTitles,
 		); err != nil {
@@ -712,26 +861,265 @@ func (q *Queries) OwnTaskFormats(ctx context.Context, arg OwnTaskFormatsParams) 
 	return items, nil
 }
 
-const setCardStatus = `-- name: SetCardStatus :one
+const replaceCardContent = `-- name: ReplaceCardContent :one
 UPDATE creator_cards
-SET status = $1::text, reject_reason = CASE WHEN $1::text = 'rejected' THEN $2::text ELSE '' END, updated_at = now(),
-    submitted_at = CASE WHEN $1::text = 'pending_review' THEN now() ELSE submitted_at END,
-    published_at = CASE WHEN $1::text = 'published' THEN now() ELSE published_at END
-WHERE user_id = $3 AND status = $4::text
-RETURNING user_id, status, reject_reason, name, city, topics, platforms, blocks, avatar, works, created_at, updated_at, submitted_at, published_at
+SET name = $1, city = $2, topics = $3, blocks = $4, avatar = $5, works = $6,
+    revision = NULL, revision_status = NULL, revision_reason = '', revision_submitted_at = NULL, review_notes = '{}',
+    updated_at = now()
+WHERE user_id = $7 AND status = $8::text AND revision_status = $9::text
+RETURNING user_id, status, reject_reason, name, city, topics, platforms, blocks, avatar, works, created_at, updated_at, submitted_at, published_at, review_notes, revision, revision_status, revision_reason, revision_submitted_at
 `
 
-type SetCardStatusParams struct {
+type ReplaceCardContentParams struct {
+	Name           string
+	City           string
+	Topics         []string
+	Blocks         []byte
+	Avatar         pgtype.Text
+	Works          []string
+	UserID         int64
+	Status         string
+	RevisionStatus string
+}
+
+func (q *Queries) ReplaceCardContent(ctx context.Context, arg ReplaceCardContentParams) (CreatorCard, error) {
+	row := q.db.QueryRow(ctx, replaceCardContent,
+		arg.Name,
+		arg.City,
+		arg.Topics,
+		arg.Blocks,
+		arg.Avatar,
+		arg.Works,
+		arg.UserID,
+		arg.Status,
+		arg.RevisionStatus,
+	)
+	var i CreatorCard
+	err := row.Scan(
+		&i.UserID,
+		&i.Status,
+		&i.RejectReason,
+		&i.Name,
+		&i.City,
+		&i.Topics,
+		&i.Platforms,
+		&i.Blocks,
+		&i.Avatar,
+		&i.Works,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.SubmittedAt,
+		&i.PublishedAt,
+		&i.ReviewNotes,
+		&i.Revision,
+		&i.RevisionStatus,
+		&i.RevisionReason,
+		&i.RevisionSubmittedAt,
+	)
+	return i, err
+}
+
+const replaceTaskContent = `-- name: ReplaceTaskContent :one
+UPDATE tasks
+SET title = $1, city = $2, nationwide = $3, categories = $4, formats = $5,
+    access = $6, min_views = $7, reward_kopecks = $8,
+    publish_by = $9, publish_time = $10, deadline_at = $11,
+    blocks = $12, cover = $13, photos = $14,
+    revision = NULL, revision_status = NULL, revision_reason = '', revision_submitted_at = NULL, review_notes = '{}',
+    updated_at = now()
+WHERE id = $15 AND status = $16::text AND revision_status = $17::text
+RETURNING id, owner_id, status, reject_reason, title, city, nationwide, formats, access, min_views, reward_kopecks, publish_by, blocks, cover, photos, created_at, updated_at, submitted_at, published_at, publish_time, deadline_at, categories, review_notes, revision, revision_status, revision_reason, revision_submitted_at
+`
+
+type ReplaceTaskContentParams struct {
+	Title          string
+	City           string
+	Nationwide     bool
+	Categories     []string
+	Formats        []string
+	Access         string
+	MinViews       int64
+	RewardKopecks  int64
+	PublishBy      pgtype.Date
+	PublishTime    pgtype.Time
+	DeadlineAt     pgtype.Timestamptz
+	Blocks         []byte
+	Cover          pgtype.Text
+	Photos         []string
+	ID             int64
+	Status         string
+	RevisionStatus string
+}
+
+// Заменить содержимое задания новой версией (одобрение правки или снятие с публикации с правкой) — только из
+// ожидаемого статуса и статуса правки.
+func (q *Queries) ReplaceTaskContent(ctx context.Context, arg ReplaceTaskContentParams) (Task, error) {
+	row := q.db.QueryRow(ctx, replaceTaskContent,
+		arg.Title,
+		arg.City,
+		arg.Nationwide,
+		arg.Categories,
+		arg.Formats,
+		arg.Access,
+		arg.MinViews,
+		arg.RewardKopecks,
+		arg.PublishBy,
+		arg.PublishTime,
+		arg.DeadlineAt,
+		arg.Blocks,
+		arg.Cover,
+		arg.Photos,
+		arg.ID,
+		arg.Status,
+		arg.RevisionStatus,
+	)
+	var i Task
+	err := row.Scan(
+		&i.ID,
+		&i.OwnerID,
+		&i.Status,
+		&i.RejectReason,
+		&i.Title,
+		&i.City,
+		&i.Nationwide,
+		&i.Formats,
+		&i.Access,
+		&i.MinViews,
+		&i.RewardKopecks,
+		&i.PublishBy,
+		&i.Blocks,
+		&i.Cover,
+		&i.Photos,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.SubmittedAt,
+		&i.PublishedAt,
+		&i.PublishTime,
+		&i.DeadlineAt,
+		&i.Categories,
+		&i.ReviewNotes,
+		&i.Revision,
+		&i.RevisionStatus,
+		&i.RevisionReason,
+		&i.RevisionSubmittedAt,
+	)
+	return i, err
+}
+
+const saveCardRevision = `-- name: SaveCardRevision :one
+UPDATE creator_cards SET revision = $1, revision_status = 'draft', revision_reason = '', updated_at = now()
+WHERE user_id = $2 AND status = 'published'
+  AND (revision_status IS NULL OR revision_status IN ('draft', 'rejected', 'changes_requested'))
+RETURNING user_id, status, reject_reason, name, city, topics, platforms, blocks, avatar, works, created_at, updated_at, submitted_at, published_at, review_notes, revision, revision_status, revision_reason, revision_submitted_at
+`
+
+type SaveCardRevisionParams struct {
+	Revision []byte
+	UserID   int64
+}
+
+func (q *Queries) SaveCardRevision(ctx context.Context, arg SaveCardRevisionParams) (CreatorCard, error) {
+	row := q.db.QueryRow(ctx, saveCardRevision, arg.Revision, arg.UserID)
+	var i CreatorCard
+	err := row.Scan(
+		&i.UserID,
+		&i.Status,
+		&i.RejectReason,
+		&i.Name,
+		&i.City,
+		&i.Topics,
+		&i.Platforms,
+		&i.Blocks,
+		&i.Avatar,
+		&i.Works,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.SubmittedAt,
+		&i.PublishedAt,
+		&i.ReviewNotes,
+		&i.Revision,
+		&i.RevisionStatus,
+		&i.RevisionReason,
+		&i.RevisionSubmittedAt,
+	)
+	return i, err
+}
+
+const saveTaskRevision = `-- name: SaveTaskRevision :one
+
+UPDATE tasks SET revision = $1, revision_status = 'draft', revision_reason = '', updated_at = now()
+WHERE id = $2 AND owner_id = $3 AND status = 'published'
+  AND (revision_status IS NULL OR revision_status IN ('draft', 'rejected', 'changes_requested'))
+RETURNING id, owner_id, status, reject_reason, title, city, nationwide, formats, access, min_views, reward_kopecks, publish_by, blocks, cover, photos, created_at, updated_at, submitted_at, published_at, publish_time, deadline_at, categories, review_notes, revision, revision_status, revision_reason, revision_submitted_at
+`
+
+type SaveTaskRevisionParams struct {
+	Revision []byte
+	ID       int64
+	OwnerID  int64
+}
+
+// ===== правка опубликованного: новая версия ждёт проверки, опубликованная видна всем =====
+// Сохранить правку опубликованного задания (новая или после отказа / доработки; на проверке — нельзя).
+func (q *Queries) SaveTaskRevision(ctx context.Context, arg SaveTaskRevisionParams) (Task, error) {
+	row := q.db.QueryRow(ctx, saveTaskRevision, arg.Revision, arg.ID, arg.OwnerID)
+	var i Task
+	err := row.Scan(
+		&i.ID,
+		&i.OwnerID,
+		&i.Status,
+		&i.RejectReason,
+		&i.Title,
+		&i.City,
+		&i.Nationwide,
+		&i.Formats,
+		&i.Access,
+		&i.MinViews,
+		&i.RewardKopecks,
+		&i.PublishBy,
+		&i.Blocks,
+		&i.Cover,
+		&i.Photos,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.SubmittedAt,
+		&i.PublishedAt,
+		&i.PublishTime,
+		&i.DeadlineAt,
+		&i.Categories,
+		&i.ReviewNotes,
+		&i.Revision,
+		&i.RevisionStatus,
+		&i.RevisionReason,
+		&i.RevisionSubmittedAt,
+	)
+	return i, err
+}
+
+const setCardRevisionStatus = `-- name: SetCardRevisionStatus :one
+UPDATE creator_cards
+SET revision_status = $1::text,
+    revision_reason = CASE WHEN $1::text = 'rejected' THEN $2::text ELSE '' END,
+    review_notes = CASE WHEN $1::text = 'changes_requested' THEN $3::jsonb ELSE '{}'::jsonb END,
+    revision_submitted_at = CASE WHEN $1::text = 'pending_review' THEN now() ELSE revision_submitted_at END,
+    updated_at = now()
+WHERE user_id = $4 AND status = 'published' AND revision_status = $5::text
+RETURNING user_id, status, reject_reason, name, city, topics, platforms, blocks, avatar, works, created_at, updated_at, submitted_at, published_at, review_notes, revision, revision_status, revision_reason, revision_submitted_at
+`
+
+type SetCardRevisionStatusParams struct {
 	ToStatus   string
 	Reason     string
+	Notes      []byte
 	UserID     int64
 	FromStatus string
 }
 
-func (q *Queries) SetCardStatus(ctx context.Context, arg SetCardStatusParams) (CreatorCard, error) {
-	row := q.db.QueryRow(ctx, setCardStatus,
+func (q *Queries) SetCardRevisionStatus(ctx context.Context, arg SetCardRevisionStatusParams) (CreatorCard, error) {
+	row := q.db.QueryRow(ctx, setCardRevisionStatus,
 		arg.ToStatus,
 		arg.Reason,
+		arg.Notes,
 		arg.UserID,
 		arg.FromStatus,
 	)
@@ -751,31 +1139,94 @@ func (q *Queries) SetCardStatus(ctx context.Context, arg SetCardStatusParams) (C
 		&i.UpdatedAt,
 		&i.SubmittedAt,
 		&i.PublishedAt,
+		&i.ReviewNotes,
+		&i.Revision,
+		&i.RevisionStatus,
+		&i.RevisionReason,
+		&i.RevisionSubmittedAt,
 	)
 	return i, err
 }
 
-const setTaskStatus = `-- name: SetTaskStatus :one
-UPDATE tasks
+const setCardStatus = `-- name: SetCardStatus :one
+UPDATE creator_cards
 SET status = $1::text, reject_reason = CASE WHEN $1::text = 'rejected' THEN $2::text ELSE '' END, updated_at = now(),
+    review_notes = CASE WHEN $1::text = 'changes_requested' THEN $3::jsonb ELSE '{}'::jsonb END,
+    revision = CASE WHEN $1::text = 'published' THEN revision ELSE NULL END,
+    revision_status = CASE WHEN $1::text = 'published' THEN revision_status ELSE NULL END,
+    revision_reason = CASE WHEN $1::text = 'published' THEN revision_reason ELSE '' END,
     submitted_at = CASE WHEN $1::text = 'pending_review' THEN now() ELSE submitted_at END,
     published_at = CASE WHEN $1::text = 'published' THEN now() ELSE published_at END
-WHERE id = $3 AND status = $4::text
-RETURNING id, owner_id, status, reject_reason, title, city, nationwide, formats, access, min_views, reward_kopecks, publish_by, blocks, cover, photos, created_at, updated_at, submitted_at, published_at, publish_time, deadline_at, categories
+WHERE user_id = $4 AND status = $5::text
+RETURNING user_id, status, reject_reason, name, city, topics, platforms, blocks, avatar, works, created_at, updated_at, submitted_at, published_at, review_notes, revision, revision_status, revision_reason, revision_submitted_at
 `
 
-type SetTaskStatusParams struct {
+type SetCardStatusParams struct {
 	ToStatus   string
 	Reason     string
+	Notes      []byte
+	UserID     int64
+	FromStatus string
+}
+
+func (q *Queries) SetCardStatus(ctx context.Context, arg SetCardStatusParams) (CreatorCard, error) {
+	row := q.db.QueryRow(ctx, setCardStatus,
+		arg.ToStatus,
+		arg.Reason,
+		arg.Notes,
+		arg.UserID,
+		arg.FromStatus,
+	)
+	var i CreatorCard
+	err := row.Scan(
+		&i.UserID,
+		&i.Status,
+		&i.RejectReason,
+		&i.Name,
+		&i.City,
+		&i.Topics,
+		&i.Platforms,
+		&i.Blocks,
+		&i.Avatar,
+		&i.Works,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.SubmittedAt,
+		&i.PublishedAt,
+		&i.ReviewNotes,
+		&i.Revision,
+		&i.RevisionStatus,
+		&i.RevisionReason,
+		&i.RevisionSubmittedAt,
+	)
+	return i, err
+}
+
+const setTaskRevisionStatus = `-- name: SetTaskRevisionStatus :one
+UPDATE tasks
+SET revision_status = $1::text,
+    revision_reason = CASE WHEN $1::text = 'rejected' THEN $2::text ELSE '' END,
+    review_notes = CASE WHEN $1::text = 'changes_requested' THEN $3::jsonb ELSE '{}'::jsonb END,
+    revision_submitted_at = CASE WHEN $1::text = 'pending_review' THEN now() ELSE revision_submitted_at END,
+    updated_at = now()
+WHERE id = $4 AND status = 'published' AND revision_status = $5::text
+RETURNING id, owner_id, status, reject_reason, title, city, nationwide, formats, access, min_views, reward_kopecks, publish_by, blocks, cover, photos, created_at, updated_at, submitted_at, published_at, publish_time, deadline_at, categories, review_notes, revision, revision_status, revision_reason, revision_submitted_at
+`
+
+type SetTaskRevisionStatusParams struct {
+	ToStatus   string
+	Reason     string
+	Notes      []byte
 	ID         int64
 	FromStatus string
 }
 
-// Смена статуса — только из ожидаемого (from): параллельная смена даёт 0 строк.
-func (q *Queries) SetTaskStatus(ctx context.Context, arg SetTaskStatusParams) (Task, error) {
-	row := q.db.QueryRow(ctx, setTaskStatus,
+// Статус правки — только из ожидаемого.
+func (q *Queries) SetTaskRevisionStatus(ctx context.Context, arg SetTaskRevisionStatusParams) (Task, error) {
+	row := q.db.QueryRow(ctx, setTaskRevisionStatus,
 		arg.ToStatus,
 		arg.Reason,
+		arg.Notes,
 		arg.ID,
 		arg.FromStatus,
 	)
@@ -803,6 +1254,75 @@ func (q *Queries) SetTaskStatus(ctx context.Context, arg SetTaskStatusParams) (T
 		&i.PublishTime,
 		&i.DeadlineAt,
 		&i.Categories,
+		&i.ReviewNotes,
+		&i.Revision,
+		&i.RevisionStatus,
+		&i.RevisionReason,
+		&i.RevisionSubmittedAt,
+	)
+	return i, err
+}
+
+const setTaskStatus = `-- name: SetTaskStatus :one
+UPDATE tasks
+SET status = $1::text, reject_reason = CASE WHEN $1::text = 'rejected' THEN $2::text ELSE '' END, updated_at = now(),
+    review_notes = CASE WHEN $1::text = 'changes_requested' THEN $3::jsonb ELSE '{}'::jsonb END,
+    revision = CASE WHEN $1::text = 'published' THEN revision ELSE NULL END,
+    revision_status = CASE WHEN $1::text = 'published' THEN revision_status ELSE NULL END,
+    revision_reason = CASE WHEN $1::text = 'published' THEN revision_reason ELSE '' END,
+    submitted_at = CASE WHEN $1::text = 'pending_review' THEN now() ELSE submitted_at END,
+    published_at = CASE WHEN $1::text = 'published' THEN now() ELSE published_at END
+WHERE id = $4 AND status = $5::text
+RETURNING id, owner_id, status, reject_reason, title, city, nationwide, formats, access, min_views, reward_kopecks, publish_by, blocks, cover, photos, created_at, updated_at, submitted_at, published_at, publish_time, deadline_at, categories, review_notes, revision, revision_status, revision_reason, revision_submitted_at
+`
+
+type SetTaskStatusParams struct {
+	ToStatus   string
+	Reason     string
+	Notes      []byte
+	ID         int64
+	FromStatus string
+}
+
+// Смена статуса — только из ожидаемого (from): параллельная смена даёт 0 строк. Замечания — только при
+// «на доработку»; правка опубликованного уходит вместе с публикацией (её содержимое переносит сервис).
+func (q *Queries) SetTaskStatus(ctx context.Context, arg SetTaskStatusParams) (Task, error) {
+	row := q.db.QueryRow(ctx, setTaskStatus,
+		arg.ToStatus,
+		arg.Reason,
+		arg.Notes,
+		arg.ID,
+		arg.FromStatus,
+	)
+	var i Task
+	err := row.Scan(
+		&i.ID,
+		&i.OwnerID,
+		&i.Status,
+		&i.RejectReason,
+		&i.Title,
+		&i.City,
+		&i.Nationwide,
+		&i.Formats,
+		&i.Access,
+		&i.MinViews,
+		&i.RewardKopecks,
+		&i.PublishBy,
+		&i.Blocks,
+		&i.Cover,
+		&i.Photos,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.SubmittedAt,
+		&i.PublishedAt,
+		&i.PublishTime,
+		&i.DeadlineAt,
+		&i.Categories,
+		&i.ReviewNotes,
+		&i.Revision,
+		&i.RevisionStatus,
+		&i.RevisionReason,
+		&i.RevisionSubmittedAt,
 	)
 	return i, err
 }
@@ -874,8 +1394,8 @@ UPDATE tasks
 SET title = $1, city = $2, nationwide = $3, categories = $4, formats = $5,
     access = $6, min_views = $7, reward_kopecks = $8,
     publish_by = $9, publish_time = $10, deadline_at = $11, blocks = $12, cover = $13, photos = $14, updated_at = now()
-WHERE id = $15 AND owner_id = $16 AND status IN ('draft', 'rejected')
-RETURNING id, owner_id, status, reject_reason, title, city, nationwide, formats, access, min_views, reward_kopecks, publish_by, blocks, cover, photos, created_at, updated_at, submitted_at, published_at, publish_time, deadline_at, categories
+WHERE id = $15 AND owner_id = $16 AND status IN ('draft', 'rejected', 'changes_requested')
+RETURNING id, owner_id, status, reject_reason, title, city, nationwide, formats, access, min_views, reward_kopecks, publish_by, blocks, cover, photos, created_at, updated_at, submitted_at, published_at, publish_time, deadline_at, categories, review_notes, revision, revision_status, revision_reason, revision_submitted_at
 `
 
 type UpdateOwnTaskParams struct {
@@ -897,7 +1417,8 @@ type UpdateOwnTaskParams struct {
 	OwnerID       int64
 }
 
-// Правка — только черновика или отклонённого (статус проверяется в том же запросе: гонки с модерацией нет).
+// Правка — только черновика, отклонённого или возвращённого на доработку (статус проверяется в том же запросе:
+// гонки с модерацией нет).
 func (q *Queries) UpdateOwnTask(ctx context.Context, arg UpdateOwnTaskParams) (Task, error) {
 	row := q.db.QueryRow(ctx, updateOwnTask,
 		arg.Title,
@@ -941,6 +1462,11 @@ func (q *Queries) UpdateOwnTask(ctx context.Context, arg UpdateOwnTaskParams) (T
 		&i.PublishTime,
 		&i.DeadlineAt,
 		&i.Categories,
+		&i.ReviewNotes,
+		&i.Revision,
+		&i.RevisionStatus,
+		&i.RevisionReason,
+		&i.RevisionSubmittedAt,
 	)
 	return i, err
 }
@@ -951,8 +1477,8 @@ VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 ON CONFLICT (user_id) DO UPDATE
 SET name = EXCLUDED.name, city = EXCLUDED.city, topics = EXCLUDED.topics, platforms = EXCLUDED.platforms,
     blocks = EXCLUDED.blocks, avatar = EXCLUDED.avatar, works = EXCLUDED.works, updated_at = now()
-WHERE creator_cards.status IN ('draft', 'rejected')
-RETURNING user_id, status, reject_reason, name, city, topics, platforms, blocks, avatar, works, created_at, updated_at, submitted_at, published_at
+WHERE creator_cards.status IN ('draft', 'rejected', 'changes_requested')
+RETURNING user_id, status, reject_reason, name, city, topics, platforms, blocks, avatar, works, created_at, updated_at, submitted_at, published_at, review_notes, revision, revision_status, revision_reason, revision_submitted_at
 `
 
 type UpsertCardParams struct {
@@ -966,7 +1492,7 @@ type UpsertCardParams struct {
 	Works     []string
 }
 
-// Создать или обновить — только черновик или отклонённую.
+// Создать или обновить — только черновик, отклонённую или возвращённую на доработку.
 func (q *Queries) UpsertCard(ctx context.Context, arg UpsertCardParams) (CreatorCard, error) {
 	row := q.db.QueryRow(ctx, upsertCard,
 		arg.UserID,
@@ -994,6 +1520,11 @@ func (q *Queries) UpsertCard(ctx context.Context, arg UpsertCardParams) (Creator
 		&i.UpdatedAt,
 		&i.SubmittedAt,
 		&i.PublishedAt,
+		&i.ReviewNotes,
+		&i.Revision,
+		&i.RevisionStatus,
+		&i.RevisionReason,
+		&i.RevisionSubmittedAt,
 	)
 	return i, err
 }

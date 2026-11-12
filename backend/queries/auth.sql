@@ -82,10 +82,28 @@ INSERT INTO sessions (user_id, token_hash, expires_at) VALUES ($1, $2, $3);
 SELECT u.*
 FROM sessions s
 JOIN users u ON u.id = s.user_id
-WHERE s.token_hash = $1 AND s.expires_at > $2;
+WHERE s.token_hash = $1 AND s.expires_at > $2 AND u.blocked_at IS NULL;
 
 -- name: DeleteSession :exec
 DELETE FROM sessions WHERE token_hash = $1;
 
 -- name: DeleteExpiredSessions :execrows
 DELETE FROM sessions WHERE expires_at < $1;
+
+-- 2FA в сессии: когда подтверждена (доступ к админке — не старше 12 часов).
+-- name: GetSessionMFA :one
+SELECT id, mfa_at FROM sessions WHERE token_hash = @token_hash AND expires_at > @now;
+
+-- name: SetSessionMFA :execrows
+UPDATE sessions SET mfa_at = @mfa_at WHERE token_hash = @token_hash AND expires_at > @now;
+
+-- name: AddLoginEvent :exec
+INSERT INTO login_events (user_id, method, ip, user_agent) VALUES (@user_id, @method, @ip, @user_agent);
+
+-- name: DeleteOldLoginEvents :execrows
+DELETE FROM login_events WHERE created_at < @before;
+
+-- Первый админ из ADMIN_EMAILS: роль назначается, только если её ещё нет (понижать роль так нельзя).
+-- name: GrantBootstrapAdmin :one
+UPDATE users SET staff_role = 'admin', updated_at = now() WHERE id = @id AND staff_role IS DISTINCT FROM 'admin'
+RETURNING *;
