@@ -131,3 +131,27 @@ export function shortName(u: User): string {
 export function initial(u: User): string {
   return (u.name.trim()[0] ?? u.email?.[0] ?? 'О').toUpperCase();
 }
+
+// ===== страница бизнеса и профиль автора =====
+export type ProfilePage = components['schemas']['Page'];
+export type PageBlock = components['schemas']['PageBlock'];
+export type PublicPage = components['schemas']['PublicPage'];
+export type PageKind = components['schemas']['PageKind'];
+
+/** Моя страница: undefined — API недоступно; page null — ещё нет (suggestedSlug — адрес новой). */
+export async function fetchMyPage(req: Request, kind: PageKind, name = ''): Promise<{ page: ProfilePage | null; suggestedSlug?: string } | undefined> {
+  const r = await getJSON<{ page: ProfilePage | null; suggestedSlug?: string }>(`/api/me/pages/${kind}${qs({ name })}`, visitorHeaders(req));
+  return r ?? undefined;
+}
+
+/** Опубликованная страница: null — нет (или API недоступно — тогда 503 решает страница по status). */
+export async function fetchPublicPage(req: Request, kind: PageKind, slug: string): Promise<{ status: number; data: PublicPage | null }> {
+  try {
+    const res = await fetch(`${BACKEND_URL}/api/pages/${kind}/${encodeURIComponent(slug)}`, { headers: visitorHeaders(req), signal: AbortSignal.timeout(3000) });
+    if (!res.ok) return { status: res.status, data: null };
+    return { status: 200, data: (await res.json()) as PublicPage };
+  } catch (err) {
+    console.warn('API страницы недоступно:', (err as Error).message);
+    return { status: 503, data: null };
+  }
+}

@@ -1,0 +1,103 @@
+---
+// Редактор страницы бизнеса и профиля автора на весь экран (оболочка приложения, тонкая панель сверху): «Адрес»
+// (ссылка целиком, латиница), «Шапка» (обложка 3:1, логотип / фото, название, сферы, город), «Блоки» (конструктор —
+// scripts/editor/page-blocks.ts). Новая страница заполняется из профиля режима и блоками по умолчанию.
+// Логика — scripts/page-editor.ts.
+import Icon from '../Icon.astro';
+import EditorBar from './EditorBar.astro';
+import ReviewNote from './ReviewNote.astro';
+import { PAGE_GROUPS, PAGE_START, PAGE_PATH } from '../../content/app';
+import type { BusinessProfile, CategoryItem, CreatorProfile, PageKind, ProfilePage, User } from '../../lib/auth';
+interface Props {
+  kind: PageKind;
+  page: ProfilePage | null;
+  suggestedSlug: string;
+  profile: BusinessProfile | CreatorProfile | null;
+  user: User;
+  categories: { common: CategoryItem[]; own: CategoryItem[] };
+  revision?: ProfilePage['revision'] | null;
+}
+const { kind, page: p, suggestedSlug, profile, user, categories, revision = null } = Astro.props;
+const creator = kind === 'creator';
+const origin = (process.env.PUBLIC_URL ?? 'http://localhost:8000').replace(/\/+$/, '');
+const empty = (type: string) => ({ type, title: '', text: '', items: [], photos: [], videos: [], links: [], contacts: type === 'contacts' ? { city: profile?.city ?? '', address: '', hours: '', site: '', phone: '', socials: [] } : null });
+const blocks = p
+  ? p.blocks.map((b) => ({
+      type: b.type, title: b.title, text: b.text, items: b.items, photos: b.photos, links: b.links, contacts: b.contacts ?? null,
+      videos: b.videos.map((v) => (v.source === 'file' ? { media: v.media, src: v.src, poster: v.poster ?? null } : { url: v.url ?? '' })),
+    }))
+  : PAGE_START[kind].map(empty);
+const known = new Set([...categories.common, ...categories.own].map((c) => c.slug));
+const init = {
+  kind, exists: !!p, status: p?.status ?? 'draft', slug: p?.slug ?? suggestedSlug,
+  title: p?.title ?? profile?.name ?? user.name, city: p?.city ?? profile?.city ?? user.city,
+  spheres: (p?.spheres ?? profile?.spheres ?? []).filter((s) => known.has(s)),
+  logo: p?.logo ? [p.logo] : [], cover: p?.cover ? [p.cover] : [], blocks, categories, uid: user.id, origin,
+};
+const json = JSON.stringify(init).replace(/</g, '\\u003c');
+const G = PAGE_GROUPS;
+const published = p?.status === 'published';
+---
+<form class="ed" novalidate autocomplete="off" data-page-editor={kind}>
+  <script type="application/json" data-init set:html={json} />
+  <EditorBar close={p ? `/app/page?kind=${kind}` : '/app/profile'} state={published ? 'Правка' : p ? 'Черновик' : 'Сохранится само'} />
+
+  <div class="ed-col">
+    {published && <p class="banner" role="note"><Icon name="eye" size={20} /><span>Правка страницы: пока её не проверят, все видят прежнюю версию.</span></p>}
+    {revision ? <ReviewNote status={revision.status} reason={revision.rejectReason} notes={p?.reviewNotes} revision /> : <ReviewNote status={p?.status} reason={p?.rejectReason} notes={p?.reviewNotes} />}
+
+    <div data-pane="edit">
+      <section class="grp" aria-labelledby="g-addr" aria-describedby="g-addr-d">
+        <h2 class="grp-h" id="g-addr">{G.address.title}</h2>
+        <p class="grp-d" id="g-addr-d">{G.address.hint}</p>
+        <div class="field" data-sec="slug">
+          <label class="lbl" for="p-slug">Адрес страницы</label>
+          <div class="slug-in">
+            <span class="slug-pre" aria-hidden="true">{PAGE_PATH[kind]}</span>
+            <input class="inp" id="p-slug" name="slug" maxlength="40" spellcheck="false" autocapitalize="off" inputmode="url" aria-describedby="p-slug-url" data-input="slug" />
+          </div>
+          <p class="muted slug-url" id="p-slug-url" data-slug-url></p>
+          <p class="ferr" data-err="slug"></p>
+        </div>
+      </section>
+
+      <section class="grp" aria-labelledby="g-head" aria-describedby="g-head-d">
+        <h2 class="grp-h" id="g-head">{G.head.title}</h2>
+        <p class="grp-d" id="g-head-d">{G.head.hint}</p>
+        <div class="sec pg-cover-up" data-sec="cover"><div data-cover></div><p class="ferr" data-err="cover"></p></div>
+        <div class="sec who-ed">
+          <div data-sec="logo"><div data-logo></div><p class="ferr" data-err="logo"></p></div>
+          <div class="grow">
+            <div class="field" data-sec="title">
+              <label class="lbl" for="p-title">{creator ? 'Имя' : 'Название'}</label>
+              <input class="inp" id="p-title" name="title" maxlength="80" placeholder={creator ? 'Как вас зовут' : 'Кофейня «Зерно»'} data-input="title" />
+              <p class="ferr" data-err="title"></p>
+            </div>
+            <div class="field" data-sec="city">
+              <label class="lbl" for="p-city">Город</label>
+              <input class="inp" id="p-city" name="city" maxlength="80" placeholder="Казань" autocomplete="address-level2" data-input="city" />
+              <p class="ferr" data-err="city"></p>
+            </div>
+          </div>
+        </div>
+        <div class="sec" data-sec="spheres">
+          <span class="lbl">{creator ? 'Темы' : 'Сферы'} <span class="hint">· можно несколько, до 5</span></span>
+          <div data-cats data-input="spheres"></div>
+          <p class="ferr" data-err="spheres"></p>
+        </div>
+      </section>
+
+      <section class="grp" aria-labelledby="g-blocks" aria-describedby="g-blocks-d">
+        <h2 class="grp-h" id="g-blocks">{G.blocks.title}</h2>
+        <p class="grp-d" id="g-blocks-d">{G.blocks.hint}</p>
+        <div class="sec" data-sec="blocks">
+          <div data-pblocks data-input="blocks"></div>
+          <p class="ferr" data-err="blocks"></p>
+        </div>
+      </section>
+    </div>
+
+    <div data-pane="preview" hidden><div class="pv" data-preview></div></div>
+  </div>
+</form>
+<script src="../../scripts/page-editor.ts"></script>

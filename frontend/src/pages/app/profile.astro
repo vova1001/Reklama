@@ -5,7 +5,8 @@ import App from '../../layouts/App.astro';
 import Icon from '../../components/Icon.astro';
 import Avatar from '../../components/Avatar.astro';
 import { FORM_GROUPS, MODES } from '../../content/app';
-import { fetchProfiles, type Mode } from '../../lib/auth';
+import { fetchMyPage, fetchProfiles, type Mode } from '../../lib/auth';
+import { PAGE_PATH, PAGE_TITLE, STATUS } from '../../content/app';
 import { getHome, type Category } from '../../lib/api';
 
 const me = Astro.locals.me;
@@ -20,6 +21,8 @@ const [{ business, creator }, categories] = await Promise.all([
     return [];
   }),
 ]);
+const [bizPage, crePage] = await Promise.all([fetchMyPage(Astro.request, 'business'), fetchMyPage(Astro.request, 'creator')]);
+const pages = ([['business', bizPage?.page ?? null], ['creator', crePage?.page ?? null]] as const);
 const bizSpheres = new Set(business?.spheres ?? []);
 const creSpheres = new Set(creator?.spheres ?? []);
 const channels = creator?.channels.length ? creator.channels : [''];
@@ -61,6 +64,24 @@ const G = FORM_GROUPS.profile;
   </section>
 
   <!-- профили режимов -->
+  <!-- страницы: витрина бизнеса и профиль автора -->
+  <section class="sec" aria-labelledby="pages-t">
+    <h2 id="pages-t" class="grp-h">Страницы</h2>
+    <p class="grp-d">Витрина бизнеса и профиль автора — по ссылке для всех</p>
+    <ul class="rows pg-rows">
+      {pages.map(([k, pg]) => (
+        <li data-my-page={k}>
+          <Icon name={k === 'business' ? 'store' : 'user-round'} size={20} />
+          <div>
+            <p class="row-t">{PAGE_TITLE[k]}</p>
+            <p class="row-s">{pg ? <><span class="st" data-s={pg.status}>{STATUS[pg.status]}</span>{pg.status === 'published' && <> · <a href={`${PAGE_PATH[k]}${pg.slug}`}>{PAGE_PATH[k]}{pg.slug}</a></>}</> : 'Ещё не оформлена'}</p>
+          </div>
+          <a class="btn pill-ghost" href={`/app/page?kind=${k}`}>{pg ? 'Открыть' : 'Оформить'}</a>
+        </li>
+      ))}
+    </ul>
+  </section>
+
   <section class="sec" aria-labelledby="modes-t">
     <h2 id="modes-t" class="grp-h">{G.modes.title}</h2>
     <p class="grp-d">{G.modes.hint}</p>

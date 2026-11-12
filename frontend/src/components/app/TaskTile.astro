@@ -28,4 +28,5 @@ const brief = [t.rewardKopecks ? rub(t.rewardKopecks) : '', g].filter(Boolean).j
     <p class="tile-m">{[where, due].filter(Boolean).join(' · ')}</p>
     {brief && <p class="tile-brief">{brief}</p>}
   </a>
+  {t.brandSlug && t.brand && <a class="tile-who" href={`/b/${t.brandSlug}`} data-brand-link><Icon name="store" size={14} />{t.brand}</a>}
 </li>

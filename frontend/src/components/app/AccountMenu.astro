@@ -1,5 +1,5 @@
 ---
-// Аватар с меню: имя и почта, Профиль, Настройки, Выйти. up — меню открывается вверх (в левой колонке).
+// Аватар с меню: имя и почта, Профиль, Моя страница (бизнеса или автора — по режиму), Настройки, Выйти. up — меню открывается вверх (в левой колонке).
 import Icon from '../Icon.astro';
 import Avatar from '../Avatar.astro';
 import type { Me } from '../../lib/auth';
@@ -18,6 +18,7 @@ const u = me.user;
       <p class="mm-mail">{u.email ?? 'Почта не указана'}</p>
     </div>
     <a class="mm-it" role="menuitem" href="/app/profile" tabindex="-1"><Icon name="user-round" size={20} />Профиль</a>
+    <a class="mm-it" role="menuitem" href="/app/page" tabindex="-1" data-my-page-link><Icon name={u.mode === 'creator' ? 'id-card' : 'store'} size={20} />Моя страница</a>
     <a class="mm-it" role="menuitem" href="/app/settings" tabindex="-1"><Icon name="settings-2" size={20} />Настройки</a>
     {u.staffRole && <a class="mm-it" role="menuitem" href="/admin" tabindex="-1" data-admin-link><Icon name="shield-check" size={20} />Админка</a>}
     <hr class="mm-sep" />

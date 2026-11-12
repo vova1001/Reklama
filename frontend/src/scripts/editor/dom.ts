@@ -26,10 +26,15 @@ import instagram from '../../icons/instagram.svg?raw';
 import atSign from '../../icons/at-sign.svg?raw';
 import refresh from '../../icons/refresh-cw.svg?raw';
 import badge from '../../icons/badge-check.svg?raw';
+import mapPin from '../../icons/map-pin.svg?raw';
+import listChecks from '../../icons/list-checks.svg?raw';
+import heart from '../../icons/heart.svg?raw';
+import idCard from '../../icons/id-card.svg?raw';
+import arrowUp from '../../icons/arrow-up.svg?raw';
 
 const RAW = {
   grip, x, plus, trash, imagePlus, tag, alert, crop, list, text, link, wallet, eye, video, calendar, users, camera, check, left, right, clock,
-  send, youtube, instagram, atSign, refresh, badge,
+  send, youtube, instagram, atSign, refresh, badge, mapPin, listChecks, heart, idCard, arrowUp,
 };
 export type IconName = keyof typeof RAW;
 

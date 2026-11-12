@@ -1,0 +1,92 @@
+---
+// Своя страница бизнеса (?kind=business) или профиль автора (?kind=creator; по умолчанию — по режиму). Черновик,
+// отклонённая и «на доработке» — редактор на весь экран; на проверке и опубликованная — как увидят все, с действиями:
+// «Изменить» (?edit=1 — правка, все видят прежнюю, пока правку не одобрят), «Открыть страницу», «Снять с публикации».
+import App from '../../layouts/App.astro';
+import Editor from '../../layouts/Editor.astro';
+import Icon from '../../components/Icon.astro';
+import PageForm from '../../components/app/PageForm.astro';
+import PageView from '../../components/page/PageView.astro';
+import ReviewNote from '../../components/app/ReviewNote.astro';
+import { PAGE_PATH, PAGE_TITLE, STATUS } from '../../content/app';
+import { fetchCategories, fetchMyPage, fetchProfiles, type PageKind } from '../../lib/auth';
+
+const me = Astro.locals.me;
+if (!me) return Astro.redirect('/login', 303);
+const q = Astro.url.searchParams.get('kind');
+const kind: PageKind = q === 'business' || q === 'creator' ? q : me.user.mode;
+const [profiles, categories] = await Promise.all([fetchProfiles(Astro.request), fetchCategories(Astro.request)]);
+const profile = kind === 'creator' ? profiles.creator : profiles.business;
+const r = await fetchMyPage(Astro.request, kind, profile?.name ?? '');
+if (r === undefined) return new Response('API недоступно', { status: 503 });
+const p = r.page;
+const rev = p?.revision ?? null;
+const revEditable = !rev || rev.status !== 'pending_review';
+const editRevision = !!p && p.status === 'published' && Astro.url.searchParams.get('edit') === '1' && revEditable;
+const editable = !p || p.status === 'draft' || p.status === 'rejected' || p.status === 'changes_requested' || editRevision;
+const formPage = editRevision && rev ? { ...rev.page, id: p!.id, status: p!.status, slug: p!.slug, reviewNotes: p!.reviewNotes, updatedAt: p!.updatedAt } : p;
+const sent = Astro.url.searchParams.get('sent') === '1';
+const title = PAGE_TITLE[kind];
+const href = p ? `${PAGE_PATH[kind]}${p.slug}` : '';
+const titleOf = (slug: string) => [...categories.common, ...categories.own].find((c) => c.slug === slug)?.title ?? slug;
+const view = p ? { ...p, sphereTitles: p.spheres.map(titleOf), blocks: p.blocks.map((b) => (b.type === 'topics' ? { ...b, itemTitles: b.items.map(titleOf) } : b)) } : null;
+---
+{editable ? (
+  <Editor title={title} page="profile" only={kind}>
+    <PageForm kind={kind} page={formPage} suggestedSlug={r.suggestedSlug ?? ''} profile={profile} user={me.user} categories={categories} revision={editRevision ? rev : null} />
+  </Editor>
+) : (
+  <App title={title} page="profile" wide="editor">
+    <div data-view-page={kind}>
+      <div class="head">
+        <h1>{title}</h1>
+        <span class="st" data-s={p!.status}>{STATUS[p!.status]}</span>
+      </div>
+      {p!.status === 'pending_review' && <p class="banner" role="status">{sent ? 'Отправлено. ' : ''}Проверим и опубликуем — обычно в течение дня.</p>}
+      {p!.status === 'published' && sent && !rev && <p class="banner is-ok" role="status"><Icon name="check" size={20} />Опубликовано — страница открыта по ссылке.</p>}
+      {rev?.status === 'pending_review' && <p class="banner" role="status" data-revision="pending"><Icon name="clock" size={20} />{sent ? 'Изменения отправлены. ' : ''}Изменения на проверке — пока все видят прежнюю версию.</p>}
+      {rev?.status === 'draft' && <p class="banner" role="status" data-revision="draft"><Icon name="pencil" size={20} />Есть неотправленные изменения.</p>}
+      {rev && <ReviewNote status={rev.status} reason={rev.rejectReason} notes={p!.reviewNotes} revision />}
+      <div class="ed-bar is-plain pg-act">
+        {p!.status === 'published' ? (
+          <>
+            <a class="btn pill-emerald" href={href} data-open-page><Icon name="arrow-up-right" size={18} />Открыть страницу</a>
+            {revEditable && <a class="btn pill-dark" href={`/app/page?kind=${kind}&edit=1`} data-edit><Icon name="pencil" size={18} />{rev ? 'Продолжить правку' : 'Изменить'}</a>}
+            {rev && <button class="btn pill-ghost" type="button" data-discard-page><Icon name="undo-2" size={18} />Отменить изменения</button>}
+            <button class="btn pill-text" type="button" data-withdraw-page data-published="1">Снять с публикации</button>
+          </>
+        ) : (
+          <>
+            <p class="ed-state">Нужно поправить?</p>
+            <button class="btn pill-ghost" type="button" data-withdraw-page><Icon name="undo-2" size={18} />В черновик</button>
+          </>
+        )}
+      </div>
+      <PageView page={view!} explain />
+    </div>
+  </App>
+)}
+<script>
+  import { api, busy } from '../../lib/client';
+  import { confirmDialog, guard, toast } from '../../lib/ui';
+  const root = document.querySelector<HTMLElement>('[data-view-page]');
+  const kind = root?.dataset.viewPage;
+  document.querySelector<HTMLButtonElement>('[data-withdraw-page]')?.addEventListener('click', async (e) => {
+    const b = e.currentTarget as HTMLButtonElement;
+    if (b.dataset.published && !(await confirmDialog('Снять с публикации?', 'Страница перестанет открываться по ссылке, пока вы не опубликуете её снова. Неотправленные изменения станут черновиком.', 'Снять'))) return b.focus();
+    busy(b, true);
+    const r = await api('POST', `/api/me/pages/${kind}/withdraw`);
+    if (r.ok) return location.assign(`/app/page?kind=${kind}`);
+    busy(b, false);
+    if (!guard(r.status)) toast(r.error.message);
+  });
+  document.querySelector<HTMLButtonElement>('[data-discard-page]')?.addEventListener('click', async (e) => {
+    const b = e.currentTarget as HTMLButtonElement;
+    if (!(await confirmDialog('Отменить изменения?', 'Останется опубликованная страница.', 'Отменить изменения'))) return b.focus();
+    busy(b, true);
+    const r = await api('DELETE', `/api/me/pages/${kind}/revision`);
+    if (r.ok) return location.assign(`/app/page?kind=${kind}`);
+    busy(b, false);
+    if (!guard(r.status)) toast(r.error.message);
+  });
+</script>

@@ -1,0 +1,27 @@
+---
+// Публичная страница бизнеса или автора (/b/<slug>, /c/<slug>): после входа — в оболочке приложения, гостю —
+// тонкая строка со знаком и «Войти» и та же колонка. Индексируется (страница для всех по ссылке).
+import App from './App.astro';
+import Base from './Base.astro';
+import Mark from '../components/Mark.astro';
+import '../styles/auth.css';
+import '../styles/app.css';
+interface Props { title: string; description: string }
+const { title, description } = Astro.props;
+const me = Astro.locals.me;
+// без кэша в браузере: сняли с публикации или сменили адрес — гость сразу видит новое
+if (!me) Astro.response.headers.set('Cache-Control', 'public, no-cache');
+---
+{me ? (
+  <App title={title} page="feed" wide="editor"><slot /></App>
+) : (
+  <Base title={`${title} — Охват`} description={description} theme="#FFFFFF" bodyClass="app-body">
+    <div class="app is-guest">
+      <header class="pg-bar">
+        <a class="rail-logo" href="/" aria-label="Охват — на главную"><Mark size={30} /><b>Охват</b></a>
+        <a class="btn pill-dark" href="/login">Войти</a>
+      </header>
+      <main id="main" class="col is-ed"><slot /></main>
+    </div>
+  </Base>
+)}

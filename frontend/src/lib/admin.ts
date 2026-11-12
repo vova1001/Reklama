@@ -48,6 +48,8 @@ export const KIND_TITLE: Record<ReviewKind, string> = {
   task_revision: 'Правка задания',
   card: 'Анкета',
   card_revision: 'Правка анкеты',
+  page: 'Страница',
+  page_revision: 'Правка страницы',
   category: 'Своя сфера',
   format: 'Свой формат',
 };

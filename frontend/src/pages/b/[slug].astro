@@ -1,0 +1,25 @@
+---
+// Страница бизнеса для всех по ссылке /b/<slug>: прежний адрес — 301 на новый; нет или не опубликована — 404.
+import Showcase from '../../layouts/Showcase.astro';
+import PageView from '../../components/page/PageView.astro';
+import PageMissing from '../../components/page/PageMissing.astro';
+import Complain from '../../components/app/Complain.astro';
+import { fetchPublicPage } from '../../lib/auth';
+
+const slug = (Astro.params.slug ?? '').toLowerCase();
+const r = await fetchPublicPage(Astro.request, 'business', slug);
+if (r.data?.movedTo) return Astro.redirect(`/b/${r.data.movedTo}`, 301);
+if (r.status === 503) return new Response('API недоступно', { status: 503, headers: { 'Retry-After': '30' } });
+const v = r.data?.page ? r.data : null;
+if (!v) Astro.response.status = 404;
+const about = v?.page?.blocks.find((b) => b.type === 'about')?.text ?? '';
+const desc = (about || [v?.page?.title, v?.page?.city].filter(Boolean).join(', ') || 'Страница бизнеса на Охвате').slice(0, 160);
+const me = Astro.locals.me;
+---
+<Showcase title={v?.page?.title || 'Страница бизнеса'} description={desc}>
+  {v?.page ? (
+    <PageView page={v.page} tasks={v.tasks} platforms={v.platforms} card={v.card}>
+      {me && me.user.id !== v.page.userId && <Complain subject="user" id={v.page.userId} />}
+    </PageView>
+  ) : <PageMissing />}
+</Showcase>

@@ -8,7 +8,7 @@ import type { Task } from '../../lib/auth';
 interface Props { task: Task }
 const { task: t } = Astro.props;
 const where = t.nationwide ? 'Вся Россия' : t.city;
-const meta = [t.brand, where, (t.categoryTitles ?? []).join(', ')].filter(Boolean).join(' · ');
+const meta = [where, (t.categoryTitles ?? []).join(', ')].filter(Boolean).join(' · ');
 const g = goal(t.minViews);
 ---
 <article class="page" data-task-page={t.id} data-lb-group>
@@ -17,7 +17,12 @@ const g = goal(t.minViews);
       <img class="page-cover" src={t.cover.src} srcset={`${t.cover.src} 800w, ${t.cover.large} 1600w`} sizes="(min-width: 768px) 720px, 100vw" alt="" width="800" height="450" decoding="async" />
     </button>
   )}
-  {meta && <p class="page-meta">{meta}</p>}
+  {(t.brand || meta) && (
+    <p class="page-meta">
+      {t.brand && (t.brandSlug ? <a class="brand-lnk" href={`/b/${t.brandSlug}`} data-brand-link>{t.brand}</a> : <span>{t.brand}</span>)}
+      {t.brand && meta && ' · '}{meta}
+    </p>
+  )}
   <h1 class="page-t">{t.title || 'Без названия'}</h1>
   <dl class="terms">
     {t.rewardKopecks > 0 && <div><dt><Icon name="wallet" size={18} />Оплата</dt><dd><b>{rub(t.rewardKopecks)}</b> за выполнение</dd></div>}

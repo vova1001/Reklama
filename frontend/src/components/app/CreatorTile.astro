@@ -31,4 +31,5 @@ const brief = [followers ? `${num(followers)} подписч.` : '', where].filt
     <p class="tile-m">{[c.city, c.topicTitles?.[0]].filter(Boolean).join(' · ')}</p>
     {brief && <p class="tile-brief">{brief}{c.platforms.length > 0 && <span class="tile-ok" aria-label="Подтверждено площадкой"><Icon name="badge-check" size={14} /></span>}</p>}
   </a>
+  {c.pageSlug && <a class="tile-who" href={`/c/${c.pageSlug}`} data-profile-link><Icon name="user-round" size={14} />Профиль автора</a>}
 </li>

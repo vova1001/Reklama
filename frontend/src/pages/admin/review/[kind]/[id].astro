@@ -8,6 +8,7 @@ import Icon from '../../../../components/Icon.astro';
 import TaskPage from '../../../../components/app/TaskPage.astro';
 import CreatorPage from '../../../../components/app/CreatorPage.astro';
 import Fields from '../../../../components/admin/Fields.astro';
+import PageView from '../../../../components/page/PageView.astro';
 import { ACTION_TITLE, adminGet, COMPLAINT_REASON, KIND_TITLE, ROLE_TITLE, waited, when, type ReviewItem, type ReviewKind } from '../../../../lib/admin';
 import { STATUS } from '../../../../content/app';
 
@@ -17,9 +18,12 @@ const id = Astro.params.id ?? '';
 const r = kind in KIND_TITLE ? await adminGet<ReviewItem>(Astro.request, `/api/admin/review/${kind}/${encodeURIComponent(id)}`) : null;
 if (!r || !r.ok) Astro.response.status = r && !r.ok ? r.status : 404;
 const it = r && r.ok ? r.data : null;
-const listing = kind === 'task' || kind === 'task_revision' || kind === 'card' || kind === 'card_revision';
-const fieldsFor = kind === 'card' || kind === 'card_revision' ? ['general', 'name', 'city', 'topics', 'platforms', 'blocks', 'avatar', 'works'] : ['general', 'title', 'categories', 'city', 'formats', 'minViews', 'reward', 'publishBy', 'blocks', 'cover', 'photos'];
-const title = it?.task?.title || it?.card?.name || it?.category?.title || it?.format?.title || KIND_TITLE[kind] || 'Проверка';
+const isPage = kind === 'page' || kind === 'page_revision';
+const listing = kind === 'task' || kind === 'task_revision' || kind === 'card' || kind === 'card_revision' || isPage;
+const fieldsFor = kind === 'card' || kind === 'card_revision' ? ['general', 'name', 'city', 'topics', 'platforms', 'blocks', 'avatar', 'works']
+  : isPage ? ['general', 'title', 'slug', 'spheres', 'city', 'logo', 'cover', 'blocks']
+  : ['general', 'title', 'categories', 'city', 'formats', 'minViews', 'reward', 'publishBy', 'blocks', 'cover', 'photos'];
+const title = it?.task?.title || it?.card?.name || it?.page?.title || it?.category?.title || it?.format?.title || KIND_TITLE[kind] || 'Проверка';
 const statusOf = (s: string) => STATUS[s.replace('revision:', '')] ?? s;
 ---
 <Admin title={title} page="queue">
@@ -38,6 +42,18 @@ const statusOf = (s: string) => STATUS[s.replace('revision:', '')] ?? s;
           <div class="rv-main">
             {it.task && <TaskPage task={it.task} />}
             {it.card && <CreatorPage card={it.card} topics={it.card.topicTitles ?? it.card.topics} />}
+            {it.page && (
+              <>
+                <p class="sub" data-page-addr>{it.page.kind === 'creator' ? 'Профиль автора' : 'Страница бизнеса'} · адрес <b>/{it.page.kind === 'creator' ? 'c' : 'b'}/{it.page.slug}</b></p>
+                <PageView page={it.page} explain />
+                {it.livePage && (
+                  <details class="rv-diff">
+                    <summary>Опубликовано сейчас</summary>
+                    <PageView page={it.livePage} explain />
+                  </details>
+                )}
+              </>
+            )}
             {it.category && (
               <section>
                 <h1>{it.category.title}</h1>

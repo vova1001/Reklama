@@ -246,3 +246,30 @@ norm (нижний регистр, ё → е, одиночные пробелы)
 - Фронт: `/admin` (middleware: не сотрудник — 404, без 2FA — `/admin/2fa`; no-store, X-Frame-Options DENY),
   `layouts/Admin.astro`, страницы сводки, очереди, карточки проверки (A/R/D/J/K, отмена 10 с), жалоб, пользователей,
   журнала, настроек; «Пожаловаться» на странице задания и автора; «Изменить» опубликованное — правка.
+
+### Страница бизнеса и профиль автора (задача 14)
+
+- **Сущность** `profile_pages` (миграция 00014): одна страница вида `business|creator` на пользователя; шапка (название,
+  город, сферы, логотип, обложка), блоки по порядку (jsonb, вид — `type`), статус и правка опубликованного — как у
+  анкеты; `media[]` — файлы опубликованного содержимого (по нему `MediaAccess` открывает их всем; файлы правки —
+  только владельцу, пока правку не одобрят). Адреса — `page_slugs (kind, slug) → page_id`: нынешний и прежние,
+  прежний ведёт на новый (сайт отвечает 301) и не достаётся другому; не больше 10 на страницу. Адрес по умолчанию —
+  транслитерация названия (`domain.SlugFrom`), занят — «-2», «-3»…
+- **Блоки** (`domain.PageBlockTypes`): бизнес — about, photos, video, contacts, facts, text; автор — about, channels
+  (подтверждённые соцсети — `PlatformSource`), topics, works (фото, видео, ссылки), reviews (заглушка до сделок),
+  card (опубликованная анкета — `PublicCards`), text, photos, video, facts. Одиночные — about, contacts, channels,
+  topics, works, reviews, card. До 20 блоков, 60 фото и 5 видео; ошибки — `blocks.<n>`.
+- **Видео:** файл — `POST /api/me/media/video` (MP4/WebM по содержимому, до `VIDEO_MAX_MB`, без перекодирования, в квоте
+  фото; 2 загрузки на сервер одновременно, таймаут чтения 10 мин), ключ `media/<id>/video` в том же `BlobStore`,
+  отдача `GET /media/{id}/video` с Range; заставку снимает браузер (кадр → JPEG → фото `video_poster`). Ссылки —
+  только YouTube и VK (`domain.ParseVideoLink`, белый список хостов), адрес iframe сервер строит из проверенных частей
+  (`youtube-nocookie.com/embed`, `vk.com/video_ext.php`); на странице iframe с `sandbox` и ещё одной проверкой адреса.
+- **Слои:** `service.Pages` (за `PageRepository`, те же `ListingDeps`: сферы, фото, режим проверки, лимит отправок) —
+  редактор, адрес, отправка, снятие, правка, публичный вид (у бизнеса — открытые задания, у автора — соцсети и
+  анкета); `Moderation.WithPages` и `Review` (виды очереди `page`, `page_revision`, уведомление → `/app/page`);
+  `Tasks`/`Cards` — адрес страницы владельца через `PageLinker` (`brandSlug`, `pageSlug`). Транспорт — `/api/me/pages/{kind}`
+  (+ `/slug`, `/submit`, `/withdraw`, `/revision`), `GET /api/pages/{kind}/{slug}` (без входа). Черновики формы —
+  `page-business`, `page-creator`.
+- **Фронт:** `/app/page?kind=` (редактор `PageForm` + `scripts/page-editor.ts`, блоки — `scripts/editor/page-blocks.ts`,
+  видео — `scripts/editor/video.ts`; иначе — вид с действиями), `/b/[slug]`, `/c/[slug]` (`layouts/Showcase.astro`,
+  `components/page/PageView.astro` — тот же вид в админке), «Страницы» в профиле, «Моя страница» в меню аккаунта.

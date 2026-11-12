@@ -12,7 +12,10 @@ const { card: c, topics } = Astro.props;
 <article class="page" data-card-page={c.id} data-lb-group>
   <div class="pv-who">
     {c.avatar ? <img class="pv-ava page-ava" src={c.avatar.src} alt="" width="96" height="96" /> : <span class="pv-ava page-ava"></span>}
-    <div><h1 class="page-t">{c.name}</h1><p class="page-meta">{c.city}</p></div>
+    <div>
+      <h1 class="page-t">{c.name}</h1>
+      <p class="page-meta">{c.city}{c.pageSlug && <>{c.city && ' · '}<a class="brand-lnk" href={`/c/${c.pageSlug}`} data-profile-link>Профиль автора</a></>}</p>
+    </div>
   </div>
   {topics.length > 0 && <div class="chips pv-tags">{topics.map((t) => <span class="chip is-static">{t}</span>)}</div>}
   <ul class="rows">

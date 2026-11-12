@@ -1,0 +1,144 @@
+---
+// Страница бизнеса или профиль автора так, как её видят все: обложка, логотип, название, сферы и город, блоки по
+// порядку; у бизнеса — открытые задания, у автора — подтверждённые соцсети и анкета. Пустые блоки не показываются.
+// Видео: файл — свой проигрыватель браузера с заставкой, YouTube / VK — iframe только с адресов из белого списка
+// (адрес строит сервер; здесь — ещё одна проверка), без доступа к странице (sandbox). Фото — просмотр поверх страницы.
+// Используется: публичные /b/<slug> и /c/<slug>, своя страница в приложении, карточка проверки в админке.
+import Icon from '../Icon.astro';
+import TaskTile from '../app/TaskTile.astro';
+import { PAGE_ABOUT_CREATOR, PAGE_BLOCKS, PLATFORM_TITLE, type PageBlockType } from '../../content/app';
+import { socialFacts } from '../../lib/format';
+import type { Card, PageBlock, ProfilePage, PublicPage } from '../../lib/auth';
+interface Props {
+  page: ProfilePage;
+  tasks?: PublicPage['tasks'];
+  platforms?: PublicPage['platforms'];
+  card?: Card | null;
+  /** Своя страница или проверка: автоматические блоки без данных — с пояснением, а не скрыты. */
+  explain?: boolean;
+}
+const { page: p, tasks = [], platforms, card = null, explain = false } = Astro.props;
+const creator = p.kind === 'creator';
+const meta = [(p.sphereTitles?.length ? p.sphereTitles : p.spheres).join(', '), p.city].filter(Boolean).join(' · ');
+const EMBED = /^https:\/\/(www\.youtube-nocookie\.com\/embed\/[A-Za-z0-9_-]{11}|vk\.com\/video_ext\.php\?oid=-?\d+&id=\d+(&hash=[0-9a-f]+)?)$/;
+const headOf = (b: PageBlock) => b.title || (b.type === 'about' && creator ? PAGE_ABOUT_CREATOR : b.type === 'text' ? '' : PAGE_BLOCKS[b.type as PageBlockType]?.title ?? '');
+const filled = (b: PageBlock): boolean => {
+  switch (b.type) {
+    case 'channels': return !!platforms?.length || explain;
+    case 'reviews': return true;
+    case 'card': return !!card || explain;
+    case 'contacts': { const c = b.contacts; return !!c && !!(c.city || c.address || c.hours || c.site || c.phone || c.socials.length); }
+    default: return !!(b.text || b.items.length || b.photos.length || b.videos.length || b.links.length);
+  }
+};
+const blocks = p.blocks.filter(filled);
+const host = (u: string) => u.replace(/^https:\/\/(www\.)?/, '').replace(/\/$/, '');
+const tel = (s: string) => 'tel:' + s.replace(/[^\d+]/g, '');
+const price = card?.blocks.find((b) => b.kind === 'list' && b.items.length)?.items.slice(0, 3) ?? [];
+let photoN = 0;
+const allPhotos = blocks.reduce((n, b) => n + b.photos.length, 0);
+---
+<article class={`pg ${creator ? 'is-creator' : 'is-business'}`} data-page-view={p.kind} data-lb-group>
+  <div class="pg-cover">
+    {p.cover && (
+      <button type="button" class="lb-t pg-cover-b" data-lb data-src={p.cover.src} data-large={p.cover.large} data-thumb={p.cover.thumb} aria-label="Открыть обложку">
+        <img src={p.cover.src} srcset={`${p.cover.src} 800w, ${p.cover.large} 1600w`} sizes="(min-width: 768px) 760px, 100vw" alt="" width="800" height="267" decoding="async" />
+      </button>
+    )}
+  </div>
+  <header class="pg-head">
+    {p.logo ? <img class="pg-logo" src={p.logo.thumb} srcset={`${p.logo.thumb} 320w, ${p.logo.src} 800w`} sizes="96px" alt="" width="96" height="96" /> : <span class="pg-logo is-none" aria-hidden="true">{(p.title || '?').slice(0, 1).toUpperCase()}</span>}
+    <div class="pg-who">
+      <h1 class="pg-t">{p.title || (creator ? 'Имя автора' : 'Название')}</h1>
+      {meta && <p class="pg-meta">{meta}</p>}
+    </div>
+  </header>
+
+  {blocks.map((b) => {
+    const h = headOf(b);
+    return (
+      <section class="pg-b" data-block={b.type}>
+        {h && <h2 class="pg-h">{h}</h2>}
+        {(b.type === 'about' || b.type === 'text' || b.type === 'works') && b.text && <p class="pg-text">{b.text}</p>}
+        {b.type === 'facts' && (
+          <ul class="pg-facts">{b.items.map((i) => <li><Icon name="check" size={18} />{i}</li>)}</ul>
+        )}
+        {b.type === 'topics' && (
+          <div class="chips pg-chips">{(b.itemTitles ?? b.items).map((t) => <span class="chip is-static">{t}</span>)}</div>
+        )}
+        {b.photos.length > 0 && (
+          <div class={`pg-ph ${b.photos.length === 1 ? 'is-one' : ''}`}>
+            {b.photos.map((ph) => {
+              photoN++;
+              return (
+                <button type="button" class="lb-t" data-lb data-src={ph.src} data-large={ph.large} data-thumb={ph.thumb} aria-label={`Открыть фото ${photoN} из ${allPhotos}`}>
+                  <img src={ph.thumb} srcset={`${ph.thumb} 320w, ${ph.src} 800w`} sizes="(min-width: 768px) 250px, 33vw" alt="" loading="lazy" decoding="async" width="320" height="320" />
+                </button>
+              );
+            })}
+          </div>
+        )}
+        {b.videos.map((v) =>
+          v.source === 'file' && v.src ? (
+            <div class="pg-video"><video controls preload="metadata" playsinline src={v.src} poster={v.poster?.src}></video></div>
+          ) : v.embedUrl && EMBED.test(v.embedUrl) ? (
+            <div class="pg-video">
+              <iframe src={v.embedUrl} title={v.source === 'vk' ? 'Видео VK' : 'Видео YouTube'} loading="lazy" allowfullscreen
+                allow="encrypted-media; picture-in-picture; fullscreen" referrerpolicy="strict-origin-when-cross-origin"
+                sandbox="allow-scripts allow-same-origin allow-presentation allow-popups"></iframe>
+            </div>
+          ) : null,
+        )}
+        {b.links.length > 0 && (
+          <ul class="pg-links">{b.links.map((l) => <li><a href={l} target="_blank" rel="nofollow noopener noreferrer ugc"><Icon name="arrow-up-right" size={16} />{host(l)}</a></li>)}</ul>
+        )}
+        {b.type === 'contacts' && b.contacts && (
+          <dl class="terms pg-contacts">
+            {b.contacts.city && <div><dt><Icon name="map-pin" size={18} />Город</dt><dd>{b.contacts.city}</dd></div>}
+            {b.contacts.address && <div><dt><Icon name="map-pin" size={18} />Адрес</dt><dd>{b.contacts.address}</dd></div>}
+            {b.contacts.hours && <div><dt><Icon name="clock" size={18} />Часы</dt><dd>{b.contacts.hours}</dd></div>}
+            {b.contacts.phone && <div><dt><Icon name="smartphone" size={18} />Телефон</dt><dd><a href={tel(b.contacts.phone)}>{b.contacts.phone}</a></dd></div>}
+            {b.contacts.site && <div><dt><Icon name="globe" size={18} />Сайт</dt><dd><a href={b.contacts.site} target="_blank" rel="nofollow noopener noreferrer ugc">{host(b.contacts.site)}</a></dd></div>}
+            {b.contacts.socials.length > 0 && <div><dt><Icon name="at-sign" size={18} />Соцсети</dt><dd class="pg-soc">{b.contacts.socials.map((s) => <a href={s} target="_blank" rel="nofollow noopener noreferrer ugc">{host(s)}</a>)}</dd></div>}
+          </dl>
+        )}
+        {b.type === 'channels' && (
+          platforms?.length ? (
+            <ul class="rows">
+              {platforms.map((x) => (
+                <li data-platform={x.kind}>
+                  <Icon name="badge-check" size={20} class="ic-ok" />
+                  <div>
+                    <p class="row-t">{PLATFORM_TITLE[x.kind] ?? x.kind} · {x.url ? <a href={x.url} target="_blank" rel="noopener nofollow ugc">{x.title || `@${x.handle}`}</a> : x.title}</p>
+                    <p class="row-s"><span class="soc-badge">Подтверждено</span> {socialFacts(x)}</p>
+                  </div>
+                  <span class="row-v">{x.followersHidden ? 'скрыто' : x.followers.toLocaleString('ru-RU')}</span>
+                </li>
+              ))}
+            </ul>
+          ) : <p class="muted">Здесь появятся соцсети, подтверждённые в анкете.</p>
+        )}
+        {b.type === 'reviews' && <p class="muted pg-soon"><Icon name="heart" size={18} />Отзывов пока нет — они появятся после первых сделок.</p>}
+        {b.type === 'card' && (
+          card ? (
+            <div class="pg-card">
+              <p class="row-t">{card.name}{card.city && <span class="muted"> · {card.city}</span>}</p>
+              {(card.topicTitles ?? []).length > 0 && <p class="muted">{card.topicTitles!.join(', ')}</p>}
+              {price.length > 0 && <ul class="pg-facts">{price.map((i) => <li><Icon name="wallet" size={18} />{i}</li>)}</ul>}
+              <a class="btn pill-ghost" href={`/app/creator/${card.id}`}><Icon name="id-card" size={18} />Открыть анкету</a>
+            </div>
+          ) : <p class="muted">Здесь появится опубликованная анкета: услуги, форматы и цены.</p>
+        )}
+      </section>
+    );
+  })}
+
+  {!creator && tasks.length > 0 && (
+    <section class="pg-b" data-block="tasks">
+      <h2 class="pg-h">Открытые задания</h2>
+      <ul class="tiles pg-tiles">{tasks.map((t) => <TaskTile task={t} />)}</ul>
+    </section>
+  )}
+  <slot />
+</article>
+<script src="../../scripts/lightbox.ts"></script>

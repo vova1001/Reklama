@@ -37,7 +37,7 @@ export const STATUS: Record<string, string> = {
 export const FIELD_TITLE: Record<string, string> = {
   general: 'Общее', title: 'Название', categories: 'Сфера', city: 'Город', formats: 'Формат', minViews: 'Просмотры',
   reward: 'Оплата', publishBy: 'Срок', blocks: 'Описание', cover: 'Обложка', photos: 'Фото', name: 'Имя', topics: 'Темы',
-  platforms: 'Соцсети', avatar: 'Фото профиля', works: 'Работы',
+  platforms: 'Соцсети', avatar: 'Фото профиля', works: 'Работы', spheres: 'Сферы', logo: 'Логотип', slug: 'Адрес страницы',
 };
 
 /** Причины жалобы (как у сервера — domain.ComplaintReasons). */
@@ -142,3 +142,60 @@ export const PROVIDERS = [
   { id: 'google', title: 'Google', icon: 'key-round', how: 'Войдите через Google с той же почтой' },
   { id: 'telegram', title: 'Telegram', icon: 'send', how: 'Привязка — в ближайшем обновлении' },
 ];
+
+// ===== страница бизнеса и профиль автора (задача 14) =====
+
+export type PageKind = 'business' | 'creator';
+export type PageBlockType = 'about' | 'photos' | 'video' | 'contacts' | 'facts' | 'text' | 'channels' | 'topics' | 'works' | 'reviews' | 'card';
+
+/** Пути публичных страниц. */
+export const PAGE_PATH: Record<PageKind, string> = { business: '/b/', creator: '/c/' };
+export const PAGE_TITLE: Record<PageKind, string> = { business: 'Страница бизнеса', creator: 'Профиль автора' };
+
+/** Блоки страницы: название, иконка, подсказка в списке «Добавить блок». Как у сервера (domain.PageBlockTypes). */
+export const PAGE_BLOCKS: Record<PageBlockType, { title: string; icon: string; hint: string }> = {
+  about: { title: 'О компании', icon: 'text', hint: 'Кто вы и чем полезны' },
+  photos: { title: 'Фото', icon: 'image-plus', hint: 'Галерея — до 12 фото' },
+  video: { title: 'Видео', icon: 'video', hint: 'Файл MP4 или ссылка YouTube / VK' },
+  contacts: { title: 'Адрес и контакты', icon: 'map-pin', hint: 'Город, адрес, часы, сайт, соцсети' },
+  facts: { title: 'Факты', icon: 'list-checks', hint: 'Короткие пункты: цифры, награды' },
+  text: { title: 'Заголовок + текст', icon: 'text', hint: 'Свой раздел' },
+  channels: { title: 'Мои каналы', icon: 'badge-check', hint: 'Подтверждённые соцсети — сами' },
+  topics: { title: 'Что могу рекламировать', icon: 'tag', hint: 'Темы, с которыми работаете' },
+  works: { title: 'Примеры работ', icon: 'camera', hint: 'Фото, видео и ссылки' },
+  reviews: { title: 'Отзывы', icon: 'heart', hint: 'Появятся после первых сделок' },
+  card: { title: 'Анкета', icon: 'id-card', hint: 'Услуги, форматы и цены — из анкеты' },
+};
+export const PAGE_ABOUT_CREATOR = 'О себе';
+export const PAGE_TYPES: Record<PageKind, PageBlockType[]> = {
+  business: ['about', 'photos', 'video', 'contacts', 'facts', 'text'],
+  creator: ['about', 'channels', 'topics', 'works', 'reviews', 'card', 'text', 'photos', 'video', 'facts'],
+};
+export const PAGE_SINGLE: PageBlockType[] = ['about', 'contacts', 'channels', 'topics', 'works', 'reviews', 'card'];
+/** Блоки новой страницы. */
+export const PAGE_START: Record<PageKind, PageBlockType[]> = {
+  business: ['about', 'photos', 'contacts'],
+  creator: ['about', 'channels', 'topics', 'works', 'card'],
+};
+
+/** Ошибки полноты — те же тексты, что у сервера (service/pages_check.go pageComplete). */
+export const PAGE_RULES: Record<PageKind, Record<string, { short: string; msg: string }>> = {
+  business: {
+    title: { short: 'название', msg: 'Название — от 2 символов' },
+    city: { short: 'город', msg: 'Укажите город' },
+    spheres: { short: 'сфера', msg: 'Выберите хотя бы одну сферу' },
+    blocks: { short: 'блоки', msg: 'Добавьте хотя бы один блок с содержимым' },
+  },
+  creator: {
+    title: { short: 'имя', msg: 'Имя — от 2 символов' },
+    city: { short: 'город', msg: 'Укажите город' },
+    spheres: { short: 'темы', msg: 'Выберите хотя бы одну тему' },
+    blocks: { short: 'блоки', msg: 'Добавьте хотя бы один блок с содержимым' },
+  },
+};
+
+export const PAGE_GROUPS = {
+  address: { title: 'Адрес', hint: 'Ссылка на страницу — латиница, цифры и дефис' },
+  head: { title: 'Шапка', hint: 'Обложка, логотип, название, сферы и город' },
+  blocks: { title: 'Блоки', hint: 'Добавляйте, перетаскивайте, удаляйте' },
+} as const;

@@ -1388,6 +1388,185 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/me/pages/{kind}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description business — страница бизнеса /b/<slug>, creator — профиль автора /c/<slug> */
+                kind: components["parameters"]["PageKind"];
+            };
+            cookie?: never;
+        };
+        /** Моя страница бизнеса или профиль автора (page null — ещё нет; suggestedSlug — адрес новой) */
+        get: operations["getMyPage"];
+        /**
+         * Сохранить черновик страницы (у опубликованной — правку; опубликованная видна до одобрения)
+         * @description Блоки по виду страницы. Бизнес — about, photos, video, contacts, facts, text; автор — about, channels (подтверждённые
+         *     соцсети — сами), topics, works, reviews (заглушка до сделок), card (анкета — сама), text, photos, video, facts.
+         *     Одиночные — about, contacts, channels, topics, works, reviews, card. До 20 блоков, 60 фото и 5 видео на странице.
+         *     Видео — файлом (`media` из `POST /api/me/media/video`, `poster` — фото назначения `video_poster`) или ссылкой
+         *     `url` на YouTube / VK Видео (только белый список; адрес для встраивания строит сервер). Новая страница получает
+         *     `slug` (если свободен) или адрес из названия. Ошибки блока — `blocks.<n>`.
+         */
+        put: operations["saveMyPage"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/pages/{kind}/slug": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description business — страница бизнеса /b/<slug>, creator — профиль автора /c/<slug> */
+                kind: components["parameters"]["PageKind"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /** Сменить адрес страницы (латиница, цифры, дефис, 3–40; прежний ведёт на новый; до 10 адресов) */
+        put: operations["setPageSlug"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/pages/{kind}/submit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description business — страница бизнеса /b/<slug>, creator — профиль автора /c/<slug> */
+                kind: components["parameters"]["PageKind"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Отправить страницу (или её правку) на проверку; MODERATION_MODE=auto — сразу published
+         * @description Обязательно — название (имя), город, хотя бы одна сфера (тема) и хотя бы один блок с содержимым.
+         */
+        post: operations["submitMyPage"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/pages/{kind}/withdraw": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description business — страница бизнеса /b/<slug>, creator — профиль автора /c/<slug> */
+                kind: components["parameters"]["PageKind"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** В черновик (с проверки или снять с публикации; неотправленная правка становится черновиком) */
+        post: operations["withdrawMyPage"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/pages/{kind}/revision": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description business — страница бизнеса /b/<slug>, creator — профиль автора /c/<slug> */
+                kind: components["parameters"]["PageKind"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Удалить правку опубликованной страницы */
+        delete: operations["discardPageRevision"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/pages/{kind}/{slug}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description business — страница бизнеса /b/<slug>, creator — профиль автора /c/<slug> */
+                kind: components["parameters"]["PageKind"];
+                slug: string;
+            };
+            cookie?: never;
+        };
+        /**
+         * Опубликованная страница для всех (без входа)
+         * @description Прежний адрес — `{movedTo}` (нынешний; сайт отвечает 301). Бизнес — с открытыми заданиями (`tasks`), автор — с
+         *     подтверждёнными соцсетями (`platforms`) и анкетой (`card`, если на странице есть блок «Анкета»). Кэш 30 с.
+         */
+        get: operations["getPublicPage"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/media/video": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Загрузить видео для страницы (MP4 или WebM как есть, без перекодирования)
+         * @description multipart/form-data, поле `file`. Тип — по содержимому; до `VIDEO_MAX_MB` (50) МБ, в квоте фото пользователя;
+         *     одновременно — 2 загрузки на сервер (иначе 503 `busy`). Кадр-заставку сайт снимает сам и грузит как фото
+         *     `video_poster`. Неприкреплённое удаляется через сутки.
+         */
+        post: operations["uploadVideo"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/media/{id}/video": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Файл видео (Range — перемотка)
+         * @description Опубликованное — всем с долгим кэшем; остальное — владельцу; чужое закрытое — 404.
+         */
+        get: operations["getVideo"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/media/{id}/{size}.webp": {
         parameters: {
             query?: never;
@@ -1754,6 +1933,8 @@ export interface components {
             photos: components["schemas"]["Photo"][];
             /** @description Название бизнеса (только в ленте) */
             brand?: string;
+            /** @description Адрес опубликованной страницы бизнеса (/b/<slug>); нет — не приходит */
+            brandSlug?: string;
             /** Format: date-time */
             createdAt: string;
             /** Format: date-time */
@@ -1866,6 +2047,8 @@ export interface components {
             topics: string[];
             /** @description Названия тем (лента и страница анкеты) */
             topicTitles?: string[];
+            /** @description Адрес опубликованного профиля автора (/c/<slug>); нет — не приходит */
+            pageSlug?: string;
             platforms: components["schemas"]["Platform"][];
             blocks: components["schemas"]["Block"][];
             avatar: components["schemas"]["Photo"] | null;
@@ -1918,10 +2101,10 @@ export interface components {
             created: boolean;
         };
         /**
-         * @description Аватар 1:1 | обложка задания 16:9 | пример к заданию | аватар анкеты 1:1 | пример работы
+         * @description Аватар 1:1 | обложка задания 16:9 | пример к заданию | аватар анкеты 1:1 | пример работы | логотип страницы 1:1 | обложка страницы 3:1 | фото страницы | заставка видео
          * @enum {string}
          */
-        MediaPurpose: "avatar" | "task_cover" | "task_photo" | "card_avatar" | "card_work";
+        MediaPurpose: "avatar" | "task_cover" | "task_photo" | "card_avatar" | "card_work" | "page_logo" | "page_cover" | "page_photo" | "video_poster";
         Media: components["schemas"]["Photo"] & {
             purpose: components["schemas"]["MediaPurpose"];
             width: number;
@@ -1957,7 +2140,127 @@ export interface components {
         /** @enum {string} */
         AdminRole: "moderator" | "admin";
         /** @enum {string} */
-        ReviewKind: "task" | "task_revision" | "card" | "card_revision" | "category" | "format";
+        PageKind: "business" | "creator";
+        /** @enum {string} */
+        PageBlockType: "about" | "photos" | "video" | "contacts" | "facts" | "text" | "channels" | "topics" | "works" | "reviews" | "card";
+        PageContacts: {
+            city: string;
+            address: string;
+            hours: string;
+            /** @description https://… */
+            site: string;
+            phone: string;
+            socials: string[];
+        };
+        VideoInput: {
+            /** @description id видео из POST /api/me/media/video */
+            media?: string;
+            /** @description id фото video_poster */
+            poster?: string;
+            /** @description Ссылка на ролик YouTube или VK Видео */
+            url?: string;
+        };
+        PageBlockInput: {
+            type: components["schemas"]["PageBlockType"];
+            title?: string;
+            text?: string;
+            /** @description facts — пункты (до 12); topics — slug тем (до 10) */
+            items?: string[];
+            photos?: string[];
+            /** @description video — одно; works — до 3 */
+            videos?: components["schemas"]["VideoInput"][];
+            links?: string[];
+            contacts?: components["schemas"]["PageContacts"] | null;
+        };
+        PageInput: {
+            /** @description Желаемый адрес новой страницы (у существующей — PUT …/slug) */
+            slug?: string;
+            title: string;
+            city: string;
+            spheres: string[];
+            /** @description id фото page_logo или "" */
+            logo: string;
+            /** @description id фото page_cover или "" */
+            cover: string;
+            blocks: components["schemas"]["PageBlockInput"][];
+        };
+        PageVideo: {
+            /** @enum {string} */
+            source: "file" | "youtube" | "vk";
+            media?: string;
+            /** @description Файл: /media/{id}/video */
+            src?: string;
+            poster?: components["schemas"]["Photo"];
+            /** @description Ролик на площадке */
+            url?: string;
+            /** @description Адрес для iframe (youtube-nocookie.com / vk.com/video_ext.php) */
+            embedUrl?: string;
+        };
+        PageBlock: {
+            type: components["schemas"]["PageBlockType"];
+            title: string;
+            text: string;
+            items: string[];
+            /** @description Названия тем блока topics (публичная страница и проверка) */
+            itemTitles?: string[];
+            photos: components["schemas"]["Photo"][];
+            videos: components["schemas"]["PageVideo"][];
+            links: string[];
+            contacts?: components["schemas"]["PageContacts"];
+        };
+        Page: {
+            /** Format: int64 */
+            id: number;
+            /**
+             * Format: int64
+             * @description Владелец (жалоба на профиль)
+             */
+            userId: number;
+            kind: components["schemas"]["PageKind"];
+            slug: string;
+            status: components["schemas"]["Status"];
+            rejectReason: string;
+            title: string;
+            city: string;
+            spheres: string[];
+            sphereTitles: string[];
+            logo: components["schemas"]["Photo"] | null;
+            cover: components["schemas"]["Photo"] | null;
+            blocks: components["schemas"]["PageBlock"][];
+            /** Format: date-time */
+            updatedAt: string;
+            /** Format: date-time */
+            submittedAt: string | null;
+            /** Format: date-time */
+            publishedAt: string | null;
+            reviewNotes?: components["schemas"]["ReviewNotes"];
+            /** @description Правка опубликованной страницы (только владельцу) */
+            revision?: components["schemas"]["Revision"] & {
+                page: components["schemas"]["Page"];
+            };
+        };
+        PageResult: {
+            page: components["schemas"]["Page"] | null;
+            suggestedSlug?: string;
+        };
+        PublicPage: {
+            page?: components["schemas"]["Page"];
+            /** @description Адрес сменился — нынешний */
+            movedTo?: string;
+            /** @description Открытые задания бизнеса */
+            tasks?: components["schemas"]["Task"][];
+            /** @description Подтверждённые соцсети автора */
+            platforms?: components["schemas"]["Platform"][];
+            card?: components["schemas"]["Card"];
+        };
+        Video: {
+            id: string;
+            src: string;
+            /** Format: int64 */
+            bytes: number;
+        };
+        /** @enum {string} */
+        ReviewKind: "task" | "task_revision" | "card" | "card_revision" | "page" | "page_revision" | "category" | "format";
         AdminMe: {
             user: components["schemas"]["User"];
             role: components["schemas"]["AdminRole"];
@@ -2146,6 +2449,8 @@ export interface components {
             liveTask?: components["schemas"]["Task"];
             card?: components["schemas"]["Card"];
             liveCard?: components["schemas"]["Card"];
+            page?: components["schemas"]["Page"];
+            livePage?: components["schemas"]["Page"];
             category?: components["schemas"]["AdminCategory"];
             usage?: {
                 tasks?: number;
@@ -2346,6 +2651,8 @@ export interface components {
         };
     };
     parameters: {
+        /** @description business — страница бизнеса /b/<slug>, creator — профиль автора /c/<slug> */
+        PageKind: "business" | "creator";
         /** @description Значение из `GET /api/auth/config` (равно cookie `ohvat_csrf`) */
         CSRF: string;
         TaskID: number;
@@ -4752,6 +5059,310 @@ export interface operations {
             };
             400: components["responses"]["BadRequest"];
             403: components["responses"]["AdminForbidden"];
+        };
+    };
+    getMyPage: {
+        parameters: {
+            query?: {
+                /** @description Название из профиля — для адреса новой страницы */
+                name?: string;
+            };
+            header?: never;
+            path: {
+                /** @description business — страница бизнеса /b/<slug>, creator — профиль автора /c/<slug> */
+                kind: components["parameters"]["PageKind"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Страница */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PageResult"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    saveMyPage: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Значение из `GET /api/auth/config` (равно cookie `ohvat_csrf`) */
+                "X-CSRF-Token": components["parameters"]["CSRF"];
+            };
+            path: {
+                /** @description business — страница бизнеса /b/<slug>, creator — профиль автора /c/<slug> */
+                kind: components["parameters"]["PageKind"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PageInput"];
+            };
+        };
+        responses: {
+            /** @description Сохранено */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PageResult"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    setPageSlug: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Значение из `GET /api/auth/config` (равно cookie `ohvat_csrf`) */
+                "X-CSRF-Token": components["parameters"]["CSRF"];
+            };
+            path: {
+                /** @description business — страница бизнеса /b/<slug>, creator — профиль автора /c/<slug> */
+                kind: components["parameters"]["PageKind"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    slug: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Адрес сменён */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PageResult"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    submitMyPage: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Значение из `GET /api/auth/config` (равно cookie `ohvat_csrf`) */
+                "X-CSRF-Token": components["parameters"]["CSRF"];
+            };
+            path: {
+                /** @description business — страница бизнеса /b/<slug>, creator — профиль автора /c/<slug> */
+                kind: components["parameters"]["PageKind"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description На проверке или опубликовано */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PageResult"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            429: components["responses"]["TooMany"];
+        };
+    };
+    withdrawMyPage: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Значение из `GET /api/auth/config` (равно cookie `ohvat_csrf`) */
+                "X-CSRF-Token": components["parameters"]["CSRF"];
+            };
+            path: {
+                /** @description business — страница бизнеса /b/<slug>, creator — профиль автора /c/<slug> */
+                kind: components["parameters"]["PageKind"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Черновик */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PageResult"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    discardPageRevision: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Значение из `GET /api/auth/config` (равно cookie `ohvat_csrf`) */
+                "X-CSRF-Token": components["parameters"]["CSRF"];
+            };
+            path: {
+                /** @description business — страница бизнеса /b/<slug>, creator — профиль автора /c/<slug> */
+                kind: components["parameters"]["PageKind"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Страница без правки */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PageResult"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    getPublicPage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description business — страница бизнеса /b/<slug>, creator — профиль автора /c/<slug> */
+                kind: components["parameters"]["PageKind"];
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Страница или новый адрес */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicPage"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+        };
+    };
+    uploadVideo: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Значение из `GET /api/auth/config` (равно cookie `ohvat_csrf`) */
+                "X-CSRF-Token": components["parameters"]["CSRF"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": {
+                    /** Format: binary */
+                    file: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Загружено */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Video"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            409: components["responses"]["Conflict"];
+            /** @description Больше VIDEO_MAX_MB (video_too_large) */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Не MP4 / WebM (video_type) */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            429: components["responses"]["TooMany"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    getVideo: {
+        parameters: {
+            query?: never;
+            header?: {
+                Range?: string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Видео */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "video/mp4": string;
+                    "video/webm": string;
+                };
+            };
+            /** @description Часть файла */
+            206: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Нет или нет доступа */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
         };
     };
     getMedia: {
