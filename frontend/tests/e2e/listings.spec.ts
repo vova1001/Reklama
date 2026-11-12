@@ -311,7 +311,7 @@ test('задание: редактор на весь экран, проверк�
 
   // снять и изменить — пропадает из ленты, снова правится
   await page.goto(`/app/tasks/${id}`);
-  await page.getByRole('button', { name: 'Снять и изменить' }).click();
+  await page.getByRole('button', { name: 'Снять с публикации' }).click();
   await page.getByRole('dialog', { name: 'Снять с публикации?' }).getByRole('button', { name: 'Снять' }).click();
   await expect(page.getByLabel('Название задания')).toHaveValue('Сторис о новом осеннем меню');
   expect((await other.request.get(`/api/tasks/${id}`)).status()).toBe(404);
@@ -435,7 +435,7 @@ test('анкета автора: из профиля, текст без Enter, �
   await biz.context().close();
 
   // снять и изменить
-  await page.getByRole('button', { name: 'Снять и изменить' }).click();
+  await page.getByRole('button', { name: 'Снять с публикации' }).click();
   await page.getByRole('dialog', { name: 'Снять с публикации?' }).getByRole('button', { name: 'Снять' }).click();
   await expect(page.getByLabel('Имя')).toHaveValue('Алина');
   expect(errors).toEqual([]);

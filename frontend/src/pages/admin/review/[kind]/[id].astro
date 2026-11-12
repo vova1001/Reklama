@@ -121,7 +121,7 @@ const statusOf = (s: string) => STATUS[s.replace('revision:', '')] ?? s;
                   <button class="btn pill-emerald" type="submit" name="action" value="approve">Одобрить в общие</button>
                   <p class="lbl" style="margin-top:8px">Объединить с форматом</p>
                   <div class="tpls">{(it.formats ?? []).map((f) => <button type="submit" class="chip" name="into" value={f}>{f}</button>)}</div>
-                  <button class="btn pill-danger-ol" type="submit" name="action" value="reject" data-confirm="Отклонить формат?|Его больше нельзя будет выбрать.|Отклонить">Отклонить</button>
+                  <button class="btn pill-danger-ol" type="submit" name="action" value="reject" data-ask="Отклонить формат?|Его больше нельзя будет выбрать.|Отклонить">Отклонить</button>
                 </form>
               </section>
             )}

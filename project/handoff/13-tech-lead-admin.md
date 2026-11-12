@@ -25,3 +25,34 @@
 - Дизайн: тот же минимализм приложения, плотнее (таблицы/списки), без лишнего.
 
 - Go три слоя, интерфейсы, миграция, OpenAPI, тесты (-race, права доступа — обязательно: модератор не может admin-действий, обычный пользователь — ничего), e2e (вход админа с 2FA, одобрить/отклонить, жалоба, блокировка). Скриншоты не нужны. Коммит, не пушить. Отчёт 3 строки + дерево по слоям.
+
+## Отчёт (техлид)
+- **Сделано:** админка `/admin` — роли модератор/администратор (`ADMIN_EMAILS`), 2FA TOTP + резервные коды (12 ч), неизменяемый журнал с поиском; очередь (задания, анкеты, правки опубликованного, свои сферы и форматы) с отбором, арендой 10 мин, карточкой проверки, решениями A/R/D, J/K, отменой 10 с и уведомлением владельцу (почта + Telegram); жалобы, пользователи (блокировка = выход везде + скрытие), сводка, режим проверки в базе. Миграция 00013, OpenAPI 0.10.0.
+- **Проверено:** `make test` (-race, PostgreSQL) — зелёные, покрытие 84,6% (права: модератор не делает админских действий, пользователь — ничего); e2e — 121 пройдено (новый: вход админа с 2FA → опубликовать/отклонить → жалоба → блокировка), `astro check` — 0 ошибок. Скриншоты не делались.
+- **Вопросы / сверх задачи:** 1) «Фото» в очереди — проверяются в карточке задания/анкеты (отдельной очереди фото нет) — так подходит? 2) Сверх: «На доработку» — клавиша D; модератор может блокировать обычных пользователей (сотрудников — только админ); вход по резервному коду и перебор 2FA — в журнале.
+
+### Изменения по слоям
+```
+backend/
+  migrations/00013_admin.sql  staff_role, blocked_*, sessions.mfa_at, staff_totp, staff_backup_codes, audit_log (триггер),
+                              changes_requested, revision*, review_notes, categories merged, format_decisions,
+                              review_leases, review_decisions, complaints, login_events, app_settings, вид review_queue
+  queries/ admin.sql нов.; listing.sql, auth.sql, media.sql изм. → store/ (sqlc)
+  domain/  admin.go нов. (роли, права, журнал, очередь, решения, жалобы); listing.go (changes_requested, правки), user.go
+  repository/ admin.go, revision.go нов.; auth.go (2FA сессии, входы, первый админ), listing.go
+  service/ staff.go, totp.go, twofactor.go, review.go, complaints.go, admin.go (пользователи, журнал, настройки, сводка),
+           notices.go нов.; moderation.go (доработка, правки, снятие), tasks.go/cards.go (правки, режим из базы, форматы),
+           auth.go (блок, ADMIN_EMAILS, входы), media.go (фото на проверке), bot_texts.go
+  gateway/ qrcode нов.; mail (письмо о решении)
+  transport/http/ admin.go нов. (/api/admin/*, /api/complaints, requireStaff/requireMFA); server.go, media.go, listing*.go, auth.go
+  config, cmd/server — ADMIN_EMAILS, лимиты, ключ 2FA, исполнитель решений; api/openapi.yaml 0.10.0
+  тесты: repository/admin_test.go, service/admin_test.go, revision_test.go, transport/http/admin_test.go
+frontend/src/
+  layouts/Admin.astro; pages/admin/ (index, 2fa, queue, review/[kind]/[id], complaints, users, audit, settings)
+  components/admin/Fields.astro; components/app/ Complain, ReviewNote нов.; TaskForm, CardForm, AccountMenu изм.
+  pages/app/ tasks/[id], card (правка опубликованного), task/[id], creator/[id] («Пожаловаться»)
+  scripts/admin/ common, review, undo; scripts/complain.ts; lib/admin.ts; middleware.ts; styles/admin.css, app.css; 5 иконок
+  tests/e2e/admin.spec.ts нов.; listings.spec.ts изм.
+окружение: docker-compose*.yml, render.yaml, .env.example (ADMIN_EMAILS, RATE_LIMIT_ADMIN/2FA/COMPLAINT_*);
+  project/architecture.md, project/design/tokens.md
+```

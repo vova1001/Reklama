@@ -35,7 +35,6 @@ services:
       RATE_LIMIT_API_BURST: "1000"
       # админы e2e (по одному на ширину экрана) и ручная проверка
       ADMIN_EMAILS: e2e-admin-desktop@example.com,e2e-admin-tablet@example.com,e2e-admin-mobile@example.com
-      MODERATION_MODE: manual
       RATE_LIMIT_2FA_BURST: "100"
       RATE_LIMIT_COMPLAINT_BURST: "100"
     depends_on:

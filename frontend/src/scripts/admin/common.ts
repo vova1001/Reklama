@@ -54,7 +54,7 @@ if (tfa) {
   });
 }
 
-// ===== формы действий: data-act="METHOD /api/…", поля → JSON; data-confirm — диалог; data-done — что после =====
+// ===== формы действий: data-act="METHOD /api/…", поля → JSON; data-ask — диалог; data-done — что после =====
 $$<HTMLFormElement>('form[data-act]').forEach((f) => {
   f.addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -64,7 +64,7 @@ $$<HTMLFormElement>('form[data-act]').forEach((f) => {
     const body: Record<string, string> = {};
     new FormData(f).forEach((v, k) => (body[k] = String(v)));
     if (sub?.name) body[sub.name] = sub.value;
-    const ask = sub?.dataset.confirm ?? f.dataset.confirm;
+    const ask = sub?.dataset.ask ?? f.dataset.ask;
     if (ask) {
       const [title, text, ok] = ask.split('|');
       if (!(await confirmDialog(title, text ?? '', ok ?? 'Да'))) return;

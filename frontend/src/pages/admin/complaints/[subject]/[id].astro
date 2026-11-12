@@ -34,8 +34,8 @@ const open = c?.complaints.some((x) => x.status === 'open');
               <textarea class="inp" id="c-note" name="note" maxlength="500" rows="3" data-input="note"></textarea>
               <p class="ferr" data-err="note" role="alert"></p>
               <button class="btn pill-ghost" type="submit" name="action" value="dismiss">Жалоба не подтвердилась</button>
-              {c.subject !== 'user' && <button class="btn pill-dark" type="submit" name="action" value="hide" data-confirm="Снять с публикации?|Владелец увидит причину и сможет исправить.|Снять">Снять с публикации</button>}
-              <button class="btn pill-danger-ol" type="submit" name="action" value="block" data-confirm="Заблокировать владельца?|Вход закроется, все сеансы завершатся, задания и анкета пропадут из ленты.|Заблокировать">Заблокировать владельца</button>
+              {c.subject !== 'user' && <button class="btn pill-dark" type="submit" name="action" value="hide" data-ask="Снять с публикации?|Владелец увидит причину и сможет исправить.|Снять">Снять с публикации</button>}
+              <button class="btn pill-danger-ol" type="submit" name="action" value="block" data-ask="Заблокировать владельца?|Вход закроется, все сеансы завершатся, задания и анкета пропадут из ленты.|Заблокировать">Заблокировать владельца</button>
             </form>
           </section>
         )}

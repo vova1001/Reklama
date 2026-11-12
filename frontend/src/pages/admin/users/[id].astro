@@ -76,7 +76,7 @@ const canBlock = !!u && !self && can(adm, 'users.block') && (!u.role || can(adm,
                 <button class="btn pill-dark" type="submit">Разблокировать</button>
               </form>
             ) : (
-              <form class="rv-form" data-act={`POST /api/admin/users/${u.id}/block`} data-confirm="Заблокировать?|Вход закроется, все сеансы завершатся, задания и анкета пропадут из ленты.|Заблокировать" novalidate>
+              <form class="rv-form" data-act={`POST /api/admin/users/${u.id}/block`} data-ask="Заблокировать?|Вход закроется, все сеансы завершатся, задания и анкета пропадут из ленты.|Заблокировать" novalidate>
                 <label class="lbl" for="b-r">Причина блокировки</label>
                 <input class="inp" id="b-r" name="reason" maxlength="500" data-input="reason" />
                 <p class="ferr" data-err="reason"></p>
@@ -88,13 +88,13 @@ const canBlock = !!u && !self && can(adm, 'users.block') && (!u.role || can(adm,
                 <p class="lbl">Роль: {ROLE_TITLE[u.role]}</p>
                 <div class="tpls">
                   {u.role !== 'moderator' && <button class="chip" type="submit" name="role" value="moderator">Сделать модератором</button>}
-                  {u.role !== 'admin' && <button class="chip" type="submit" name="role" value="admin" data-confirm="Сделать администратором?|Администратор управляет ролями, режимом проверки и видит журнал.|Сделать">Сделать администратором</button>}
-                  {u.role && <button class="chip" type="submit" name="role" value="" data-confirm="Снять роль?|Доступ к админке закроется.|Снять">Снять роль</button>}
+                  {u.role !== 'admin' && <button class="chip" type="submit" name="role" value="admin" data-ask="Сделать администратором?|Администратор управляет ролями, режимом проверки и видит журнал.|Сделать">Сделать администратором</button>}
+                  {u.role && <button class="chip" type="submit" name="role" value="" data-ask="Снять роль?|Доступ к админке закроется.|Снять">Снять роль</button>}
                 </div>
               </form>
             )}
             {can(adm, 'staff.manage') && u.role && (
-              <form class="rv-form" data-act={`POST /api/admin/users/${u.id}/reset-2fa`} data-confirm="Сбросить 2FA?|При следующем входе сотрудник настроит защиту заново.|Сбросить" data-done="2FA сброшена" novalidate>
+              <form class="rv-form" data-act={`POST /api/admin/users/${u.id}/reset-2fa`} data-ask="Сбросить 2FA?|При следующем входе сотрудник настроит защиту заново.|Сбросить" data-done="2FA сброшена" novalidate>
                 <button class="btn pill-ghost" type="submit">Сбросить 2FA</button>
               </form>
             )}
