@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"bytes"
 	"errors"
 	"io"
 	"log/slog"
@@ -8,6 +9,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 
@@ -142,7 +144,10 @@ func (s *Server) getMedia(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	name := chi.URLParam(r, "file")
 	size, err := strconv.Atoi(strings.TrimSuffix(name, ".webp"))
-	if err != nil || !strings.HasSuffix(name, ".webp") {
+	video := name == "video" // видео страницы — один файл как есть (size 0)
+	if video {
+		size, err = 0, nil
+	} else if err != nil || !strings.HasSuffix(name, ".webp") || size == 0 {
 		http.NotFound(w, r)
 		return
 	}
@@ -174,6 +179,10 @@ func (s *Server) getMedia(w http.ResponseWriter, r *http.Request) {
 	etag := `"` + id + "-" + strconv.Itoa(size) + `"`
 	h := w.Header()
 	h.Set("ETag", etag)
+	if video {
+		serveVideo(w, r, b, public)
+		return
+	}
 	h.Set("Content-Type", "image/webp")
 	h.Set("X-Content-Type-Options", "nosniff")
 	h.Set("Content-Security-Policy", "default-src 'none'; sandbox")
@@ -192,4 +201,24 @@ func (s *Server) getMedia(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodHead {
 		_, _ = w.Write(b.Data)
 	}
+}
+
+// serveVideo — видео с поддержкой Range (перемотка, докачка); отдача может идти дольше обычного ответа.
+func serveVideo(w http.ResponseWriter, r *http.Request, b service.Blob, public bool) {
+	_ = http.NewResponseController(w).SetWriteDeadline(time.Now().Add(videoUploadTimeout))
+	h := w.Header()
+	ct := b.ContentType
+	if ct != "video/mp4" && ct != "video/webm" {
+		ct = "application/octet-stream"
+	}
+	h.Set("Content-Type", ct)
+	h.Set("X-Content-Type-Options", "nosniff")
+	h.Set("Content-Security-Policy", "default-src 'none'; sandbox")
+	if public {
+		h.Set("Cache-Control", "public, max-age=31536000, immutable")
+	} else {
+		h.Set("Cache-Control", "private, max-age=3600")
+		h.Set("Vary", "Cookie")
+	}
+	http.ServeContent(w, r, "", b.ModTime, bytes.NewReader(b.Data))
 }

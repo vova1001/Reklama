@@ -52,6 +52,11 @@ type ReviewContent interface {
 	History(ctx context.Context, subject domain.Subject, id int64) ([]domain.StatusChange, error)
 }
 
+// PageContent — страница на проверке (по id).
+type PageContent interface {
+	PageByID(ctx context.Context, id int64) (domain.Page, error)
+}
+
 // DecisionNotice — что сообщить владельцу о решении.
 type DecisionNotice struct {
 	Kind   domain.ReviewKind
@@ -93,6 +98,7 @@ type ReviewDeps struct {
 	Moderator Moderator
 	Platforms PlatformSource   // подтверждённые соцсети в анкете
 	Notifier  DecisionNotifier // nil — без уведомлений
+	Pages     PageContent      // страницы бизнеса и авторов; nil — их нет в проверке
 	Clock     Clock
 	Log       *slog.Logger
 }
@@ -234,6 +240,8 @@ type ReviewItem struct {
 	LiveTask     *domain.Task        // правка: опубликованная сейчас
 	Card         *domain.CreatorCard // на проверке (для правки — новая версия)
 	LiveCard     *domain.CreatorCard
+	Page         *domain.Page // на проверке (для правки — новая версия)
+	LivePage     *domain.Page
 	Category     *domain.CategoryInfo
 	Format       *FormatReview
 	Usage        [2]int // категория: в заданиях и анкетах
@@ -340,6 +348,38 @@ func (s *Review) Item(ctx context.Context, u domain.User, kind domain.ReviewKind
 		if it.History, err = s.d.Content.History(ctx, domain.SubjectCard, n); err != nil {
 			return it, err
 		}
+	case domain.KindPage, domain.KindPageRevision:
+		n, err := strconv.ParseInt(id, 10, 64)
+		if err != nil || s.d.Pages == nil {
+			return it, domain.ErrNotFound
+		}
+		p, err := s.d.Pages.PageByID(ctx, n)
+		if err != nil {
+			return it, err
+		}
+		ownerID = p.UserID
+		titles, err := s.categoryTitles(ctx, ownerID)
+		if err != nil {
+			return it, err
+		}
+		p.SphereTitles = mapTitles(titles, p.Spheres)
+		pageTopicTitles(titles, p.Blocks)
+		it.Page = &p
+		if kind == domain.KindPageRevision {
+			if p.Revision == nil {
+				return it, domain.ErrNotFound
+			}
+			rev := *p.Revision
+			rev.ID, rev.UserID, rev.Kind, rev.Slug, rev.Status = p.ID, p.UserID, p.Kind, p.Slug, p.RevisionStatus
+			rev.SphereTitles = mapTitles(titles, rev.Spheres)
+			pageTopicTitles(titles, rev.Blocks)
+			live := p
+			live.Revision = nil
+			it.Page, it.LivePage = &rev, &live
+		}
+		if it.History, err = s.d.Content.History(ctx, domain.SubjectPage, n); err != nil {
+			return it, err
+		}
 	case domain.KindCategory:
 		n, err := strconv.ParseInt(id, 10, 64)
 		if err != nil {
@@ -389,6 +429,14 @@ func (s *Review) Item(ctx context.Context, u domain.User, kind domain.ReviewKind
 		}
 	}
 	return it, nil
+}
+
+func pageTopicTitles(titles map[string]string, bs []domain.PageBlock) {
+	for i := range bs {
+		if bs[i].Type == domain.PBTopics {
+			bs[i].ItemTitles = mapTitles(titles, bs[i].Items)
+		}
+	}
 }
 
 func firstNonEmpty(v ...string) string {
@@ -464,8 +512,11 @@ type DecisionInput struct {
 }
 
 func subjectOf(k domain.ReviewKind) domain.Subject {
-	if k == domain.KindCard || k == domain.KindCardRevision {
+	switch k {
+	case domain.KindCard, domain.KindCardRevision:
 		return domain.SubjectCard
+	case domain.KindPage, domain.KindPageRevision:
+		return domain.SubjectPage
 	}
 	return domain.SubjectTask
 }
@@ -605,6 +656,14 @@ func (s *Review) notify(ctx context.Context, d domain.ReviewDecision) {
 		n.Path = "/app/tasks/" + strconv.FormatInt(d.ItemID, 10)
 		if t, err := s.d.Content.Task(ctx, d.ItemID); err == nil {
 			n.Title = t.Title
+		}
+	case domain.SubjectPage:
+		n.Path = "/app/page"
+		if s.d.Pages != nil {
+			if p, err := s.d.Pages.PageByID(ctx, d.ItemID); err == nil {
+				n.Title = p.Title
+				n.Path += "?kind=" + string(p.Kind)
+			}
 		}
 	default:
 		n.Path = "/app/card"

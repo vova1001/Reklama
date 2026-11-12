@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: Охват API
-  version: 0.10.0
+  version: 0.11.0
   description: |
     API площадки «Охват»: данные главной, регистрация и вход (почта с кодом, Telegram, Google), приложение после входа:
     один аккаунт — два режима («Бизнес» и «Автор»), профили режимов заполняются, когда понадобятся.
@@ -26,6 +26,8 @@ info:
     `MODERATION_MODE=auto` (по умолчанию) — отправленное сразу публикуется: в журнале «на проверке» от владельца и
     «опубликовано» от системы с пометкой «одобрено автоматически», ответ отправки — уже `published`;
     `manual` — ждёт модератора. Режим переключает администратор (хранится в базе; переменная — значение по умолчанию).
+    Страница бизнеса (`/b/<slug>`) и профиль автора (`/c/<slug>`) — из блоков, с той же проверкой и правками
+    опубликованного (`/api/me/pages/{kind}`); адрес уникален в своём виде, прежние адреса ведут на новый.
     Опубликованное можно изменить без снятия: `PUT` сохраняет правку (`revision`), `…/submit` отправляет её на проверку,
     опубликованная версия видна всем до одобрения; `…/withdraw` снимает с публикации (черновиком становится правка).
 
@@ -1461,6 +1463,150 @@ paths:
         "200": { description: Настройки, content: { application/json: { schema: { $ref: "#/components/schemas/AdminSettings" } } } }
         "400": { $ref: "#/components/responses/BadRequest" }
         "403": { $ref: "#/components/responses/AdminForbidden" }
+  /api/me/pages/{kind}:
+    parameters: [{ $ref: "#/components/parameters/PageKind" }]
+    get:
+      summary: Моя страница бизнеса или профиль автора (page null — ещё нет; suggestedSlug — адрес новой)
+      operationId: getMyPage
+      tags: [pages]
+      security: [{ session: [] }]
+      parameters:
+        - { name: name, in: query, schema: { type: string, maxLength: 200 }, description: Название из профиля — для адреса новой страницы }
+      responses:
+        "200": { description: Страница, content: { application/json: { schema: { $ref: "#/components/schemas/PageResult" } } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    put:
+      summary: Сохранить черновик страницы (у опубликованной — правку; опубликованная видна до одобрения)
+      description: |
+        Блоки по виду страницы. Бизнес — about, photos, video, contacts, facts, text; автор — about, channels (подтверждённые
+        соцсети — сами), topics, works, reviews (заглушка до сделок), card (анкета — сама), text, photos, video, facts.
+        Одиночные — about, contacts, channels, topics, works, reviews, card. До 20 блоков, 60 фото и 5 видео на странице.
+        Видео — файлом (`media` из `POST /api/me/media/video`, `poster` — фото назначения `video_poster`) или ссылкой
+        `url` на YouTube / VK Видео (только белый список; адрес для встраивания строит сервер). Новая страница получает
+        `slug` (если свободен) или адрес из названия. Ошибки блока — `blocks.<n>`.
+      operationId: saveMyPage
+      tags: [pages]
+      security: [{ session: [] }]
+      parameters: [{ $ref: "#/components/parameters/CSRF" }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/PageInput" } } } }
+      responses:
+        "200": { description: Сохранено, content: { application/json: { schema: { $ref: "#/components/schemas/PageResult" } } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+  /api/me/pages/{kind}/slug:
+    parameters: [{ $ref: "#/components/parameters/PageKind" }]
+    put:
+      summary: Сменить адрес страницы (латиница, цифры, дефис, 3–40; прежний ведёт на новый; до 10 адресов)
+      operationId: setPageSlug
+      tags: [pages]
+      security: [{ session: [] }]
+      parameters: [{ $ref: "#/components/parameters/CSRF" }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, required: [slug], additionalProperties: false, properties: { slug: { type: string } } } } }
+      responses:
+        "200": { description: Адрес сменён, content: { application/json: { schema: { $ref: "#/components/schemas/PageResult" } } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /api/me/pages/{kind}/submit:
+    parameters: [{ $ref: "#/components/parameters/PageKind" }]
+    post:
+      summary: Отправить страницу (или её правку) на проверку; MODERATION_MODE=auto — сразу published
+      description: Обязательно — название (имя), город, хотя бы одна сфера (тема) и хотя бы один блок с содержимым.
+      operationId: submitMyPage
+      tags: [pages]
+      security: [{ session: [] }]
+      parameters: [{ $ref: "#/components/parameters/CSRF" }]
+      responses:
+        "200": { description: На проверке или опубликовано, content: { application/json: { schema: { $ref: "#/components/schemas/PageResult" } } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "429": { $ref: "#/components/responses/TooMany" }
+  /api/me/pages/{kind}/withdraw:
+    parameters: [{ $ref: "#/components/parameters/PageKind" }]
+    post:
+      summary: В черновик (с проверки или снять с публикации; неотправленная правка становится черновиком)
+      operationId: withdrawMyPage
+      tags: [pages]
+      security: [{ session: [] }]
+      parameters: [{ $ref: "#/components/parameters/CSRF" }]
+      responses:
+        "200": { description: Черновик, content: { application/json: { schema: { $ref: "#/components/schemas/PageResult" } } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+  /api/me/pages/{kind}/revision:
+    parameters: [{ $ref: "#/components/parameters/PageKind" }]
+    delete:
+      summary: Удалить правку опубликованной страницы
+      operationId: discardPageRevision
+      tags: [pages]
+      security: [{ session: [] }]
+      parameters: [{ $ref: "#/components/parameters/CSRF" }]
+      responses:
+        "200": { description: Страница без правки, content: { application/json: { schema: { $ref: "#/components/schemas/PageResult" } } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+  /api/pages/{kind}/{slug}:
+    parameters:
+      - { $ref: "#/components/parameters/PageKind" }
+      - { name: slug, in: path, required: true, schema: { type: string, maxLength: 64 } }
+    get:
+      summary: Опубликованная страница для всех (без входа)
+      description: |
+        Прежний адрес — `{movedTo}` (нынешний; сайт отвечает 301). Бизнес — с открытыми заданиями (`tasks`), автор — с
+        подтверждёнными соцсетями (`platforms`) и анкетой (`card`, если на странице есть блок «Анкета»). Кэш 30 с.
+      operationId: getPublicPage
+      tags: [pages]
+      responses:
+        "200": { description: Страница или новый адрес, content: { application/json: { schema: { $ref: "#/components/schemas/PublicPage" } } } }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /api/me/media/video:
+    post:
+      summary: Загрузить видео для страницы (MP4 или WebM как есть, без перекодирования)
+      description: |
+        multipart/form-data, поле `file`. Тип — по содержимому; до `VIDEO_MAX_MB` (50) МБ, в квоте фото пользователя;
+        одновременно — 2 загрузки на сервер (иначе 503 `busy`). Кадр-заставку сайт снимает сам и грузит как фото
+        `video_poster`. Неприкреплённое удаляется через сутки.
+      operationId: uploadVideo
+      tags: [media]
+      security: [{ session: [] }]
+      parameters: [{ $ref: "#/components/parameters/CSRF" }]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema: { type: object, required: [file], properties: { file: { type: string, format: binary } } }
+      responses:
+        "201": { description: Загружено, content: { application/json: { schema: { $ref: "#/components/schemas/Video" } } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "413": { description: Больше VIDEO_MAX_MB (video_too_large), content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "415": { description: Не MP4 / WebM (video_type), content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "429": { $ref: "#/components/responses/TooMany" }
+        "503": { $ref: "#/components/responses/Unavailable" }
+  /media/{id}/video:
+    get:
+      summary: Файл видео (Range — перемотка)
+      description: Опубликованное — всем с долгим кэшем; остальное — владельцу; чужое закрытое — 404.
+      operationId: getVideo
+      tags: [media]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, pattern: "^[A-Za-z0-9_-]{22}$" } }
+        - { name: Range, in: header, schema: { type: string } }
+      responses:
+        "200": { description: Видео, content: { video/mp4: { schema: { type: string, format: binary } }, video/webm: { schema: { type: string, format: binary } } } }
+        "206": { description: Часть файла }
+        "404": { description: Нет или нет доступа }
   /media/{id}/{size}.webp:
     get:
       summary: Файл фото
@@ -1484,6 +1630,12 @@ components:
   securitySchemes:
     session: { type: apiKey, in: cookie, name: ohvat_session }
   parameters:
+    PageKind:
+      name: kind
+      in: path
+      required: true
+      schema: { type: string, enum: [business, creator] }
+      description: business — страница бизнеса /b/<slug>, creator — профиль автора /c/<slug>
     CSRF:
       name: X-CSRF-Token
       in: header
@@ -1873,6 +2025,7 @@ components:
         cover: { nullable: true, allOf: [{ $ref: "#/components/schemas/Photo" }] }
         photos: { type: array, items: { $ref: "#/components/schemas/Photo" } }
         brand: { type: string, description: Название бизнеса (только в ленте) }
+        brandSlug: { type: string, description: "Адрес опубликованной страницы бизнеса (/b/<slug>); нет — не приходит" }
         createdAt: { type: string, format: date-time }
         updatedAt: { type: string, format: date-time }
         submittedAt: { type: string, format: date-time, nullable: true }
@@ -1966,6 +2119,7 @@ components:
         city: { type: string }
         topics: { type: array, items: { type: string } }
         topicTitles: { type: array, items: { type: string }, description: Названия тем (лента и страница анкеты) }
+        pageSlug: { type: string, description: "Адрес опубликованного профиля автора (/c/<slug>); нет — не приходит" }
         platforms: { type: array, items: { $ref: "#/components/schemas/Platform" } }
         blocks: { type: array, items: { $ref: "#/components/schemas/Block" } }
         avatar: { nullable: true, allOf: [{ $ref: "#/components/schemas/Photo" }] }
@@ -2025,8 +2179,8 @@ components:
         created: { type: boolean }
     MediaPurpose:
       type: string
-      enum: [avatar, task_cover, task_photo, card_avatar, card_work]
-      description: "Аватар 1:1 | обложка задания 16:9 | пример к заданию | аватар анкеты 1:1 | пример работы"
+      enum: [avatar, task_cover, task_photo, card_avatar, card_work, page_logo, page_cover, page_photo, video_poster]
+      description: "Аватар 1:1 | обложка задания 16:9 | пример к заданию | аватар анкеты 1:1 | пример работы | логотип страницы 1:1 | обложка страницы 3:1 | фото страницы | заставка видео"
     Media:
       allOf:
         - { $ref: "#/components/schemas/Photo" }
@@ -2060,7 +2214,120 @@ components:
       required: [created]
       properties: { created: { type: boolean } }
     AdminRole: { type: string, enum: [moderator, admin] }
-    ReviewKind: { type: string, enum: [task, task_revision, card, card_revision, category, format] }
+    PageKind: { type: string, enum: [business, creator] }
+    PageBlockType:
+      type: string
+      enum: [about, photos, video, contacts, facts, text, channels, topics, works, reviews, card]
+    PageContacts:
+      type: object
+      required: [city, address, hours, site, phone, socials]
+      properties:
+        city: { type: string, maxLength: 80 }
+        address: { type: string, maxLength: 200 }
+        hours: { type: string, maxLength: 120 }
+        site: { type: string, description: "https://…" }
+        phone: { type: string, maxLength: 30 }
+        socials: { type: array, maxItems: 6, items: { type: string } }
+    VideoInput:
+      type: object
+      properties:
+        media: { type: string, description: id видео из POST /api/me/media/video }
+        poster: { type: string, description: id фото video_poster }
+        url: { type: string, description: Ссылка на ролик YouTube или VK Видео }
+    PageBlockInput:
+      type: object
+      required: [type]
+      properties:
+        type: { $ref: "#/components/schemas/PageBlockType" }
+        title: { type: string, maxLength: 80 }
+        text: { type: string, maxLength: 3000 }
+        items: { type: array, items: { type: string }, description: "facts — пункты (до 12); topics — slug тем (до 10)" }
+        photos: { type: array, maxItems: 12, items: { type: string } }
+        videos: { type: array, items: { $ref: "#/components/schemas/VideoInput" }, description: "video — одно; works — до 3" }
+        links: { type: array, maxItems: 10, items: { type: string } }
+        contacts: { nullable: true, allOf: [{ $ref: "#/components/schemas/PageContacts" }] }
+    PageInput:
+      type: object
+      required: [title, city, spheres, logo, cover, blocks]
+      properties:
+        slug: { type: string, description: Желаемый адрес новой страницы (у существующей — PUT …/slug) }
+        title: { type: string, maxLength: 80 }
+        city: { type: string, maxLength: 80 }
+        spheres: { type: array, maxItems: 5, items: { type: string } }
+        logo: { type: string, description: id фото page_logo или "" }
+        cover: { type: string, description: id фото page_cover или "" }
+        blocks: { type: array, maxItems: 20, items: { $ref: "#/components/schemas/PageBlockInput" } }
+    PageVideo:
+      type: object
+      required: [source]
+      properties:
+        source: { type: string, enum: [file, youtube, vk] }
+        media: { type: string }
+        src: { type: string, description: "Файл: /media/{id}/video" }
+        poster: { $ref: "#/components/schemas/Photo" }
+        url: { type: string, description: Ролик на площадке }
+        embedUrl: { type: string, description: "Адрес для iframe (youtube-nocookie.com / vk.com/video_ext.php)" }
+    PageBlock:
+      type: object
+      required: [type, title, text, items, photos, videos, links]
+      properties:
+        type: { $ref: "#/components/schemas/PageBlockType" }
+        title: { type: string }
+        text: { type: string }
+        items: { type: array, items: { type: string } }
+        itemTitles: { type: array, items: { type: string }, description: Названия тем блока topics (публичная страница и проверка) }
+        photos: { type: array, items: { $ref: "#/components/schemas/Photo" } }
+        videos: { type: array, items: { $ref: "#/components/schemas/PageVideo" } }
+        links: { type: array, items: { type: string } }
+        contacts: { $ref: "#/components/schemas/PageContacts" }
+    Page:
+      type: object
+      required: [id, userId, kind, slug, status, rejectReason, title, city, spheres, sphereTitles, logo, cover, blocks, updatedAt, submittedAt, publishedAt]
+      properties:
+        id: { type: integer, format: int64 }
+        userId: { type: integer, format: int64, description: Владелец (жалоба на профиль) }
+        kind: { $ref: "#/components/schemas/PageKind" }
+        slug: { type: string }
+        status: { $ref: "#/components/schemas/Status" }
+        rejectReason: { type: string }
+        title: { type: string }
+        city: { type: string }
+        spheres: { type: array, items: { type: string } }
+        sphereTitles: { type: array, items: { type: string } }
+        logo: { nullable: true, allOf: [{ $ref: "#/components/schemas/Photo" }] }
+        cover: { nullable: true, allOf: [{ $ref: "#/components/schemas/Photo" }] }
+        blocks: { type: array, items: { $ref: "#/components/schemas/PageBlock" } }
+        updatedAt: { type: string, format: date-time }
+        submittedAt: { type: string, format: date-time, nullable: true }
+        publishedAt: { type: string, format: date-time, nullable: true }
+        reviewNotes: { $ref: "#/components/schemas/ReviewNotes" }
+        revision:
+          description: Правка опубликованной страницы (только владельцу)
+          allOf:
+            - { $ref: "#/components/schemas/Revision" }
+            - { type: object, required: [page], properties: { page: { $ref: "#/components/schemas/Page" } } }
+    PageResult:
+      type: object
+      required: [page]
+      properties:
+        page: { nullable: true, allOf: [{ $ref: "#/components/schemas/Page" }] }
+        suggestedSlug: { type: string }
+    PublicPage:
+      type: object
+      properties:
+        page: { $ref: "#/components/schemas/Page" }
+        movedTo: { type: string, description: Адрес сменился — нынешний }
+        tasks: { type: array, items: { $ref: "#/components/schemas/Task" }, description: Открытые задания бизнеса }
+        platforms: { type: array, items: { $ref: "#/components/schemas/Platform" }, description: Подтверждённые соцсети автора }
+        card: { $ref: "#/components/schemas/Card" }
+    Video:
+      type: object
+      required: [id, src, bytes]
+      properties:
+        id: { type: string }
+        src: { type: string }
+        bytes: { type: integer, format: int64 }
+    ReviewKind: { type: string, enum: [task, task_revision, card, card_revision, page, page_revision, category, format] }
     AdminMe:
       type: object
       required: [user, role, permissions, twoFactor, rejectTemplates, reviewFields, undoSeconds]
@@ -2240,6 +2507,8 @@ components:
         liveTask: { $ref: "#/components/schemas/Task" }
         card: { $ref: "#/components/schemas/Card" }
         liveCard: { $ref: "#/components/schemas/Card" }
+        page: { $ref: "#/components/schemas/Page" }
+        livePage: { $ref: "#/components/schemas/Page" }
         category: { $ref: "#/components/schemas/AdminCategory" }
         usage: { type: object, properties: { tasks: { type: integer }, cards: { type: integer } } }
         targets: { type: array, items: { $ref: "#/components/schemas/AdminCategory" } }

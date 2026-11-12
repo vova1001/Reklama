@@ -127,6 +127,7 @@ func run(log *slog.Logger) error {
 	go imaging.Warm()
 	media := service.NewMedia(mediaRepo, newBlobStore(cfg, pool, log), imgPool, service.MediaConfig{
 		MaxBytes: int64(cfg.MediaMaxMB) << 20, QuotaBytes: int64(cfg.MediaQuotaMB) << 20, MaxFiles: cfg.MediaMaxFiles,
+		VideoMaxBytes: int64(cfg.VideoMaxMB) << 20,
 	}, log)
 	social, err := newSocial(cfg, pool, authRepo, tgClient, log)
 	if err != nil {
@@ -134,18 +135,22 @@ func run(log *slog.Logger) error {
 	}
 	// админка: режим проверки — в базе (MODERATION_MODE — по умолчанию), решения по своим форматам
 	adminRepo := repository.NewAdmin(pool)
+	pagesRepo := repository.NewPages(pool)
 	settings := service.NewSettings(adminRepo, domain.ModerationMode(cfg.Moderation), nil, log)
 	deps := service.ListingDeps{
 		Categories: catRepo, Submits: listRepo, Media: mediaRepo, Platforms: social,
 		Limits: service.ListingLimits{MaxTasks: cfg.TasksMax, SubmitsPerDay: cfg.SubmitsPerDay},
 		Mode:   domain.ModerationMode(cfg.Moderation), Modes: settings, FormatRules: adminRepo,
+		PageLinks: pagesRepo,
 	}
 	log.Info("проверка заданий и анкет", "default_mode", cfg.Moderation, "admins_from_env", len(cfg.AdminEmails))
 	tasks := service.NewTasks(listRepo, deps)
 	cards := service.NewCards(listRepo, deps)
+	// страница бизнеса и профиль автора: те же сферы, фото, режим проверки и лимит отправок
+	pages := service.NewPages(pagesRepo, service.PagesDeps{ListingDeps: deps, Cards: cards})
 	content := moderationRepo{listRepo, catRepo}
-	moderation := service.NewModeration(content)
-	adm, err := newAdmin(cfg, pool, adminRepo, authRepo, content, moderation, social, queue, notifier, log)
+	moderation := service.NewModeration(content).WithPages(pagesRepo)
+	adm, err := newAdmin(cfg, pool, adminRepo, authRepo, content, moderation, social, pagesRepo, queue, notifier, log)
 	if err != nil {
 		return err
 	}
@@ -180,6 +185,7 @@ func run(log *slog.Logger) error {
 	api := httpapi.New(httpapi.Services{
 		Home: service.NewHome(repository.NewHome(pool)), Health: service.NewHealth(repository.NewHealth(pool)),
 		Auth: auth, Profiles: profiles, Tasks: tasks, Cards: cards, Categories: service.NewCategories(catRepo), Formats: service.NewFormats(listRepo), Media: media, Drafts: drafts, Social: social,
+		Pages: pages, Videos: media,
 		TwoFactor: adm.twoFactor, Review: adm.review, Complaints: adm.complaints, StaffUsers: adm.users, Audit: service.NewAuditLog(adminRepo),
 		Settings: settings, Dashboard: service.NewDashboard(adminRepo, nil),
 	}, opts)
@@ -333,7 +339,7 @@ type admin struct {
 // newAdmin — админка: 2FA (секреты — AES-256-GCM: TOKEN_ENC_KEY или ключ из AUTH_SECRET), очередь проверки с
 // решениями и уведомлениями (почта + Telegram), жалобы, пользователи.
 func newAdmin(cfg config.Config, pool *pgxpool.Pool, repo *repository.Admin, users *repository.Auth, content moderationRepo,
-	mod *service.Moderation, social *service.Social, queue *mail.Queue, bot service.Notifier, log *slog.Logger) (admin, error) {
+	mod *service.Moderation, social *service.Social, pages *repository.Pages, queue *mail.Queue, bot service.Notifier, log *slog.Logger) (admin, error) {
 	key, old := cfg.TwoFactorKeys(service.TOTPKeyFromSecret)
 	if key == "" {
 		k := make([]byte, 32)
@@ -353,7 +359,7 @@ func newAdmin(cfg config.Config, pool *pgxpool.Pool, repo *repository.Admin, use
 	if queue != nil { // без способа отправки писем — только Telegram
 		notices.Mail = queue
 	}
-	review := service.NewReview(service.ReviewDeps{Repo: repo, Content: content, Moderator: mod, Platforms: social, Notifier: notices, Log: log},
+	review := service.NewReview(service.ReviewDeps{Repo: repo, Content: content, Moderator: mod, Platforms: social, Notifier: notices, Pages: pages, Log: log},
 		service.ReviewConfig{})
 	staff := service.NewStaffUsers(repo, userContent{users: users, profiles: repository.NewProfiles(pool), listings: content.Listings,
 		social: repository.NewSocial(pool)}, nil, func(err error) bool { return errors.Is(err, repository.ErrLastAdmin) })

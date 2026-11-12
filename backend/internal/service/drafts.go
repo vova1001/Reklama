@@ -49,8 +49,8 @@ func NewDrafts(store DraftStore, cfg DraftConfig, clock Clock) *Drafts {
 	return &Drafts{store: store, cfg: cfg, clock: clock}
 }
 
-// reForm — какие формы бывают: новое задание, задание по id, анкета.
-var reForm = regexp.MustCompile(`^(task-new|task-[1-9][0-9]{0,17}|card)$`)
+// reForm — какие формы бывают: новое задание, задание по id, анкета, страница бизнеса и профиль автора.
+var reForm = regexp.MustCompile(`^(task-new|task-[1-9][0-9]{0,17}|card|page-business|page-creator)$`)
 
 func checkForm(form string) error {
 	if !reForm.MatchString(form) {

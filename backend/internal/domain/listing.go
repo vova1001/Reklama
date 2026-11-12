@@ -133,6 +133,7 @@ type Task struct {
 	Photos         []string // media.id примеров «что показать», по порядку
 	CategoryTitles []string // названия сфер по порядку (только в ленте и на странице задания)
 	Brand          string   // название бизнеса (только в ленте)
+	BrandSlug      string   // адрес опубликованной страницы бизнеса (/b/<slug>); "" — нет
 	CreatedAt      time.Time
 	UpdatedAt      time.Time
 	SubmittedAt    *time.Time
@@ -172,6 +173,7 @@ type CreatorCard struct {
 	Avatar       string   // media.id аватара (1:1); "" — нет
 	Works        []string // media.id примеров работ, по порядку
 	TopicTitles  []string // названия тем по порядку (только в ленте и на странице анкеты)
+	PageSlug     string   // адрес опубликованного профиля автора (/c/<slug>); "" — нет
 	CreatedAt    time.Time
 	UpdatedAt    time.Time
 	SubmittedAt  *time.Time

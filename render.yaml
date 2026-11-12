@@ -123,6 +123,9 @@ services:
         value: postgres
       - key: MEDIA_WORKERS
         value: "1"
+      # видео страниц: до 30 МБ файл (база на бесплатном тарифе маленькая; с S3 — можно больше)
+      - key: VIDEO_MAX_MB
+        value: "30"
       - key: STORAGE_ENDPOINT
         sync: false
       - key: STORAGE_BUCKET

@@ -117,6 +117,21 @@ type ListingDeps struct {
 	Modes ModeSource
 	// FormatRules — решения по своим форматам (nil — свои форматы без проверки).
 	FormatRules FormatPolicy
+	// PageLinks — адреса опубликованных страниц владельцев (ссылка «Профиль» из ленты и страницы); nil — без них.
+	PageLinks PageLinker
+}
+
+// PageLinker — адреса опубликованных страниц пользователей вида kind (нет страницы — нет в ответе).
+type PageLinker interface {
+	PublishedSlugs(ctx context.Context, kind domain.PageKind, userIDs []int64) (map[int64]string, error)
+}
+
+// pageSlugs — адреса страниц владельцев; без PageLinks — пусто.
+func (d *ListingDeps) pageSlugs(ctx context.Context, kind domain.PageKind, ids []int64) (map[int64]string, error) {
+	if d.PageLinks == nil || len(ids) == 0 {
+		return map[int64]string{}, nil
+	}
+	return d.PageLinks.PublishedSlugs(ctx, kind, uniqIDs(ids))
 }
 
 // mode — текущий режим проверки.
@@ -354,12 +369,33 @@ func (s *Tasks) Feed(ctx context.Context, q FeedQuery) (FeedPage, error) {
 		page.Tasks = ts[:limit]
 		page.Next = cursorOf(page.Tasks[limit-1].PublishedAt, page.Tasks[limit-1].ID)
 	}
-	return page, nil
+	return page, s.withBrandLinks(ctx, page.Tasks)
 }
 
 // Public — опубликованное задание (страница задания для всех); иначе domain.ErrNotFound.
 func (s *Tasks) Public(ctx context.Context, id int64) (domain.Task, error) {
-	return s.repo.PublishedTask(ctx, id)
+	t, err := s.repo.PublishedTask(ctx, id)
+	if err != nil {
+		return t, err
+	}
+	ts := []domain.Task{t}
+	return ts[0], s.withBrandLinks(ctx, ts)
+}
+
+// withBrandLinks — адрес страницы бизнеса у каждого задания (одним запросом на страницу ленты).
+func (s *Tasks) withBrandLinks(ctx context.Context, ts []domain.Task) error {
+	ids := make([]int64, 0, len(ts))
+	for _, t := range ts {
+		ids = append(ids, t.OwnerID)
+	}
+	m, err := s.pageSlugs(ctx, domain.PageBusiness, ids)
+	if err != nil {
+		return err
+	}
+	for i := range ts {
+		ts[i].BrandSlug = m[ts[i].OwnerID]
+	}
+	return nil
 }
 
 // feedFilter — проверка отбора ленты: сферы — slug (до 5), город — до 80 символов, форматы — из списка

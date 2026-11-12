@@ -12,6 +12,12 @@ const (
 	PurposeTaskPhoto  = "task_photo"  // пример «что показать»
 	PurposeCardAvatar = "card_avatar" // аватар анкеты автора, 1:1
 	PurposeCardWork   = "card_work"   // пример работы автора
+	// Страницы бизнеса и автора (задача 14).
+	PurposePageLogo    = "page_logo"    // логотип / аватар страницы, 1:1
+	PurposePageCover   = "page_cover"   // обложка страницы, 3:1
+	PurposePagePhoto   = "page_photo"   // фото в блоках страницы
+	PurposeVideoPoster = "video_poster" // кадр-заставка загруженного видео
+	PurposePageVideo   = "page_video"   // видео (файл MP4 / WebM как есть; загружается отдельно от фото)
 )
 
 // MediaSizes — ширины (по длинной стороне), в которых хранится каждое фото (WebP); меньше исходного не растягиваем.
@@ -30,18 +36,21 @@ func ValidMediaSize(n int) bool {
 // Aspect — пропорции назначения (ширина/высота); 0 — свободные.
 func Aspect(purpose string) float64 {
 	switch purpose {
-	case PurposeAvatar, PurposeCardAvatar:
+	case PurposeAvatar, PurposeCardAvatar, PurposePageLogo:
 		return 1
 	case PurposeTaskCover:
 		return 16.0 / 9.0
+	case PurposePageCover:
+		return 3
 	}
 	return 0
 }
 
-// ValidPurpose — назначение из списка.
+// ValidPurpose — назначение фото из списка (видео загружается отдельно).
 func ValidPurpose(p string) bool {
 	switch p {
-	case PurposeAvatar, PurposeTaskCover, PurposeTaskPhoto, PurposeCardAvatar, PurposeCardWork:
+	case PurposeAvatar, PurposeTaskCover, PurposeTaskPhoto, PurposeCardAvatar, PurposeCardWork,
+		PurposePageLogo, PurposePageCover, PurposePagePhoto, PurposeVideoPoster:
 		return true
 	}
 	return false
@@ -71,3 +80,6 @@ type MediaAccess struct {
 func MediaKey(id string, size int) string {
 	return "media/" + id + "/" + strconv.Itoa(size) + ".webp"
 }
+
+// VideoKey — ключ файла видео в хранилище (один файл, как загружен).
+func VideoKey(id string) string { return "media/" + id + "/video" }

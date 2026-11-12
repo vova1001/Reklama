@@ -218,6 +218,8 @@ SELECT m.id, m.owner_id,
                                                    AND (t.cover = m.id OR m.id = ANY(t.photos)))
             WHEN m.subject = 'creator_card' THEN EXISTS (SELECT 1 FROM creator_cards c WHERE c.user_id = m.subject_id AND c.status = 'published'
                                                    AND (c.avatar = m.id OR m.id = ANY(c.works)))
+            WHEN m.subject = 'page' THEN EXISTS (SELECT 1 FROM profile_pages p WHERE p.id = m.subject_id AND p.status = 'published'
+                                                   AND m.id = ANY(p.media))
             ELSE false
         END)::boolean AS public
 FROM media m WHERE m.id = $1
@@ -229,7 +231,8 @@ type MediaAccessRow struct {
 	Public  bool
 }
 
-// Кому видно: аватар профиля — всем; фото задания или анкеты — всем, когда они опубликованы; иначе — владельцу.
+// Кому видно: аватар профиля — всем; фото задания, анкеты или страницы — всем, когда они опубликованы (у страницы —
+// только файлы опубликованного содержимого, не правки); иначе — владельцу.
 func (q *Queries) MediaAccess(ctx context.Context, id string) (MediaAccessRow, error) {
 	row := q.db.QueryRow(ctx, mediaAccess, id)
 	var i MediaAccessRow

@@ -215,6 +215,10 @@ var moderationHeads = map[string]map[domain.ReviewAction]string{
 		domain.ActionRework: "Анкету вернули на доработку"},
 	string(domain.KindCardRevision): {domain.ActionApprove: "Изменения анкеты опубликованы",
 		domain.ActionReject: "Изменения анкеты не прошли проверку", domain.ActionRework: "Изменения анкеты нужно поправить"},
+	string(domain.KindPage): {domain.ActionApprove: "Страница опубликована", domain.ActionReject: "Страница не прошла проверку",
+		domain.ActionRework: "Страницу вернули на доработку"},
+	string(domain.KindPageRevision): {domain.ActionApprove: "Изменения страницы опубликованы",
+		domain.ActionReject: "Изменения страницы не прошли проверку", domain.ActionRework: "Изменения страницы нужно поправить"},
 }
 
 // ModerationHead — заголовок решения (для письма).

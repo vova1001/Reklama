@@ -41,10 +41,11 @@ var FieldTitles = map[string]string{
 	"general": "Общее", "title": "Название", "categories": "Сфера", "city": "Город", "formats": "Формат",
 	"minViews": "Просмотры", "reward": "Оплата", "publishBy": "Срок", "blocks": "Описание", "cover": "Обложка",
 	"photos": "Фото", "name": "Имя", "topics": "Темы", "platforms": "Соцсети", "avatar": "Фото профиля", "works": "Работы",
+	"spheres": "Сферы", "logo": "Логотип", "slug": "Адрес страницы",
 }
 
-var fieldOrder = []string{"general", "title", "name", "categories", "topics", "city", "formats", "platforms", "minViews",
-	"reward", "publishBy", "blocks", "cover", "avatar", "photos", "works"}
+var fieldOrder = []string{"general", "title", "name", "slug", "categories", "topics", "spheres", "city", "formats", "platforms", "minViews",
+	"reward", "publishBy", "logo", "blocks", "cover", "avatar", "photos", "works"}
 
 // OrderedNotes — замечания по порядку полей формы.
 func OrderedNotes(n map[string]string) []FieldNote {

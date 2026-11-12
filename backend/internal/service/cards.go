@@ -202,13 +202,35 @@ func (s *Cards) Feed(ctx context.Context, q FeedQuery) (CardPage, error) {
 	for i := range page.Cards {
 		ptrs[i] = &page.Cards[i]
 	}
+	if err := s.withPageLinks(ctx, ptrs); err != nil {
+		return page, err
+	}
 	return page, s.withPlatforms(ctx, ptrs)
+}
+
+// withPageLinks — адрес профиля автора у каждой анкеты (одним запросом на страницу ленты).
+func (s *Cards) withPageLinks(ctx context.Context, cs []*domain.CreatorCard) error {
+	ids := make([]int64, 0, len(cs))
+	for _, c := range cs {
+		ids = append(ids, c.UserID)
+	}
+	m, err := s.pageSlugs(ctx, domain.PageCreator, ids)
+	if err != nil {
+		return err
+	}
+	for _, c := range cs {
+		c.PageSlug = m[c.UserID]
+	}
+	return nil
 }
 
 // Public — опубликованная анкета автора (страница анкеты); иначе domain.ErrNotFound.
 func (s *Cards) Public(ctx context.Context, userID int64) (domain.CreatorCard, error) {
 	c, err := s.repo.PublishedCard(ctx, userID)
 	if err != nil {
+		return c, err
+	}
+	if err := s.withPageLinks(ctx, []*domain.CreatorCard{&c}); err != nil {
 		return c, err
 	}
 	return c, s.withPlatforms(ctx, []*domain.CreatorCard{&c})

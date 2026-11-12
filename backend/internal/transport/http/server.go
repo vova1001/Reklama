@@ -120,6 +120,8 @@ type Services struct {
 	Media      MediaService
 	Drafts     DraftService
 	Social     SocialService // nil — подтверждение соцсетей выключено
+	Pages      PageService   // nil — страниц бизнеса и авторов нет
+	Videos     VideoService  // nil — загрузка видео выключена
 	// Админка (nil TwoFactor — админка выключена).
 	TwoFactor  TwoFactorService
 	Review     ReviewService
@@ -167,6 +169,8 @@ type Server struct {
 	media      MediaService
 	drafts     DraftService
 	social     SocialService
+	pages      PageService
+	videos     VideoService
 	twoFactor  TwoFactorService
 	review     ReviewService
 	complaints ComplaintService
@@ -185,6 +189,7 @@ func New(svc Services, opt Options) *Server {
 	return &Server{
 		home: svc.Home, health: svc.Health, auth: svc.Auth, profiles: svc.Profiles, tasks: svc.Tasks, cards: svc.Cards,
 		categories: svc.Categories, formats: svc.Formats, media: svc.Media, drafts: svc.Drafts, social: svc.Social,
+		pages: svc.Pages, videos: svc.Videos,
 		twoFactor: svc.TwoFactor, review: svc.Review, complaints: svc.Complaints, staffUsers: svc.StaffUsers, audit: svc.Audit,
 		settings: svc.Settings, dashboard: svc.Dashboard, opt: opt,
 	}
@@ -204,6 +209,9 @@ func (s *Server) Routes() http.Handler {
 		r.Get("/home", s.getHome)
 		r.Get("/tasks", s.getFeed)
 		r.Get("/tasks/{id}", s.getPublicTask)
+		if s.pages != nil {
+			r.Get("/pages/{kind}/{slug}", s.getPublicPage)
+		}
 		r.Group(func(r chi.Router) {
 			r.Use(noStore, s.requireUser, limit(s.opt.UserLimiter, byUser("user:")))
 			r.Get("/cards", s.getCardFeed)
@@ -266,6 +274,17 @@ func (s *Server) Routes() http.Handler {
 			r.Get("/formats/similar", s.getSimilarFormats)
 
 			r.With(limit(s.opt.UploadLimiter, byUser("upload:"))).Post("/media", s.uploadMedia)
+			if s.videos != nil {
+				r.With(limit(s.opt.UploadLimiter, byUser("upload:"))).Post("/media/video", s.uploadVideo)
+			}
+			if s.pages != nil {
+				r.Get("/pages/{kind}", s.getMyPage)
+				r.Put("/pages/{kind}", s.putMyPage)
+				r.Put("/pages/{kind}/slug", s.putPageSlug)
+				r.Post("/pages/{kind}/submit", s.submitPage)
+				r.Post("/pages/{kind}/withdraw", s.withdrawPage)
+				r.Delete("/pages/{kind}/revision", s.discardPageRevision)
+			}
 			r.Delete("/media/{id}", s.deleteMedia)
 
 			r.Get("/drafts/{form}", s.getDraft)

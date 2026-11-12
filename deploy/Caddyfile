@@ -14,6 +14,10 @@
 		request_body /api/me/media {
 			max_size 11MB
 		}
+		# видео страниц — до VIDEO_MAX_MB (бэкенд режет сам)
+		request_body /api/me/media/video {
+			max_size 510MB
+		}
 		# адрес посетителя ставит только Caddy (присланный клиентом X-Real-IP перезаписывается)
 		reverse_proxy backend:8080 {
 			header_up X-Real-IP {remote_host}

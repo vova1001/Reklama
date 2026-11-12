@@ -189,6 +189,13 @@ type ModerationLog struct {
 	Auto       bool
 }
 
+type PageSlug struct {
+	Kind      string
+	Slug      string
+	PageID    int64
+	CreatedAt pgtype.Timestamptz
+}
+
 type Plan struct {
 	ID           int64
 	Audience     string
@@ -207,6 +214,31 @@ type PlanFeature struct {
 	PlanID   int64
 	Position int32
 	Text     string
+}
+
+type ProfilePage struct {
+	ID                  int64
+	UserID              int64
+	Kind                string
+	Slug                string
+	Status              string
+	RejectReason        string
+	Title               string
+	City                string
+	Spheres             []string
+	Logo                pgtype.Text
+	Cover               pgtype.Text
+	Blocks              []byte
+	Media               []string
+	ReviewNotes         []byte
+	Revision            []byte
+	RevisionStatus      pgtype.Text
+	RevisionReason      string
+	RevisionSubmittedAt pgtype.Timestamptz
+	CreatedAt           pgtype.Timestamptz
+	UpdatedAt           pgtype.Timestamptz
+	SubmittedAt         pgtype.Timestamptz
+	PublishedAt         pgtype.Timestamptz
 }
 
 type ReviewDecision struct {

@@ -289,6 +289,8 @@ type reviewItemDTO struct {
 	LiveTask     *taskDTO           `json:"liveTask,omitempty"`
 	Card         *cardDTO           `json:"card,omitempty"`
 	LiveCard     *cardDTO           `json:"liveCard,omitempty"`
+	Page         *pageDTO           `json:"page,omitempty"`
+	LivePage     *pageDTO           `json:"livePage,omitempty"`
 	Category     *adminCategoryDTO  `json:"category,omitempty"`
 	Usage        *usageDTO          `json:"usage,omitempty"`
 	Targets      []adminCategoryDTO `json:"targets,omitempty"`
@@ -570,6 +572,11 @@ func (s *Server) getReviewItem(w http.ResponseWriter, r *http.Request) {
 		out.Card = c
 	}
 	out.LiveCard = toCardDTO(it.LiveCard)
+	if it.Page != nil {
+		out.Page = toPageDTO(it.Page)
+		out.Page.Revision = nil
+	}
+	out.LivePage = toPageDTO(it.LivePage)
 	if it.Category != nil {
 		c := toCategoryDTO(*it.Category)
 		out.Category = &c

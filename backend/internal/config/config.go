@@ -99,6 +99,7 @@ type Config struct {
 	MediaQuotaMB    int     // MEDIA_QUOTA_MB — на пользователя, 300
 	MediaMaxFiles   int     // MEDIA_MAX_FILES — на пользователя, 300
 	MediaWorkers    int     // MEDIA_WORKERS — обработка фото параллельно; 0 — половина ядер
+	VideoMaxMB      int     // VIDEO_MAX_MB — видео страницы, один файл, 50 (до 500)
 	UploadRPS       float64 // RATE_LIMIT_UPLOAD_RPS — загрузок фото в секунду на пользователя, 0.5
 	UploadBurst     int     // RATE_LIMIT_UPLOAD_BURST, 20
 
@@ -351,6 +352,10 @@ func load(get func(string) string) (Config, error) {
 	c.MediaQuotaMB = num("MEDIA_QUOTA_MB", 300)
 	c.MediaMaxFiles = num("MEDIA_MAX_FILES", 300)
 	c.MediaWorkers = num("MEDIA_WORKERS", 0)
+	c.VideoMaxMB = num("VIDEO_MAX_MB", 50)
+	if c.VideoMaxMB > 500 {
+		errs = append(errs, errors.New("VIDEO_MAX_MB: не больше 500"))
+	}
 	c.UploadRPS = rate("RATE_LIMIT_UPLOAD_RPS", 0.5)
 	c.UploadBurst = num("RATE_LIMIT_UPLOAD_BURST", 20)
 	c.MediaStore = strings.ToLower(strings.TrimSpace(get("MEDIA_STORE")))

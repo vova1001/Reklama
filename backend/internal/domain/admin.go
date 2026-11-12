@@ -137,10 +137,12 @@ const (
 	KindCardRevision ReviewKind = "card_revision"
 	KindCategory     ReviewKind = "category"
 	KindFormat       ReviewKind = "format"
+	KindPage         ReviewKind = "page"          // страница бизнеса или профиль автора
+	KindPageRevision ReviewKind = "page_revision" // правка опубликованной страницы
 )
 
 // ReviewKinds — все виды (порядок — для фильтра).
-var ReviewKinds = []ReviewKind{KindTask, KindTaskRevision, KindCard, KindCardRevision, KindCategory, KindFormat}
+var ReviewKinds = []ReviewKind{KindTask, KindTaskRevision, KindCard, KindCardRevision, KindPage, KindPageRevision, KindCategory, KindFormat}
 
 // ValidReviewKind — вид из списка.
 func ValidReviewKind(k ReviewKind) bool {
@@ -152,13 +154,15 @@ func ValidReviewKind(k ReviewKind) bool {
 	return false
 }
 
-// Listing — задание или анкета (с решением, отменой и уведомлением).
+// Listing — задание, анкета или страница (с решением, отменой и уведомлением).
 func (k ReviewKind) Listing() bool {
-	return k == KindTask || k == KindTaskRevision || k == KindCard || k == KindCardRevision
+	return k == KindTask || k == KindTaskRevision || k == KindCard || k == KindCardRevision || k == KindPage || k == KindPageRevision
 }
 
 // Revision — правка опубликованного.
-func (k ReviewKind) Revision() bool { return k == KindTaskRevision || k == KindCardRevision }
+func (k ReviewKind) Revision() bool {
+	return k == KindTaskRevision || k == KindCardRevision || k == KindPageRevision
+}
 
 // QueueItem — строка очереди.
 type QueueItem struct {
@@ -254,6 +258,7 @@ var RejectTemplates = []RejectTemplate{
 var ReviewFields = map[ReviewKind][]string{
 	KindTask: {"title", "categories", "city", "formats", "minViews", "reward", "publishBy", "blocks", "cover", "photos"},
 	KindCard: {"name", "city", "topics", "platforms", "blocks", "avatar", "works"},
+	KindPage: {"title", "city", "spheres", "logo", "cover", "blocks", "slug"},
 }
 
 // ===== жалобы =====

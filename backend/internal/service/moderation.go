@@ -58,12 +58,29 @@ func (d Decision) action() domain.ReviewAction {
 
 // Moderation — переходы «на проверке → опубликовано | отклонено | на доработке» (свои категории — «→ общая |
 // отклонена»), правки опубликованного и снятие опубликованного по жалобе — с записью в журнал.
-type Moderation struct{ repo ModerationRepository }
+type Moderation struct {
+	repo  ModerationRepository
+	pages PageModeration
+}
 
 var _ Moderator = (*Moderation)(nil)
 
+// PageModeration — что модерации нужно от хранилища страниц (бизнеса и автора).
+type PageModeration interface {
+	PageByID(ctx context.Context, id int64) (domain.Page, error)
+	SetPageStatus(ctx context.Context, chain ...domain.StatusChange) (domain.Page, error)
+	SetPageRevision(ctx context.Context, ch domain.StatusChange) (domain.Page, error)
+	ApplyPageRevision(ctx context.Context, id int64, revStatus domain.Status, log domain.StatusChange, chain ...domain.StatusChange) (domain.Page, error)
+}
+
 // NewModeration создаёт сервис модерации.
 func NewModeration(repo ModerationRepository) *Moderation { return &Moderation{repo: repo} }
+
+// WithPages — решения и по страницам бизнеса и авторов.
+func (m *Moderation) WithPages(p PageModeration) *Moderation {
+	m.pages = p
+	return m
+}
 
 // checkDecision — причина отказа 5–500 символов; замечания — хотя бы одно, поля из списка, каждое 3–300.
 func checkDecision(d *Decision, subject domain.Subject) error {
@@ -78,8 +95,11 @@ func checkDecision(d *Decision, subject domain.Subject) error {
 		d.Notes = nil
 	case domain.ActionRework:
 		kind := domain.KindTask
-		if subject == domain.SubjectCard {
+		switch subject {
+		case domain.SubjectCard:
 			kind = domain.KindCard
+		case domain.SubjectPage:
+			kind = domain.KindPage
 		}
 		ve := &ValidationError{}
 		clean := map[string]string{}
@@ -187,6 +207,23 @@ func (m *Moderation) Decide(ctx context.Context, d Decision) (domain.Status, err
 		}
 		out, err := m.repo.SetCardStatus(ctx, ch)
 		return out.Status, conflictToStatus(err)
+	case domain.SubjectPage:
+		if m.pages == nil {
+			return "", domain.ErrNotFound
+		}
+		p, err := m.pages.PageByID(ctx, d.ID)
+		if err != nil {
+			return "", err
+		}
+		if d.Revision {
+			return m.decidePageRevision(ctx, p, ch)
+		}
+		ch.From = p.Status
+		if !domain.CanTransition(ch.From, to, domain.ActorModerator) {
+			return "", ErrWrongStatus
+		}
+		out, err := m.pages.SetPageStatus(ctx, ch)
+		return out.Status, conflictToStatus(err)
 	case domain.SubjectCategory:
 		// своя категория: одобренная становится общей; общая с таким названием уже есть — ErrWrongStatus
 		c, err := m.repo.Category(ctx, d.ID)
@@ -232,6 +269,19 @@ func (m *Moderation) decideCardRevision(ctx context.Context, c domain.CreatorCar
 		return domain.StatusPublished, conflictToStatus(err)
 	}
 	out, err := m.repo.SetCardRevision(ctx, ch)
+	return out.RevisionStatus, conflictToStatus(err)
+}
+
+func (m *Moderation) decidePageRevision(ctx context.Context, p domain.Page, ch domain.StatusChange) (domain.Status, error) {
+	if p.Status != domain.StatusPublished || p.Revision == nil || !domain.RevisionTransition(p.RevisionStatus, ch.To, domain.ActorModerator) {
+		return "", ErrWrongStatus
+	}
+	ch.From = p.RevisionStatus
+	if ch.To == domain.StatusPublished {
+		_, err := m.pages.ApplyPageRevision(ctx, p.ID, p.RevisionStatus, ch)
+		return domain.StatusPublished, conflictToStatus(err)
+	}
+	out, err := m.pages.SetPageRevision(ctx, ch)
 	return out.RevisionStatus, conflictToStatus(err)
 }
 

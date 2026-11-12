@@ -72,6 +72,7 @@ type taskDTO struct {
 	Cover          *photoDTO  `json:"cover"`
 	Photos         []photoDTO `json:"photos"`
 	Brand          string     `json:"brand,omitempty"`
+	BrandSlug      string     `json:"brandSlug,omitempty"` // адрес страницы бизнеса /b/<slug>
 	CreatedAt      time.Time  `json:"createdAt"`
 	UpdatedAt      time.Time  `json:"updatedAt"`
 	SubmittedAt    *time.Time `json:"submittedAt"`
@@ -126,6 +127,7 @@ type cardDTO struct {
 	City         string            `json:"city"`
 	Topics       []string          `json:"topics"`
 	TopicTitles  []string          `json:"topicTitles,omitempty"`
+	PageSlug     string            `json:"pageSlug,omitempty"` // адрес профиля автора /c/<slug>
 	Platforms    []platformDTO     `json:"platforms"`
 	Blocks       []blockDTO        `json:"blocks"`
 	Avatar       *photoDTO         `json:"avatar"`
@@ -251,7 +253,7 @@ func toTaskDTO(t domain.Task) taskDTO {
 		ID: t.ID, Status: string(t.Status), RejectReason: t.RejectReason, Title: t.Title, City: t.City, Nationwide: t.Nationwide,
 		Categories: nonNilStr(t.Categories), CategoryTitles: t.CategoryTitles, Formats: nonNilStr(t.Formats), Access: t.Access,
 		MinViews: t.MinViews, RewardKopecks: t.RewardKopecks, PublishBy: by, PublishTime: t.PublishTime, DeadlineAt: utcPtr(t.DeadlineAt), Blocks: toBlocksDTO(t.Blocks),
-		Cover: photo(t.Cover), Photos: photos(t.Photos), Brand: t.Brand,
+		Cover: photo(t.Cover), Photos: photos(t.Photos), Brand: t.Brand, BrandSlug: t.BrandSlug,
 		CreatedAt: t.CreatedAt.UTC(), UpdatedAt: t.UpdatedAt.UTC(), SubmittedAt: utcPtr(t.SubmittedAt), PublishedAt: utcPtr(t.PublishedAt),
 	}
 	if len(t.ReviewNotes) > 0 {
@@ -275,17 +277,22 @@ func toTasksDTO(ts []domain.Task) []taskDTO {
 	return out
 }
 
+func toPlatformsDTO(in []domain.Platform) []platformDTO {
+	ps := make([]platformDTO, 0, len(in))
+	for _, p := range in {
+		ps = append(ps, platformDTO{Kind: p.Kind, Type: p.Type, Handle: p.Handle, Title: p.Title, URL: p.URL,
+			Followers: p.Followers, FollowersHidden: p.FollowersHidden, Verified: p.Verified, RefreshedAt: utcPtr(p.RefreshedAt)})
+	}
+	return ps
+}
+
 func toCardDTO(c *domain.CreatorCard) *cardDTO {
 	if c == nil {
 		return nil
 	}
-	ps := make([]platformDTO, 0, len(c.Platforms))
-	for _, p := range c.Platforms {
-		ps = append(ps, platformDTO{Kind: p.Kind, Type: p.Type, Handle: p.Handle, Title: p.Title, URL: p.URL,
-			Followers: p.Followers, FollowersHidden: p.FollowersHidden, Verified: p.Verified, RefreshedAt: utcPtr(p.RefreshedAt)})
-	}
+	ps := toPlatformsDTO(c.Platforms)
 	out := &cardDTO{
-		ID: c.UserID, TopicTitles: c.TopicTitles, PublishedAt: utcPtr(c.PublishedAt),
+		ID: c.UserID, TopicTitles: c.TopicTitles, PageSlug: c.PageSlug, PublishedAt: utcPtr(c.PublishedAt),
 		Status: string(c.Status), RejectReason: c.RejectReason, Name: c.Name, City: c.City, Topics: nonNilStr(c.Topics),
 		Platforms: ps, Blocks: toBlocksDTO(c.Blocks), Avatar: photo(c.Avatar), Works: photos(c.Works),
 		UpdatedAt: c.UpdatedAt.UTC(), SubmittedAt: utcPtr(c.SubmittedAt),
