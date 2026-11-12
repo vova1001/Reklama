@@ -5,10 +5,12 @@
 // (календарь и время). Логика — scripts/editor.ts.
 import Icon from '../Icon.astro';
 import EditorBar from './EditorBar.astro';
+import ReviewNote from './ReviewNote.astro';
 import { FORM_GROUPS, TASK_BLOCKS, TASK_TEMPLATES } from '../../content/app';
 import type { CategoryItem, Task } from '../../lib/auth';
-interface Props { task: Task | null; categories: { common: CategoryItem[]; own: CategoryItem[] }; brand: string }
-const { task: t, categories, brand } = Astro.props;
+// revision — правка опубликованного: в форме новая версия, опубликованная видна всем до одобрения.
+interface Props { task: Task | null; categories: { common: CategoryItem[]; own: CategoryItem[] }; brand: string; revision?: Task['revision'] | null }
+const { task: t, categories, brand, revision = null } = Astro.props;
 const init = {
   kind: 'task', id: t?.id ?? null, status: t?.status ?? 'draft', blocks: t ? t.blocks : TASK_BLOCKS, templates: TASK_TEMPLATES,
   cover: t?.cover ? [t.cover] : [], photos: t?.photos ?? [], selected: t?.categories ?? [], formats: t?.formats ?? [],
@@ -23,10 +25,11 @@ const G = FORM_GROUPS.task;
 ---
 <form class="ed" novalidate autocomplete="off" data-editor="task">
   <script type="application/json" data-init set:html={json} />
-  <EditorBar close="/app/tasks" state={t ? 'Черновик' : 'Сохранится само'} />
+  <EditorBar close={revision !== null || t?.status === 'published' ? `/app/tasks/${t?.id}` : '/app/tasks'} state={t?.status === 'published' ? 'Правка' : t ? 'Черновик' : 'Сохранится само'} />
 
   <div class="ed-col">
-    {t?.status === 'rejected' && <p class="banner is-err" role="note"><Icon name="circle-alert" size={20} /><span><b>Отклонено.</b> {t.rejectReason}</span></p>}
+    {t?.status === 'published' && <p class="banner" role="note"><Icon name="eye" size={20} /><span>Правка опубликованного: пока её не проверят, авторы видят прежнюю версию.</span></p>}
+    {revision ? <ReviewNote status={revision.status} reason={revision.rejectReason} notes={t?.reviewNotes} revision /> : <ReviewNote status={t?.status} reason={t?.rejectReason} notes={t?.reviewNotes} />}
 
     <div data-pane="edit">
       <div class="sec ed-cover">
@@ -130,7 +133,7 @@ const G = FORM_GROUPS.task;
         </div>
       </section>
 
-      <div class="sec ed-danger" hidden={!t} data-delete-wrap><button class="btn pill-text" type="button" data-delete><Icon name="trash-2" size={18} />Удалить черновик</button></div>
+      <div class="sec ed-danger" hidden={!t || t.status === 'published'} data-delete-wrap><button class="btn pill-text" type="button" data-delete><Icon name="trash-2" size={18} />Удалить черновик</button></div>
     </div>
 
     <div data-pane="preview" hidden><div class="pv" data-preview></div></div>

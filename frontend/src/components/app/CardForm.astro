@@ -4,10 +4,12 @@
 // желанию), «Работы». Начальные значения — из профиля автора. Логика — scripts/editor.ts.
 import Icon from '../Icon.astro';
 import EditorBar from './EditorBar.astro';
+import ReviewNote from './ReviewNote.astro';
 import { CARD_BLOCKS, CARD_TEMPLATES, FORM_GROUPS } from '../../content/app';
 import type { Card, CategoryItem, CreatorProfile, User } from '../../lib/auth';
-interface Props { card: Card | null; profile: CreatorProfile | null; user: User; categories: { common: CategoryItem[]; own: CategoryItem[] } }
-const { card: c, profile, user, categories } = Astro.props;
+// revision — правка опубликованной анкеты (бизнес видит прежнюю, пока правку не одобрят).
+interface Props { card: Card | null; profile: CreatorProfile | null; user: User; categories: { common: CategoryItem[]; own: CategoryItem[] }; revision?: Card['revision'] | null }
+const { card: c, profile, user, categories, revision = null } = Astro.props;
 const known = new Set([...categories.common, ...categories.own].map((x) => x.slug));
 const init = {
   kind: 'card', id: null, status: c?.status ?? 'draft', blocks: c ? c.blocks : CARD_BLOCKS, templates: CARD_TEMPLATES,
@@ -24,10 +26,11 @@ const G = FORM_GROUPS.card;
 ---
 <form class="ed" novalidate autocomplete="off" data-editor="card">
   <script type="application/json" data-init set:html={json} />
-  <EditorBar close="/app" state={c ? 'Черновик' : 'Сохранится само'} />
+  <EditorBar close={c?.status === 'published' ? '/app/card' : '/app'} state={c?.status === 'published' ? 'Правка' : c ? 'Черновик' : 'Сохранится само'} />
 
   <div class="ed-col">
-    {c?.status === 'rejected' && <p class="banner is-err" role="note"><Icon name="circle-alert" size={20} /><span><b>Отклонено.</b> {c.rejectReason}</span></p>}
+    {c?.status === 'published' && <p class="banner" role="note"><Icon name="eye" size={20} /><span>Правка анкеты: пока её не проверят, бизнес видит прежнюю версию.</span></p>}
+    {revision ? <ReviewNote status={revision.status} reason={revision.rejectReason} notes={c?.reviewNotes} revision /> : <ReviewNote status={c?.status} reason={c?.rejectReason} notes={c?.reviewNotes} />}
 
     <div data-pane="edit">
       <section class="grp" aria-labelledby="g-main" aria-describedby="g-main-d">

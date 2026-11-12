@@ -1,0 +1,37 @@
+---
+// Настройки (только администратор): режим проверки — «автоматически» (сразу публикуется) или «вручную» (ждёт
+// модератора). Хранится в базе; MODERATION_MODE — значение по умолчанию. Свои резервные коды 2FA — новые.
+import Admin from '../../layouts/Admin.astro';
+import Icon from '../../components/Icon.astro';
+import { adminGet, type AdminSettings } from '../../lib/admin';
+
+const adm = Astro.locals.admin!;
+const r = adm.permissions.includes('settings') ? await adminGet<AdminSettings>(Astro.request, '/api/admin/settings') : null;
+const s = r && r.ok ? r.data : null;
+const MODE = { auto: 'Автоматически — сразу публикуется', manual: 'Вручную — ждёт модератора' };
+---
+<Admin title="Настройки" page="settings">
+  <div class="head"><h1>Настройки</h1></div>
+  {s && (
+    <section class="sec">
+      <h2 class="sec-h">Проверка заданий и анкет</h2>
+      <p class="muted">По умолчанию (MODERATION_MODE): {MODE[s.moderationDefault]}.</p>
+      <form class="acts" data-act="PUT /api/admin/settings" data-confirm-mode novalidate>
+        {(['manual', 'auto'] as const).map((m) => (
+          <button class={`btn ${s.moderationMode === m ? 'pill-dark' : 'pill-ghost'}`} type="submit" name="moderationMode" value={m} aria-pressed={s.moderationMode === m ? 'true' : 'false'}
+            data-confirm={s.moderationMode === m ? undefined : `Переключить режим?|${MODE[m]}.|Переключить`}>
+            {s.moderationMode === m && <Icon name="check" size={18} />}{MODE[m]}
+          </button>
+        ))}
+      </form>
+    </section>
+  )}
+  <section class="sec">
+    <h2 class="sec-h">Двухфакторная защита</h2>
+    <p class="muted">Резервных кодов осталось: {adm.twoFactor.backupLeft}. Новые коды заменят прежние.</p>
+    <form class="acts" data-act="POST /api/admin/2fa/backup-codes" data-codes data-confirm="Выдать новые коды?|Прежние перестанут действовать.|Выдать" novalidate>
+      <button class="btn pill-ghost" type="submit"><Icon name="key-round" size={18} />Новые резервные коды</button>
+    </form>
+    <div class="codes" data-codes-out hidden></div>
+  </section>
+</Admin>

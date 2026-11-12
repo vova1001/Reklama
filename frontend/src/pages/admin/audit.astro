@@ -1,0 +1,62 @@
+---
+// Журнал действий (только администратор): кто, что, над чем, до/после, причина, адрес и устройство. Записи не
+// изменяются и не удаляются (запрещено в базе). Поиск и отбор по действию, предмету, периоду; новые сверху.
+import Admin from '../../layouts/Admin.astro';
+import Icon from '../../components/Icon.astro';
+import { adminGet, qs, when, type AuditPage } from '../../lib/admin';
+
+const sp = Astro.url.searchParams;
+const f = { q: sp.get('q') ?? '', action: sp.get('action') ?? '', subject: sp.get('subject') ?? '', subjectId: sp.get('subjectId') ?? '', actor: sp.get('actor') ?? '' };
+const before = sp.get('before') ?? '';
+const r = Astro.locals.admin!.permissions.includes('audit.view') ? await adminGet<AuditPage>(Astro.request, `/api/admin/audit${qs({ ...f, before, limit: 50 })}`) : null;
+if (!r) Astro.response.status = 403;
+const d = r && r.ok ? r.data : null;
+const ACTIONS: Record<string, string> = {
+  'review.decision': 'Решение', 'review.undo': 'Отмена решения', 'review.applied': 'Решение применено', 'review.category': 'Своя сфера',
+  'review.format': 'Свой формат', 'user.block': 'Блокировка', 'user.unblock': 'Разблокировка', 'role.set': 'Роль', 'role.bootstrap': 'Роль из ADMIN_EMAILS',
+  'complaint.resolve': 'Жалоба', 'settings.update': 'Настройка', '2fa.enabled': '2FA включена', '2fa.reset': '2FA сброшена', '2fa.backup_regen': 'Новые резервные коды',
+  '2fa.backup_used': 'Вход по резервному коду', '2fa.locked': 'Перебор кодов 2FA',
+};
+const json = (v: unknown) => (v === null || v === undefined ? '' : JSON.stringify(v));
+---
+<Admin title="Журнал" page="audit">
+  <div class="head"><h1>Журнал действий</h1></div>
+  {!r ? <p class="banner is-err">Журнал доступен только администратору.</p> : (
+    <>
+      <form class="qf" method="get" action="/admin/audit">
+        <div class="qf-row">
+          <label class="lbl-sr" for="a-q">Поиск</label>
+          <input class="inp" id="a-q" name="q" value={f.q} placeholder="Действие, причина, сотрудник, адрес или id" maxlength="100" />
+          <label class="lbl-sr" for="a-sid">id предмета</label>
+          <input class="inp sm" id="a-sid" name="subjectId" value={f.subjectId} placeholder="id предмета" maxlength="100" />
+          <input type="hidden" name="action" value={f.action} />
+          <button class="btn pill-dark" type="submit"><Icon name="search" size={18} />Найти</button>
+        </div>
+        <div class="qf-row">
+          <a class="chip" aria-current={(!f.action) ? 'true' : undefined} href={`/admin/audit${qs({ ...f, action: '' })}`}>Все</a>
+          {['review.decision', 'user.block', 'role.set', 'complaint.resolve', 'settings.update', '2fa.reset'].map((a) => <a class="chip" aria-current={(f.action === a) ? 'true' : undefined} href={`/admin/audit${qs({ ...f, action: a })}`}>{ACTIONS[a]}</a>)}
+        </div>
+      </form>
+      {!d ? <p class="banner is-err">Не удалось загрузить журнал.</p> : d.items.length === 0 ? <div class="empty"><Icon name="scroll-text" size={32} /><h2>Записей нет</h2></div> : (
+        <>
+          <table class="tbl" data-audit>
+            <thead><tr><th>Когда</th><th>Кто</th><th>Что</th><th>Над чем</th><th>До → после</th><th>Откуда</th></tr></thead>
+            <tbody>
+              {d.items.map((e) => (
+                <tr>
+                  <td class="num">{when(e.at)}</td>
+                  <td data-l="Кто">{e.actorLabel || (e.actorId ? `id ${e.actorId}` : 'система')}</td>
+                  <td data-l="Что"><b>{ACTIONS[e.action] ?? e.action}</b>{e.reason && <span class="json">{e.reason}</span>}</td>
+                  <td data-l="Над чем">{e.subject}{e.subjectId && ` #${e.subjectId}`}</td>
+                  <td data-l="До → после"><span class="json">{json(e.before)}{e.before && e.after ? ' → ' : ''}{json(e.after)}</span></td>
+                  <td class="num" data-l="Откуда">{e.ip}{e.device && <span class="json">{e.device}</span>}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {d.next && <div class="pager"><span></span><a class="btn pill-ghost" href={`/admin/audit${qs({ ...f, before: d.next })}`}>Старше</a></div>}
+        </>
+      )}
+    </>
+  )}
+</Admin>

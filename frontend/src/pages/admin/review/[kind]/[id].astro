@@ -1,0 +1,172 @@
+---
+// Карточка проверки: как увидят пользователи (фото — просмотр поверх), все поля (у правки — что изменилось),
+// подтверждённые соцсети, владелец и его история (прошлые решения, жалобы). Справа — решения: «Опубликовать» (A),
+// «Отклонить» (R, шаблоны причин + свой текст), «На доработку» (D, замечания по полям); J — следующий, K — назад.
+// Элемент берётся в работу при открытии (аренда 10 минут, другие его не видят).
+import Admin from '../../../../layouts/Admin.astro';
+import Icon from '../../../../components/Icon.astro';
+import TaskPage from '../../../../components/app/TaskPage.astro';
+import CreatorPage from '../../../../components/app/CreatorPage.astro';
+import Fields from '../../../../components/admin/Fields.astro';
+import { ACTION_TITLE, adminGet, COMPLAINT_REASON, KIND_TITLE, ROLE_TITLE, waited, when, type ReviewItem, type ReviewKind } from '../../../../lib/admin';
+import { STATUS } from '../../../../content/app';
+
+const adm = Astro.locals.admin!;
+const kind = Astro.params.kind as ReviewKind;
+const id = Astro.params.id ?? '';
+const r = kind in KIND_TITLE ? await adminGet<ReviewItem>(Astro.request, `/api/admin/review/${kind}/${encodeURIComponent(id)}`) : null;
+if (!r || !r.ok) Astro.response.status = r && !r.ok ? r.status : 404;
+const it = r && r.ok ? r.data : null;
+const listing = kind === 'task' || kind === 'task_revision' || kind === 'card' || kind === 'card_revision';
+const fieldsFor = kind === 'card' || kind === 'card_revision' ? ['general', 'name', 'city', 'topics', 'platforms', 'blocks', 'avatar', 'works'] : ['general', 'title', 'categories', 'city', 'formats', 'minViews', 'reward', 'publishBy', 'blocks', 'cover', 'photos'];
+const title = it?.task?.title || it?.card?.name || it?.category?.title || it?.format?.title || KIND_TITLE[kind] || 'Проверка';
+const statusOf = (s: string) => STATUS[s.replace('revision:', '')] ?? s;
+---
+<Admin title={title} page="queue">
+  <div data-review data-kind={kind} data-id={id} data-in-queue={it?.inQueue ? '1' : undefined} data-listing={listing ? '1' : undefined}>
+    <div class="head">
+      <a class="btn pill-text back-lnk" href="/admin/queue"><Icon name="arrow-left" size={18} />Очередь</a>
+      <span class="keys" aria-hidden="true">{listing ? 'A — опубликовать · R — отклонить · D — на доработку · ' : ''}J — следующий · K — назад</span>
+    </div>
+    {!it ? (
+      <div class="empty"><Icon name="inbox" size={32} /><h2>Не найдено</h2><p>Возможно, уже проверено или удалено.</p><button class="btn pill-emerald" type="button" data-next>Следующий</button></div>
+    ) : (
+      <>
+        <p class="sub"><span class="tag">{KIND_TITLE[kind]}</span> {it.inQueue ? <>ждёт <b>{waited(it.waitingSince)}</b></> : <b>уже не на проверке</b>}</p>
+        <p class="rv-lease" data-lease role="status" aria-live="polite"></p>
+        <div class="rv">
+          <div class="rv-main">
+            {it.task && <TaskPage task={it.task} />}
+            {it.card && <CreatorPage card={it.card} topics={it.card.topicTitles ?? it.card.topics} />}
+            {it.category && (
+              <section>
+                <h1>{it.category.title}</h1>
+                <p class="sub">Своя сфера · id {it.category.id} · {it.category.slug}</p>
+                <dl class="kv"><div><dt>Выбрана</dt><dd>в заданиях: {it.usage?.tasks ?? 0}, в анкетах: {it.usage?.cards ?? 0}</dd></div></dl>
+              </section>
+            )}
+            {it.format && (
+              <section>
+                <h1>{it.format.title}</h1>
+                <p class="sub">Свой формат · в заданиях: {it.format.tasks}</p>
+              </section>
+            )}
+            {(it.task || it.card) && (
+              <details class="rv-diff" open={kind.endsWith('revision')}>
+                <summary>{kind.endsWith('revision') ? 'Что изменилось' : 'Все поля'}</summary>
+                <Fields task={it.task} live={it.liveTask} card={it.card} liveCard={it.liveCard} />
+              </details>
+            )}
+          </div>
+
+          <aside class="rv-side" aria-label="Решение и история">
+            {listing && it.inQueue && (
+              <section class="rv-box" data-decide>
+                <h2>Решение</h2>
+                <p class="muted">Применится через {adm.undoSeconds} с — можно отменить.</p>
+                <div class="rv-acts">
+                  <button class="btn pill-emerald" type="button" data-act="approve"><span>Опубликовать</span><span class="kbd">A</span></button>
+                  <button class="btn pill-ghost" type="button" data-act="rework" aria-expanded="false" aria-controls="f-rework"><span>На доработку</span><span class="kbd">D</span></button>
+                  <button class="btn pill-danger-ol" type="button" data-act="reject" aria-expanded="false" aria-controls="f-reject"><span>Отклонить</span><span class="kbd">R</span></button>
+                </div>
+                <form class="rv-form" id="f-reject" data-form="reject" hidden novalidate>
+                  <p class="lbl">Причина — её увидит владелец</p>
+                  <div class="tpls" role="group" aria-label="Шаблоны причин">
+                    {adm.rejectTemplates.map((t) => <button type="button" class="chip" aria-pressed="false" data-tpl={t.text}>{t.text}</button>)}
+                  </div>
+                  <label class="lbl-sr" for="rj-reason">Причина отказа</label>
+                  <textarea class="inp" id="rj-reason" name="reason" maxlength="500" rows="3" placeholder="Шаблон и/или свой текст" data-input="reason"></textarea>
+                  <p class="ferr" data-err="reason" role="alert"></p>
+                  <button class="btn pill-danger" type="submit">Отклонить</button>
+                </form>
+                <form class="rv-form" id="f-rework" data-form="rework" hidden novalidate>
+                  <p class="lbl">Что поправить — по полям</p>
+                  <div class="notes">
+                    {fieldsFor.map((f) => (
+                      <div class="note-row">
+                        <label class="lbl" for={`n-${f}`}>{adm.reviewFields[f] ?? f}</label>
+                        <input class="inp" id={`n-${f}`} name={f} maxlength="300" data-input={`notes.${f}`} />
+                        <p class="ferr" data-err={`notes.${f}`}></p>
+                      </div>
+                    ))}
+                  </div>
+                  <p class="ferr" data-err="notes" role="alert"></p>
+                  <button class="btn pill-dark" type="submit">Вернуть на доработку</button>
+                </form>
+              </section>
+            )}
+            {kind === 'category' && it.category && it.inQueue && (
+              <section class="rv-box">
+                <h2>Решение</h2>
+                <form class="rv-form" data-act={`POST /api/admin/categories/${it.category.id}/decision`} data-done="/admin/queue" novalidate>
+                  <button class="btn pill-emerald" type="submit" name="action" value="approve">Одобрить в общие</button>
+                  <p class="lbl" style="margin-top:8px">Объединить с общей</p>
+                  <div class="tpls">
+                    {(it.targets ?? []).map((t) => <button type="submit" class="chip" name="into" value={t.slug} data-act={`POST /api/admin/categories/${it.category!.id}/decision`}>{t.title}</button>)}
+                  </div>
+                  <input type="hidden" name="action" value="merge" />
+                  <label class="lbl" for="cat-r">Или отклонить — причина</label>
+                  <input class="inp" id="cat-r" name="reason" maxlength="500" data-input="reason" />
+                  <p class="ferr" data-err="reason"></p>
+                  <button class="btn pill-danger-ol" type="submit" name="action" value="reject">Отклонить</button>
+                </form>
+              </section>
+            )}
+            {kind === 'format' && it.format && it.inQueue && (
+              <section class="rv-box">
+                <h2>Решение</h2>
+                <form class="rv-form" data-act="POST /api/admin/formats/decision" data-done="/admin/queue" novalidate>
+                  <input type="hidden" name="norm" value={it.format.norm} />
+                  <input type="hidden" name="action" value="merge" />
+                  <button class="btn pill-emerald" type="submit" name="action" value="approve">Одобрить в общие</button>
+                  <p class="lbl" style="margin-top:8px">Объединить с форматом</p>
+                  <div class="tpls">{(it.formats ?? []).map((f) => <button type="submit" class="chip" name="into" value={f}>{f}</button>)}</div>
+                  <button class="btn pill-danger-ol" type="submit" name="action" value="reject" data-confirm="Отклонить формат?|Его больше нельзя будет выбрать.|Отклонить">Отклонить</button>
+                </form>
+              </section>
+            )}
+            {it.owner && (
+              <section class="rv-box">
+                <h2>{kind.startsWith('card') ? 'Автор' : 'Бизнес'}</h2>
+                <dl class="rv-facts">
+                  <div><dt>Кто</dt><dd><a href={`/admin/users/${it.owner.id}`}>{it.owner.businessName || it.owner.creatorName || it.owner.name || `id ${it.owner.id}`}</a></dd></div>
+                  <div><dt>Почта</dt><dd>{it.owner.email || '—'}</dd></div>
+                  <div><dt>С нами с</dt><dd>{when(it.owner.createdAt)}</dd></div>
+                  {it.owner.role && <div><dt>Роль</dt><dd>{ROLE_TITLE[it.owner.role]}</dd></div>}
+                  {it.owner.blocked && <div><dt>Заблокирован</dt><dd>{it.owner.blockedReason}</dd></div>}
+                </dl>
+              </section>
+            )}
+            {it.decisions.length > 0 && (
+              <section class="rv-box">
+                <h2>Прошлые решения</h2>
+                <ul class="rv-hist">
+                  {it.decisions.slice(0, 8).map((d) => (
+                    <li><span><b>{ACTION_TITLE[d.action]}</b> · {KIND_TITLE[d.type]} #{d.itemId}</span>{d.reason && <span class="muted">{d.reason}</span>}<span class="muted">{when(d.createdAt)}{d.moderator ? ` · ${d.moderator}` : ''}</span></li>
+                  ))}
+                </ul>
+              </section>
+            )}
+            {it.complaints.length > 0 && (
+              <section class="rv-box">
+                <h2>Жалобы на владельца: {it.complaints.length}</h2>
+                <ul class="rv-hist">
+                  {it.complaints.slice(0, 8).map((c) => <li><span><b>{COMPLAINT_REASON[c.reason] ?? c.reason}</b> · {c.status === 'open' ? 'открыта' : c.status === 'dismissed' ? 'не подтвердилась' : 'решена'}</span>{c.comment && <span class="muted">{c.comment}</span>}<span class="muted">{when(c.createdAt)}</span></li>)}
+                </ul>
+              </section>
+            )}
+            {it.history.length > 0 && (
+              <section class="rv-box">
+                <h2>История статусов</h2>
+                <ul class="rv-hist">
+                  {it.history.slice(-10).reverse().map((h) => <li><span>{statusOf(h.from)} → <b>{statusOf(h.to)}</b>{h.from.startsWith('revision:') ? ' (правка)' : ''}</span>{h.reason && <span class="muted">{h.reason}</span>}<span class="muted">{when(h.at)}{h.auto ? ' · автоматически' : ''}</span></li>)}
+                </ul>
+              </section>
+            )}
+          </aside>
+        </div>
+      </>
+    )}
+  </div>
+</Admin>
+<script src="../../../../scripts/admin/review.ts"></script>

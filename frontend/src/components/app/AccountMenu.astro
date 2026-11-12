@@ -19,6 +19,7 @@ const u = me.user;
     </div>
     <a class="mm-it" role="menuitem" href="/app/profile" tabindex="-1"><Icon name="user-round" size={20} />Профиль</a>
     <a class="mm-it" role="menuitem" href="/app/settings" tabindex="-1"><Icon name="settings-2" size={20} />Настройки</a>
+    {u.staffRole && <a class="mm-it" role="menuitem" href="/admin" tabindex="-1" data-admin-link><Icon name="shield-check" size={20} />Админка</a>}
     <hr class="mm-sep" />
     <button class="mm-it mm-out" type="button" role="menuitem" tabindex="-1" data-logout><Icon name="log-out" size={20} />Выйти</button>
   </div>

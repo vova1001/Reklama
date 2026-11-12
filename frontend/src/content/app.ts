@@ -30,7 +30,25 @@ export const STATUS: Record<string, string> = {
   published: 'Опубликовано',
   rejected: 'Отклонено',
   expired: 'Завершено',
+  changes_requested: 'На доработке',
 };
+
+/** Поля, к которым модератор пишет замечания «на доработку» (как у сервера — service.FieldTitles). */
+export const FIELD_TITLE: Record<string, string> = {
+  general: 'Общее', title: 'Название', categories: 'Сфера', city: 'Город', formats: 'Формат', minViews: 'Просмотры',
+  reward: 'Оплата', publishBy: 'Срок', blocks: 'Описание', cover: 'Обложка', photos: 'Фото', name: 'Имя', topics: 'Темы',
+  platforms: 'Соцсети', avatar: 'Фото профиля', works: 'Работы',
+};
+
+/** Причины жалобы (как у сервера — domain.ComplaintReasons). */
+export const COMPLAINT_REASONS: { id: string; title: string }[] = [
+  { id: 'spam', title: 'Спам или реклама' },
+  { id: 'fraud', title: 'Мошенничество' },
+  { id: 'offensive', title: 'Оскорбления или травля' },
+  { id: 'illegal', title: 'Запрещённые товары или услуги' },
+  { id: 'fake', title: 'Фейк, чужие фото или накрутка' },
+  { id: 'other', title: 'Другое' },
+];
 
 export const FORMATS: { id: string; title: string }[] = [
   { id: 'reels', title: 'Reels' },

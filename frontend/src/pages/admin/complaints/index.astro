@@ -1,0 +1,38 @@
+---
+// Очередь жалоб: предметы с открытыми жалобами (сколько, причины, когда первая), старые первыми.
+import Admin from '../../../layouts/Admin.astro';
+import Icon from '../../../components/Icon.astro';
+import { adminGet, COMPLAINT_REASON, qs, SUBJECT_TITLE, waited, type ComplaintGroups } from '../../../lib/admin';
+
+const subject = Astro.url.searchParams.get('subject') ?? '';
+const offset = Math.max(0, Number(Astro.url.searchParams.get('offset')) || 0);
+const r = await adminGet<ComplaintGroups>(Astro.request, `/api/admin/complaints${qs({ subject, offset, limit: 50 })}`);
+const d = r.ok ? r.data : null;
+---
+<Admin title="Жалобы" page="complaints">
+  <div class="head"><div><h1>Жалобы</h1>{d && <p class="sub">Открытых предметов: <b>{d.total}</b></p>}</div></div>
+  <div class="qf-row qf" role="group" aria-label="Что">
+    <a class="chip" aria-current={(!subject) ? 'true' : undefined} href="/admin/complaints">Все</a>
+    {Object.entries(SUBJECT_TITLE).map(([k, t]) => <a class="chip" aria-current={(subject === k) ? 'true' : undefined} href={`/admin/complaints?subject=${k}`}>{t}</a>)}
+  </div>
+  {!d ? (
+    <p class="banner is-err" role="alert"><Icon name="circle-alert" size={20} />Не удалось загрузить жалобы.</p>
+  ) : d.items.length === 0 ? (
+    <div class="empty"><Icon name="check" size={32} /><h2>Жалоб нет</h2><p>Новые появятся здесь.</p></div>
+  ) : (
+    <table class="tbl" data-complaints>
+      <thead><tr><th>На что</th><th>Чьё</th><th>Причины</th><th>Жалоб</th><th>Ждёт</th></tr></thead>
+      <tbody>
+        {d.items.map((g) => (
+          <tr data-c-item={`${g.subject}:${g.subjectId}`}>
+            <td><a class="row-lnk" href={`/admin/complaints/${g.subject}/${g.subjectId}`}>{SUBJECT_TITLE[g.subject] ?? g.subject} #{g.subjectId}</a></td>
+            <td data-l="Чьё">{g.targetName || `id ${g.targetId}`}</td>
+            <td data-l="Причины">{g.reasons.map((x) => COMPLAINT_REASON[x] ?? x).join(', ')}</td>
+            <td class="num" data-l="Жалоб">{g.total}</td>
+            <td class="num" data-l="Ждёт">{waited(g.firstAt)}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  )}
+</Admin>

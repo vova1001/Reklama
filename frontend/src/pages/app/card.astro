@@ -1,11 +1,13 @@
 ---
-// Анкета автора: черновик и отклонённая — редактор на весь экран; на проверке и опубликованная — как увидит бизнес,
-// статус и «В черновик» (с проверки) или «Снять и изменить» (опубликованная).
+// Анкета автора: черновик, отклонённая и «на доработке» — редактор на весь экран; на проверке и опубликованная —
+// как увидит бизнес. Опубликованную меняют без снятия: «Изменить» (?edit=1) — правка, бизнес видит прежнюю,
+// пока правку не одобрят; «Снять с публикации» — в черновик.
 import App from '../../layouts/App.astro';
 import Editor from '../../layouts/Editor.astro';
 import Icon from '../../components/Icon.astro';
 import CardForm from '../../components/app/CardForm.astro';
 import CreatorPage from '../../components/app/CreatorPage.astro';
+import ReviewNote from '../../components/app/ReviewNote.astro';
 import { STATUS } from '../../content/app';
 import { fetchCard, fetchCategories, fetchProfiles } from '../../lib/auth';
 
@@ -14,15 +16,19 @@ if (!me) return Astro.redirect('/login', 303);
 if (me.user.mode !== 'creator') return Astro.redirect('/app', 303);
 const card = await fetchCard(Astro.request);
 if (card === undefined) return new Response('API недоступно', { status: 503 });
-const editable = !card || card.status === 'draft' || card.status === 'rejected';
+const rev = card?.revision ?? null;
+const revEditable = !rev || rev.status !== 'pending_review';
+const editRevision = !!card && card.status === 'published' && Astro.url.searchParams.get('edit') === '1' && revEditable;
+const editable = !card || card.status === 'draft' || card.status === 'rejected' || card.status === 'changes_requested' || editRevision;
 const [categories, { creator }] = await Promise.all([fetchCategories(Astro.request), fetchProfiles(Astro.request)]);
 const titleOf = (slug: string) => [...categories.common, ...categories.own].find((c) => c.slug === slug)?.title ?? slug;
 const sent = Astro.url.searchParams.get('sent') === '1';
 const c = card!;
+const formCard = editRevision && rev ? { ...rev.card, id: c.id, status: c.status, reviewNotes: c.reviewNotes, platforms: c.platforms, updatedAt: c.updatedAt } : card;
 ---
 {editable ? (
   <Editor title="Анкета" page="create" only="creator">
-    <CardForm card={card} profile={creator} user={me.user} categories={categories} />
+    <CardForm card={formCard} profile={creator} user={me.user} categories={categories} revision={editRevision ? rev : null} />
   </Editor>
 ) : (
   <App title="Анкета" page="create" only="creator">
@@ -32,13 +38,24 @@ const c = card!;
         <span class="st" data-s={c.status} data-status-label>{STATUS[c.status]}</span>
       </div>
       {c.status === 'pending_review' && <p class="banner" role="status">{sent ? 'Отправлено. ' : ''}Проверим и покажем бизнесу — обычно в течение дня.</p>}
-      {c.status === 'published' && sent && <p class="banner is-ok" role="status"><Icon name="check" size={20} />Опубликовано — бизнес уже видит анкету в ленте.</p>}
+      {c.status === 'published' && sent && !rev && <p class="banner is-ok" role="status"><Icon name="check" size={20} />Опубликовано — бизнес уже видит анкету в ленте.</p>}
+      {rev?.status === 'pending_review' && <p class="banner" role="status" data-revision="pending"><Icon name="clock" size={20} />{sent ? 'Изменения отправлены. ' : ''}Изменения на проверке — пока бизнес видит прежнюю версию.</p>}
+      {rev?.status === 'draft' && <p class="banner" role="status" data-revision="draft"><Icon name="pencil" size={20} />Есть неотправленные изменения.</p>}
+      {rev && <ReviewNote status={rev.status} reason={rev.rejectReason} notes={c.reviewNotes} revision />}
       <CreatorPage card={c} topics={c.topics.map(titleOf)} />
       <div class="ed-bar is-plain">
-        <p class="ed-state">{c.status === 'published' ? 'Нужно изменить?' : 'Нужно поправить?'}</p>
-        <button class="btn pill-ghost" type="button" data-withdraw-card data-published={c.status === 'published' ? '1' : undefined}>
-          <Icon name={c.status === 'published' ? 'pencil' : 'undo-2'} size={18} />{c.status === 'published' ? 'Снять и изменить' : 'В черновик'}
-        </button>
+        {c.status === 'published' ? (
+          <>
+            {revEditable && <a class="btn pill-dark" href="/app/card?edit=1" data-edit><Icon name="pencil" size={18} />{rev ? 'Продолжить правку' : 'Изменить'}</a>}
+            {rev && <button class="btn pill-ghost" type="button" data-discard-card><Icon name="undo-2" size={18} />Отменить изменения</button>}
+            <button class="btn pill-text" type="button" data-withdraw-card data-published="1">Снять с публикации</button>
+          </>
+        ) : (
+          <>
+            <p class="ed-state">Нужно поправить?</p>
+            <button class="btn pill-ghost" type="button" data-withdraw-card><Icon name="undo-2" size={18} />В черновик</button>
+          </>
+        )}
       </div>
     </div>
   </App>
@@ -48,10 +65,19 @@ const c = card!;
   import { confirmDialog, guard, toast } from '../../lib/ui';
   document.querySelector<HTMLButtonElement>('[data-withdraw-card]')?.addEventListener('click', async (e) => {
     const b = e.currentTarget as HTMLButtonElement;
-    if (b.dataset.published && !(await confirmDialog('Снять с публикации?', 'Анкета пропадёт из ленты, пока вы не опубликуете её снова.', 'Снять'))) return b.focus();
+    if (b.dataset.published && !(await confirmDialog('Снять с публикации?', 'Анкета пропадёт из ленты, пока вы не опубликуете её снова. Неотправленные изменения станут черновиком.', 'Снять'))) return b.focus();
     busy(b, true);
     const r = await api('POST', '/api/me/card/withdraw');
     if (r.ok) return location.reload();
+    busy(b, false);
+    if (!guard(r.status)) toast(r.error.message);
+  });
+  document.querySelector<HTMLButtonElement>('[data-discard-card]')?.addEventListener('click', async (e) => {
+    const b = e.currentTarget as HTMLButtonElement;
+    if (!(await confirmDialog('Отменить изменения?', 'Останется опубликованная анкета.', 'Отменить изменения'))) return b.focus();
+    busy(b, true);
+    const r = await api('DELETE', '/api/me/card/revision');
+    if (r.ok) return location.assign('/app/card');
     busy(b, false);
     if (!guard(r.status)) toast(r.error.message);
   });

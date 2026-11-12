@@ -1,11 +1,13 @@
 ---
-// Своё задание: черновик и отклонённое — редактор на весь экран; на проверке и опубликованное — как увидят
-// авторы, статус и «В черновик» (с проверки) или «Снять и изменить» (опубликованное).
+// Своё задание: черновик, отклонённое и «на доработке» — редактор на весь экран; на проверке и опубликованное —
+// как увидят авторы и статус. Опубликованное меняется без снятия: «Изменить» (?edit=1) — правка, пока её не
+// проверят, авторы видят прежнюю версию; «Снять с публикации» — в черновик.
 import App from '../../../layouts/App.astro';
 import Editor from '../../../layouts/Editor.astro';
 import Icon from '../../../components/Icon.astro';
 import TaskForm from '../../../components/app/TaskForm.astro';
 import TaskPage from '../../../components/app/TaskPage.astro';
+import ReviewNote from '../../../components/app/ReviewNote.astro';
 import { STATUS } from '../../../content/app';
 import { fetchCategories, fetchProfiles, fetchTask } from '../../../lib/auth';
 
@@ -14,17 +16,22 @@ if (!me) return Astro.redirect('/login', 303);
 const id = Number(Astro.params.id);
 const task = Number.isSafeInteger(id) && id > 0 ? await fetchTask(Astro.request, id) : null;
 if (!task) Astro.response.status = 404;
-const editable = !!task && (task.status === 'draft' || task.status === 'rejected');
+const rev = task?.revision ?? null;
+const revEditable = !rev || rev.status !== 'pending_review';
+const editRevision = !!task && task.status === 'published' && Astro.url.searchParams.get('edit') === '1' && revEditable;
+const editable = !!task && (task.status === 'draft' || task.status === 'rejected' || task.status === 'changes_requested' || editRevision);
 const [categories, { business }] = editable
   ? await Promise.all([fetchCategories(Astro.request), fetchProfiles(Astro.request)])
   : [{ common: [], own: [] }, await fetchProfiles(Astro.request)];
 const brand = business?.name ?? me.user.name;
 const t = task!;
+// в редакторе правки — новая версия (если начата), иначе опубликованная
+const formTask = editRevision && rev ? { ...rev.task, id: t.id, status: t.status, reviewNotes: t.reviewNotes, updatedAt: t.updatedAt } : t;
 const sent = Astro.url.searchParams.get('sent') === '1';
 ---
 {editable ? (
   <Editor title={t.title || 'Задание'} page="my" only="business">
-    <TaskForm task={t} categories={categories} brand={brand} />
+    <TaskForm task={formTask} categories={categories} brand={brand} revision={editRevision ? rev : null} />
   </Editor>
 ) : (
   <App title={task?.title || 'Задание'} page="my" only="business">
@@ -38,13 +45,24 @@ const sent = Astro.url.searchParams.get('sent') === '1';
         </div>
         {t.status === 'pending_review' && <p class="banner" role="status">{sent ? 'Отправлено. ' : ''}Проверим и опубликуем — обычно в течение дня.</p>}
         {t.status === 'expired' && <p class="banner" role="status"><Icon name="clock" size={20} />Срок публикации прошёл — задания нет в ленте. Верните в черновик, чтобы продлить.</p>}
-        {t.status === 'published' && sent && <p class="banner is-ok" role="status"><Icon name="check" size={20} />Опубликовано — авторы уже видят задание в ленте.</p>}
+        {t.status === 'published' && sent && !rev && <p class="banner is-ok" role="status"><Icon name="check" size={20} />Опубликовано — авторы уже видят задание в ленте.</p>}
+        {rev?.status === 'pending_review' && <p class="banner" role="status" data-revision="pending"><Icon name="clock" size={20} />{sent ? 'Изменения отправлены. ' : ''}Изменения на проверке — пока авторы видят прежнюю версию.</p>}
+        {rev?.status === 'draft' && <p class="banner" role="status" data-revision="draft"><Icon name="pencil" size={20} />Есть неотправленные изменения.</p>}
+        {rev && <ReviewNote status={rev.status} reason={rev.rejectReason} notes={t.reviewNotes} revision />}
         <TaskPage task={{ ...t, brand }} />
         <div class="ed-bar is-plain">
-          <p class="ed-state">{t.status === 'published' ? 'Нужно изменить?' : 'Нужно поправить?'}</p>
-          <button class="btn pill-ghost" type="button" data-withdraw={t.id} data-published={t.status === 'published' ? '1' : undefined}>
-            <Icon name={t.status === 'published' ? 'pencil' : 'undo-2'} size={18} />{t.status === 'published' ? 'Снять и изменить' : 'В черновик'}
-          </button>
+          {t.status === 'published' ? (
+            <>
+              {revEditable && <a class="btn pill-dark" href={`/app/tasks/${t.id}?edit=1`} data-edit><Icon name="pencil" size={18} />{rev ? 'Продолжить правку' : 'Изменить'}</a>}
+              {rev && <button class="btn pill-ghost" type="button" data-discard={t.id}><Icon name="undo-2" size={18} />Отменить изменения</button>}
+              <button class="btn pill-text" type="button" data-withdraw={t.id} data-published="1">Снять с публикации</button>
+            </>
+          ) : (
+            <>
+              <p class="ed-state">Нужно поправить?</p>
+              <button class="btn pill-ghost" type="button" data-withdraw={t.id}><Icon name="undo-2" size={18} />В черновик</button>
+            </>
+          )}
         </div>
       </div>
     )}
@@ -55,10 +73,19 @@ const sent = Astro.url.searchParams.get('sent') === '1';
   import { confirmDialog, guard, toast } from '../../../lib/ui';
   document.querySelector<HTMLButtonElement>('[data-withdraw]')?.addEventListener('click', async (e) => {
     const b = e.currentTarget as HTMLButtonElement;
-    if (b.dataset.published && !(await confirmDialog('Снять с публикации?', 'Задание пропадёт из ленты, пока вы не опубликуете его снова.', 'Снять'))) return b.focus();
+    if (b.dataset.published && !(await confirmDialog('Снять с публикации?', 'Задание пропадёт из ленты, пока вы не опубликуете его снова. Неотправленные изменения станут черновиком.', 'Снять'))) return b.focus();
     busy(b, true);
     const r = await api('POST', `/api/me/tasks/${b.dataset.withdraw}/withdraw`);
     if (r.ok) return location.reload();
+    busy(b, false);
+    if (!guard(r.status)) toast(r.error.message);
+  });
+  document.querySelector<HTMLButtonElement>('[data-discard]')?.addEventListener('click', async (e) => {
+    const b = e.currentTarget as HTMLButtonElement;
+    if (!(await confirmDialog('Отменить изменения?', 'Останется опубликованная версия.', 'Отменить изменения'))) return b.focus();
+    busy(b, true);
+    const r = await api('DELETE', `/api/me/tasks/${b.dataset.discard}/revision`);
+    if (r.ok) return location.assign(location.pathname);
     busy(b, false);
     if (!guard(r.status)) toast(r.error.message);
   });

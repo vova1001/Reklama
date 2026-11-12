@@ -718,3 +718,18 @@ html:has(body.app-body) { background: var(--color-card); scroll-padding: 72px 0 
   .soc-steps, .soc-accs { margin-left: 0; }
 }
 @media (prefers-reduced-motion: reduce) { .soc-tools .ibtn[aria-busy='true'] .ic { animation: none; } }
+
+/* ===== жалоба (задача 13) ===== */
+.cmp-btn { margin-left: -12px; }
+.cmp-reasons { display: grid; gap: 4px; margin-top: 8px; }
+.cmp-r { display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 0 12px; border-radius: 12px; font-size: 16px; text-align: left; color: var(--color-ink); cursor: pointer; }
+.cmp-r::before { content: ''; flex: none; width: 18px; height: 18px; border-radius: 50%; box-shadow: inset 0 0 0 1.5px var(--color-line-strong); }
+.cmp-r[aria-checked='true'] { background: var(--color-panel); font-weight: 600; }
+.cmp-r[aria-checked='true']::before { box-shadow: inset 0 0 0 5px var(--color-ink); }
+@media (hover: hover) { .cmp-r:hover { background: var(--color-panel); } }
+.dlg .cmp-c { height: auto; min-height: 80px; padding: 10px 12px; font-size: 16px; resize: vertical; }
+.dlg .lbl { margin-top: 8px; font-size: 15px; }
+.notes-l { display: grid; gap: 4px; margin-top: 4px; }
+.st[data-s='changes_requested'] { color: var(--color-error); }
+.st[data-s='changes_requested']::before { background: var(--color-error); }
+.ed-bar.is-plain { flex-wrap: wrap; gap: 8px; }

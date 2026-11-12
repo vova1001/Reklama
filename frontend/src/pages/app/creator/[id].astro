@@ -3,6 +3,7 @@
 import App from '../../../layouts/App.astro';
 import Icon from '../../../components/Icon.astro';
 import CreatorPage from '../../../components/app/CreatorPage.astro';
+import Complain from '../../../components/app/Complain.astro';
 import { fetchPublicCard } from '../../../lib/auth';
 
 const me = Astro.locals.me;
@@ -20,6 +21,7 @@ if (!card) Astro.response.status = 404;
       <div class="cta">
         <button class="btn pill-emerald" type="button" data-soon="Предложения появятся в ближайшем обновлении"><Icon name="send" size={18} />Предложить задание</button>
       </div>
+      {card.id !== me.user.id && <Complain subject="creator_card" id={card.id} />}
     </CreatorPage>
   )}
 </App>

@@ -850,6 +850,544 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/me/tasks/{id}/revision": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["TaskID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Удалить правку опубликованного задания (опубликованное остаётся как было) */
+        delete: operations["discardTaskRevision"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/card/revision": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Удалить правку опубликованной анкеты */
+        delete: operations["discardCardRevision"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/complaints": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Пожаловаться на задание, анкету или профиль
+         * @description Не на своё; до 20 в сутки (429 rate_limited, reason complaints_daily). Повтор открытой жалобы — 200, created=false.
+         */
+        post: operations["createComplaint"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/me": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Админка — кто я, права, 2FA, справочники карточки проверки
+         * @description Доступно без подтверждения 2FA (по нему интерфейс ведёт на настройку или ввод кода). Не сотрудник — 404.
+         */
+        get: operations["adminMe"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/2fa/setup": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Новый секрет TOTP и QR-код (пока 2FA не включена) */
+        post: operations["adminTwoFactorSetup"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/2fa/confirm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Первый код из приложения — 2FA включена, резервные коды (показываются один раз) */
+        post: operations["adminTwoFactorConfirm"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/2fa/verify": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Подтвердить вход в админку кодом или резервным кодом (на 12 часов)
+         * @description Повтор того же кода не проходит; 5 неверных подряд — блокировка на 15 минут (429, reason 2fa_locked).
+         */
+        post: operations["adminTwoFactorVerify"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/2fa/backup-codes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Новые резервные коды (прежние перестают действовать) */
+        post: operations["adminBackupCodes"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/dashboard": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Сводка — очередь по видам, решения за сегодня и неделю, среднее время проверки, новые пользователи */
+        get: operations["adminDashboard"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/queue": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Очередь проверки (без взятых другими и без ждущих применения решений) */
+        get: operations["adminQueue"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/queue/next": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Взять следующий по отбору (skip — текущий, отпускается) */
+        post: operations["adminQueueNext"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/review/{kind}/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                kind: components["schemas"]["ReviewKind"];
+                /** @description id задания, автора, категории или ключ формата */
+                id: string;
+            };
+            cookie?: never;
+        };
+        /** Карточка проверки — как увидят пользователи, все поля, фото, соцсети, история владельца */
+        get: operations["adminReviewItem"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/review/{kind}/{id}/claim": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                kind: components["schemas"]["ReviewKind"];
+                id: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Взять в работу на 10 минут (своё — продлить) */
+        post: operations["adminClaim"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/review/{kind}/{id}/release": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                kind: components["schemas"]["ReviewKind"];
+                id: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Отпустить */
+        post: operations["adminRelease"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/review/{kind}/{id}/decision": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                kind: "task" | "task_revision" | "card" | "card_revision";
+                id: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Решение — применится через 10 с (до этого — отмена); затем уведомление владельцу (почта + Telegram) */
+        post: operations["adminDecide"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/decisions/{id}/undo": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["TaskID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Отменить своё решение в течение 10 с */
+        post: operations["adminUndo"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/categories/{id}/decision": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["TaskID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Своя категория — одобрить в общие, объединить с общей, отклонить */
+        post: operations["adminCategoryDecision"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/formats/decision": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Свой формат — одобрить в общие подсказки, объединить с форматом из списка, отклонить */
+        post: operations["adminFormatDecision"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/complaints": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Очередь жалоб — предметы с открытыми жалобами, старые первыми */
+        get: operations["adminComplaints"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/complaints/{subject}/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                subject: "task" | "creator_card" | "user";
+                id: components["parameters"]["TaskID"];
+            };
+            cookie?: never;
+        };
+        /** Жалобы на предмет и сам предмет */
+        get: operations["adminComplaintCase"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/complaints/{subject}/{id}/resolve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                subject: "task" | "creator_card" | "user";
+                id: components["parameters"]["TaskID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Решение по жалобам — отклонить (dismiss), снять с публикации (hide), заблокировать владельца (block) */
+        post: operations["adminResolveComplaints"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/users": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Поиск пользователей (id, почта, имя, названия профилей) */
+        get: operations["adminUsers"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/users/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["TaskID"];
+            };
+            cookie?: never;
+        };
+        /** Карточка пользователя — профили, способы входа, задания, анкета, соцсети, входы, решения, жалобы */
+        get: operations["adminUserCard"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/users/{id}/block": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["TaskID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Заблокировать — вход закрыт, все сеансы завершены, контент скрыт (сотрудника — только администратор) */
+        post: operations["adminBlockUser"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/users/{id}/unblock": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["TaskID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Разблокировать */
+        post: operations["adminUnblockUser"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/users/{id}/role": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["TaskID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /** Назначить модератором или администратором или снять роль (только администратор) */
+        put: operations["adminSetRole"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/users/{id}/reset-2fa": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["TaskID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Сбросить 2FA сотрудника (потерян телефон) — только администратор */
+        post: operations["adminResetTwoFactor"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/audit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Журнал действий (только администратор), новые сверху; записи не изменяются и не удаляются */
+        get: operations["adminAudit"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Настройки (только администратор) */
+        get: operations["adminSettings"];
+        /** Режим проверки — auto | manual (хранится в базе; MODERATION_MODE — значение по умолчанию) */
+        put: operations["adminSetSettings"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/media/{id}/{size}.webp": {
         parameters: {
             query?: never;
@@ -1084,6 +1622,7 @@ export interface components {
             mode: components["schemas"]["Mode"];
             /** @description Общие данные профиля сохранялись */
             onboarded: boolean;
+            staffRole?: components["schemas"]["AdminRole"];
         };
         LoginResult: {
             user: components["schemas"]["User"];
@@ -1116,10 +1655,10 @@ export interface components {
             completion: number;
         };
         /**
-         * @description Черновик | на проверке | опубликовано | отклонено (с причиной) | завершено (срок публикации прошёл, только задания)
+         * @description Черновик | на проверке | опубликовано | отклонено (с причиной) | завершено (срок публикации прошёл, только задания) | на доработке (замечания в reviewNotes)
          * @enum {string}
          */
-        Status: "draft" | "pending_review" | "published" | "rejected" | "expired";
+        Status: "draft" | "pending_review" | "published" | "rejected" | "expired" | "changes_requested";
         /** @description Динамический блок: text — абзацы, list — пункты, links — ссылки https://… */
         Block: {
             /** @enum {string} */
@@ -1223,6 +1762,11 @@ export interface components {
             submittedAt: string | null;
             /** Format: date-time */
             publishedAt: string | null;
+            reviewNotes?: components["schemas"]["ReviewNotes"];
+            /** @description Правка опубликованного (только владельцу) */
+            revision?: components["schemas"]["Revision"] & {
+                task: components["schemas"]["Task"];
+            };
         };
         TaskList: {
             tasks: components["schemas"]["Task"][];
@@ -1332,6 +1876,11 @@ export interface components {
             submittedAt: string | null;
             /** Format: date-time */
             publishedAt: string | null;
+            reviewNotes?: components["schemas"]["ReviewNotes"];
+            /** @description Правка опубликованной анкеты (только владельцу) */
+            revision?: components["schemas"]["Revision"] & {
+                card: components["schemas"]["Card"];
+            };
         };
         DraftResult: {
             draft: {
@@ -1377,6 +1926,336 @@ export interface components {
             purpose: components["schemas"]["MediaPurpose"];
             width: number;
             height: number;
+        };
+        Revision: {
+            /** @enum {string} */
+            status: "draft" | "pending_review" | "rejected" | "changes_requested";
+            rejectReason: string;
+            /** Format: date-time */
+            submittedAt: string | null;
+        };
+        /** @description Замечания модератора «на доработку»: поле формы (title, blocks, photos…, general) → текст */
+        ReviewNotes: {
+            [key: string]: string;
+        };
+        ComplaintInput: {
+            /** @enum {string} */
+            subject: "task" | "creator_card" | "user";
+            /**
+             * Format: int64
+             * @description id задания, id автора анкеты или пользователя
+             */
+            id: number;
+            /** @enum {string} */
+            reason: "spam" | "fraud" | "offensive" | "illegal" | "fake" | "other";
+            /** @description Для other — от 5 символов */
+            comment?: string;
+        };
+        ComplaintCreated: {
+            created: boolean;
+        };
+        /** @enum {string} */
+        AdminRole: "moderator" | "admin";
+        /** @enum {string} */
+        ReviewKind: "task" | "task_revision" | "card" | "card_revision" | "category" | "format";
+        AdminMe: {
+            user: components["schemas"]["User"];
+            role: components["schemas"]["AdminRole"];
+            permissions: string[];
+            twoFactor: {
+                enabled: boolean;
+                /** @description Подтверждена в этой сессии не раньше 12 часов назад */
+                verified: boolean;
+                /** Format: date-time */
+                verifiedUntil: string | null;
+                backupLeft: number;
+            };
+            rejectTemplates: {
+                id: string;
+                text: string;
+            }[];
+            /** @description Поле → название (замечания) */
+            reviewFields: {
+                [key: string]: string;
+            };
+            undoSeconds: number;
+        };
+        TwoFactorSetup: {
+            /** @description Ключ base32 для ручного ввода */
+            secret: string;
+            /** @description otpauth://totp/… */
+            uri: string;
+            /** @description data:image/png;base64,… (QR строится на сервере) */
+            qr?: string;
+        };
+        CodeInput: {
+            /** @description 6 цифр из приложения или резервный код xxxxx-xxxxx */
+            code: string;
+        };
+        BackupCodes: {
+            backupCodes: string[];
+        };
+        Dashboard: {
+            queue: {
+                type: components["schemas"]["ReviewKind"];
+                total: number;
+                /** Format: date-time */
+                oldest: string | null;
+            }[];
+            decidedToday: number;
+            decidedWeek: number;
+            /** @description Среднее ожидание до решения за 7 дней */
+            avgReviewSeconds: number;
+            usersToday: number;
+            usersWeek: number;
+            openComplaints: number;
+        };
+        QueueItem: {
+            type: components["schemas"]["ReviewKind"];
+            id: string;
+            title: string;
+            /** Format: int64 */
+            ownerId: number;
+            ownerName: string;
+            categories: string[];
+            city: string;
+            /** Format: date-time */
+            waitingSince: string;
+            /** @description Взято в работу мной */
+            mine: boolean;
+        };
+        Queue: {
+            items: components["schemas"]["QueueItem"][];
+            total: number;
+            /** Format: date-time */
+            oldest: string | null;
+        };
+        NextInput: {
+            type?: components["schemas"]["ReviewKind"][];
+            category?: string[];
+            city?: string;
+            q?: string;
+            /** Format: date */
+            from?: string;
+            /** Format: date */
+            to?: string;
+            /** @enum {string} */
+            sort?: "oldest" | "newest";
+            skipType?: string;
+            skipId?: string;
+        };
+        Lease: {
+            /** Format: int64 */
+            moderatorId: number;
+            mine: boolean;
+            /** Format: date-time */
+            expiresAt: string;
+        };
+        DecisionInput: {
+            /** @enum {string} */
+            action: "approve" | "reject" | "rework";
+            /** @description Причина отказа 5–500 символов (шаблон + свой текст) */
+            reason?: string;
+            notes?: components["schemas"]["ReviewNotes"];
+        };
+        Decision: {
+            /** Format: int64 */
+            id: number;
+            type: components["schemas"]["ReviewKind"];
+            /** Format: int64 */
+            itemId: number;
+            /** @enum {string} */
+            action: "approve" | "reject" | "rework";
+            reason: string;
+            notes: components["schemas"]["ReviewNotes"];
+            /** @enum {string} */
+            state: "pending" | "applied" | "undone" | "failed";
+            moderator?: string;
+            /** Format: date-time */
+            applyAt: string;
+            /** Format: date-time */
+            createdAt: string;
+        };
+        AdminUser: {
+            /** Format: int64 */
+            id: number;
+            name: string;
+            email: string;
+            city: string;
+            avatarUrl: string;
+            /** @enum {string} */
+            role: "" | "moderator" | "admin";
+            businessName: string;
+            creatorName: string;
+            blocked: boolean;
+            /** Format: date-time */
+            blockedAt: string | null;
+            blockedReason: string;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            lastLoginAt: string | null;
+        };
+        Complaint: {
+            /** Format: int64 */
+            id: number;
+            subject: string;
+            /** Format: int64 */
+            subjectId: number;
+            reporter?: string;
+            /** Format: int64 */
+            reporterId: number;
+            reason: string;
+            comment: string;
+            /** @enum {string} */
+            status: "open" | "resolved" | "dismissed";
+            action: string;
+            resolution: string;
+            /** Format: date-time */
+            resolvedAt: string | null;
+            /** Format: date-time */
+            createdAt: string;
+        };
+        StatusChange: {
+            from: string;
+            to: string;
+            reason: string;
+            /** Format: int64 */
+            actorId: number;
+            auto: boolean;
+            /** Format: date-time */
+            at: string;
+        };
+        AdminCategory: {
+            /** Format: int64 */
+            id: number;
+            slug: string;
+            title: string;
+            status: string;
+            /** Format: int64 */
+            authorId: number;
+        };
+        ReviewItem: {
+            type: components["schemas"]["ReviewKind"];
+            id: string;
+            inQueue: boolean;
+            /** Format: date-time */
+            waitingSince: string | null;
+            lease: components["schemas"]["Lease"] | null;
+            task?: components["schemas"]["Task"];
+            liveTask?: components["schemas"]["Task"];
+            card?: components["schemas"]["Card"];
+            liveCard?: components["schemas"]["Card"];
+            category?: components["schemas"]["AdminCategory"];
+            usage?: {
+                tasks?: number;
+                cards?: number;
+            };
+            targets?: components["schemas"]["AdminCategory"][];
+            format?: {
+                norm?: string;
+                title?: string;
+                tasks?: number;
+            };
+            formats?: string[];
+            owner: components["schemas"]["AdminUser"] | null;
+            history: components["schemas"]["StatusChange"][];
+            decisions: components["schemas"]["Decision"][];
+            complaints: components["schemas"]["Complaint"][];
+        };
+        ComplaintGroups: {
+            total: number;
+            items: {
+                subject: string;
+                /** Format: int64 */
+                subjectId: number;
+                /** Format: int64 */
+                targetId: number;
+                targetName: string;
+                total: number;
+                reasons: string[];
+                /** Format: date-time */
+                firstAt: string;
+            }[];
+        };
+        ComplaintCase: {
+            subject: string;
+            /** Format: int64 */
+            id: number;
+            complaints: components["schemas"]["Complaint"][];
+            task?: components["schemas"]["Task"];
+            card?: components["schemas"]["Card"];
+            target: components["schemas"]["AdminUser"] | null;
+        };
+        ReasonInput: {
+            /** @description 5–500 символов */
+            reason: string;
+        };
+        UserCard: {
+            user: components["schemas"]["AdminUser"];
+            providers: string[];
+            business: components["schemas"]["BusinessProfile"] | null;
+            creator: components["schemas"]["CreatorProfile"] | null;
+            tasks: components["schemas"]["Task"][];
+            card: components["schemas"]["Card"] | null;
+            socials: {
+                platform: string;
+                type: string;
+                title: string;
+                handle: string;
+                url: string;
+                status: string;
+                /** Format: int64 */
+                followers: number;
+                /** Format: date-time */
+                verifiedAt: string | null;
+            }[];
+            logins: {
+                method: string;
+                ip: string;
+                device: string;
+                /** Format: date-time */
+                at: string;
+            }[];
+            decisions: components["schemas"]["Decision"][];
+            complaints: components["schemas"]["Complaint"][];
+        };
+        AuditEntry: {
+            /** Format: int64 */
+            id: number;
+            /** Format: int64 */
+            actorId: number;
+            actorLabel: string;
+            actorRole: string;
+            action: string;
+            subject: string;
+            subjectId: string;
+            /** @description Состояние до (JSON) */
+            before: unknown;
+            /** @description Состояние после (JSON) */
+            after: unknown;
+            reason: string;
+            ip: string;
+            device: string;
+            /** Format: date-time */
+            at: string;
+        };
+        AuditPage: {
+            items: components["schemas"]["AuditEntry"][];
+            /**
+             * Format: int64
+             * @description Курсор следующей страницы (before)
+             */
+            next: number | null;
+        };
+        AdminSettings: {
+            /** @enum {string} */
+            moderationMode: "auto" | "manual";
+            /**
+             * @description Из MODERATION_MODE
+             * @enum {string}
+             */
+            moderationDefault: "auto" | "manual";
         };
     };
     responses: {
@@ -1440,6 +2319,15 @@ export interface components {
         };
         /** @description wrong_status — статус уже другой | tasks_limit | media_quota */
         Conflict: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description forbidden — нет права | 2fa_setup_required | 2fa_required */
+        AdminForbidden: {
             headers: {
                 [name: string]: unknown;
             };
@@ -2929,6 +3817,941 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+        };
+    };
+    discardTaskRevision: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Значение из `GET /api/auth/config` (равно cookie `ohvat_csrf`) */
+                "X-CSRF-Token": components["parameters"]["CSRF"];
+            };
+            path: {
+                id: components["parameters"]["TaskID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Задание без правки */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Task"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    discardCardRevision: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Значение из `GET /api/auth/config` (равно cookie `ohvat_csrf`) */
+                "X-CSRF-Token": components["parameters"]["CSRF"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Анкета без правки */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CardResult"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    createComplaint: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Значение из `GET /api/auth/config` (равно cookie `ohvat_csrf`) */
+                "X-CSRF-Token": components["parameters"]["CSRF"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ComplaintInput"];
+            };
+        };
+        responses: {
+            /** @description Такая жалоба уже есть */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ComplaintCreated"];
+                };
+            };
+            /** @description Жалоба принята */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ComplaintCreated"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            /** @description self_action — на своё */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            429: components["responses"]["TooMany"];
+        };
+    };
+    adminMe: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Сотрудник */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminMe"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    adminTwoFactorSetup: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Значение из `GET /api/auth/config` (равно cookie `ohvat_csrf`) */
+                "X-CSRF-Token": components["parameters"]["CSRF"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Секрет */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TwoFactorSetup"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            429: components["responses"]["TooMany"];
+        };
+    };
+    adminTwoFactorConfirm: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Значение из `GET /api/auth/config` (равно cookie `ohvat_csrf`) */
+                "X-CSRF-Token": components["parameters"]["CSRF"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CodeInput"];
+            };
+        };
+        responses: {
+            /** @description Резервные коды */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BackupCodes"];
+                };
+            };
+            /** @description 2fa_invalid — неверный код */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            429: components["responses"]["TooMany"];
+        };
+    };
+    adminTwoFactorVerify: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Значение из `GET /api/auth/config` (равно cookie `ohvat_csrf`) */
+                "X-CSRF-Token": components["parameters"]["CSRF"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CodeInput"];
+            };
+        };
+        responses: {
+            /** @description Подтверждено */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 2fa_invalid */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description 2fa_setup_required */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            429: components["responses"]["TooMany"];
+        };
+    };
+    adminBackupCodes: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Значение из `GET /api/auth/config` (равно cookie `ohvat_csrf`) */
+                "X-CSRF-Token": components["parameters"]["CSRF"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Резервные коды */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BackupCodes"];
+                };
+            };
+            403: components["responses"]["AdminForbidden"];
+        };
+    };
+    adminDashboard: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Сводка */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Dashboard"];
+                };
+            };
+            403: components["responses"]["AdminForbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    adminQueue: {
+        parameters: {
+            query?: {
+                type?: components["schemas"]["ReviewKind"][];
+                category?: string[];
+                city?: string;
+                from?: string;
+                to?: string;
+                q?: string;
+                sort?: "oldest" | "newest";
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Очередь */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Queue"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            403: components["responses"]["AdminForbidden"];
+        };
+    };
+    adminQueueNext: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Значение из `GET /api/auth/config` (равно cookie `ohvat_csrf`) */
+                "X-CSRF-Token": components["parameters"]["CSRF"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NextInput"];
+            };
+        };
+        responses: {
+            /** @description Взят в работу */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QueueItem"];
+                };
+            };
+            /** @description Очередь пуста */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            403: components["responses"]["AdminForbidden"];
+        };
+    };
+    adminReviewItem: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                kind: components["schemas"]["ReviewKind"];
+                /** @description id задания, автора, категории или ключ формата */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Карточка */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReviewItem"];
+                };
+            };
+            403: components["responses"]["AdminForbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    adminClaim: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Значение из `GET /api/auth/config` (равно cookie `ohvat_csrf`) */
+                "X-CSRF-Token": components["parameters"]["CSRF"];
+            };
+            path: {
+                kind: components["schemas"]["ReviewKind"];
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Аренда */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Lease"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+            /** @description lease_held — у другого модератора */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    adminRelease: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Значение из `GET /api/auth/config` (равно cookie `ohvat_csrf`) */
+                "X-CSRF-Token": components["parameters"]["CSRF"];
+            };
+            path: {
+                kind: components["schemas"]["ReviewKind"];
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Отпущено */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    adminDecide: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Значение из `GET /api/auth/config` (равно cookie `ohvat_csrf`) */
+                "X-CSRF-Token": components["parameters"]["CSRF"];
+            };
+            path: {
+                kind: "task" | "task_revision" | "card" | "card_revision";
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DecisionInput"];
+            };
+        };
+        responses: {
+            /** @description Принято */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Decision"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            /** @description lease_held | lease_lost | wrong_status */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    adminUndo: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Значение из `GET /api/auth/config` (равно cookie `ohvat_csrf`) */
+                "X-CSRF-Token": components["parameters"]["CSRF"];
+            };
+            path: {
+                id: components["parameters"]["TaskID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Отменено */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Decision"];
+                };
+            };
+            /** @description undo_expired */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    adminCategoryDecision: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Значение из `GET /api/auth/config` (равно cookie `ohvat_csrf`) */
+                "X-CSRF-Token": components["parameters"]["CSRF"];
+            };
+            path: {
+                id: components["parameters"]["TaskID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @enum {string} */
+                    action: "approve" | "merge" | "reject";
+                    /** @description slug общей категории (merge) */
+                    into?: string;
+                    /** @description причина (reject) */
+                    reason?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Решено */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    adminFormatDecision: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Значение из `GET /api/auth/config` (равно cookie `ohvat_csrf`) */
+                "X-CSRF-Token": components["parameters"]["CSRF"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description ключ формата из очереди */
+                    norm: string;
+                    /** @enum {string} */
+                    action: "approve" | "merge" | "reject";
+                    into?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Решено */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    adminComplaints: {
+        parameters: {
+            query?: {
+                subject?: "task" | "creator_card" | "user";
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Жалобы */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ComplaintGroups"];
+                };
+            };
+            403: components["responses"]["AdminForbidden"];
+        };
+    };
+    adminComplaintCase: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                subject: "task" | "creator_card" | "user";
+                id: components["parameters"]["TaskID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Жалобы */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ComplaintCase"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+        };
+    };
+    adminResolveComplaints: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Значение из `GET /api/auth/config` (равно cookie `ohvat_csrf`) */
+                "X-CSRF-Token": components["parameters"]["CSRF"];
+            };
+            path: {
+                subject: "task" | "creator_card" | "user";
+                id: components["parameters"]["TaskID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @enum {string} */
+                    action: "dismiss" | "hide" | "block";
+                    /** @description Причина (для hide и block — 5–500 символов, её увидит владелец) */
+                    note?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Закрыто жалоб */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        closed: number;
+                    };
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    adminUsers: {
+        parameters: {
+            query?: {
+                q?: string;
+                staff?: "1";
+                blocked?: "1";
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Пользователи */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["AdminUser"][];
+                    };
+                };
+            };
+            403: components["responses"]["AdminForbidden"];
+        };
+    };
+    adminUserCard: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["TaskID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Карточка */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserCard"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+        };
+    };
+    adminBlockUser: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Значение из `GET /api/auth/config` (равно cookie `ohvat_csrf`) */
+                "X-CSRF-Token": components["parameters"]["CSRF"];
+            };
+            path: {
+                id: components["parameters"]["TaskID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReasonInput"];
+            };
+        };
+        responses: {
+            /** @description Заблокирован */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminUser"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            403: components["responses"]["AdminForbidden"];
+            /** @description wrong_status | self_action | last_admin */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    adminUnblockUser: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Значение из `GET /api/auth/config` (равно cookie `ohvat_csrf`) */
+                "X-CSRF-Token": components["parameters"]["CSRF"];
+            };
+            path: {
+                id: components["parameters"]["TaskID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReasonInput"];
+            };
+        };
+        responses: {
+            /** @description Разблокирован */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminUser"];
+                };
+            };
+            403: components["responses"]["AdminForbidden"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    adminSetRole: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Значение из `GET /api/auth/config` (равно cookie `ohvat_csrf`) */
+                "X-CSRF-Token": components["parameters"]["CSRF"];
+            };
+            path: {
+                id: components["parameters"]["TaskID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @enum {string} */
+                    role: "" | "moderator" | "admin";
+                };
+            };
+        };
+        responses: {
+            /** @description Роль */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminUser"];
+                };
+            };
+            403: components["responses"]["AdminForbidden"];
+            /** @description self_action | last_admin */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    adminResetTwoFactor: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Значение из `GET /api/auth/config` (равно cookie `ohvat_csrf`) */
+                "X-CSRF-Token": components["parameters"]["CSRF"];
+            };
+            path: {
+                id: components["parameters"]["TaskID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Сброшено */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            403: components["responses"]["AdminForbidden"];
+        };
+    };
+    adminAudit: {
+        parameters: {
+            query?: {
+                q?: string;
+                actor?: number;
+                action?: string;
+                subject?: string;
+                subjectId?: string;
+                from?: string;
+                to?: string;
+                /** @description курсор — id последней записи */
+                before?: number;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Записи */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuditPage"];
+                };
+            };
+            403: components["responses"]["AdminForbidden"];
+        };
+    };
+    adminSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Настройки */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminSettings"];
+                };
+            };
+            403: components["responses"]["AdminForbidden"];
+        };
+    };
+    adminSetSettings: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Значение из `GET /api/auth/config` (равно cookie `ohvat_csrf`) */
+                "X-CSRF-Token": components["parameters"]["CSRF"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @enum {string} */
+                    moderationMode: "auto" | "manual";
+                };
+            };
+        };
+        responses: {
+            /** @description Настройки */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminSettings"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            403: components["responses"]["AdminForbidden"];
         };
     };
     getMedia: {

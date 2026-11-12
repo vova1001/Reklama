@@ -116,6 +116,8 @@ services:
       # проверка заданий и анкет: auto — сразу публикуются, manual — ждут модератора
       - key: MODERATION_MODE
         value: auto
+      - key: ADMIN_EMAILS
+        sync: false
       # фото: на Render нет диска — файлы в PostgreSQL; S3 (R2, Яндекс) — MEDIA_STORE=s3 и STORAGE_* без правки кода
       - key: MEDIA_STORE
         value: postgres

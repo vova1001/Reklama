@@ -1,0 +1,58 @@
+---
+// Пользователи: поиск по id, почте, имени и названиям профилей; отбор — сотрудники, заблокированные.
+import Admin from '../../../layouts/Admin.astro';
+import Icon from '../../../components/Icon.astro';
+import { adminGet, qs, ROLE_TITLE, when, type AdminUser } from '../../../lib/admin';
+
+const sp = Astro.url.searchParams;
+const q = (sp.get('q') ?? '').slice(0, 100);
+const staff = sp.get('staff') === '1';
+const blocked = sp.get('blocked') === '1';
+const offset = Math.max(0, Number(sp.get('offset')) || 0);
+const r = await adminGet<{ items: AdminUser[] }>(Astro.request, `/api/admin/users${qs({ q, staff: staff ? '1' : '', blocked: blocked ? '1' : '', offset, limit: 50 })}`);
+const items = r.ok ? r.data.items : null;
+const keep = (o: Record<string, string | number>) => qs({ q, staff: staff ? '1' : '', blocked: blocked ? '1' : '', ...o });
+---
+<Admin title="Пользователи" page="users">
+  <div class="head"><h1>Пользователи</h1></div>
+  <form class="qf" method="get" action="/admin/users">
+    <div class="qf-row">
+      <label class="lbl-sr" for="u-q">Поиск</label>
+      <input class="inp" id="u-q" name="q" value={q} placeholder="id, почта, имя или название" maxlength="100" />
+      {staff && <input type="hidden" name="staff" value="1" />}
+      {blocked && <input type="hidden" name="blocked" value="1" />}
+      <button class="btn pill-dark" type="submit"><Icon name="search" size={18} />Найти</button>
+    </div>
+    <div class="qf-row">
+      <a class="chip" aria-current={(staff) ? 'true' : undefined} href={`/admin/users${keep({ staff: staff ? '' : '1' })}`}>Сотрудники</a>
+      <a class="chip" aria-current={(blocked) ? 'true' : undefined} href={`/admin/users${keep({ blocked: blocked ? '' : '1' })}`}>Заблокированные</a>
+    </div>
+  </form>
+  {!items ? (
+    <p class="banner is-err" role="alert"><Icon name="circle-alert" size={20} />Не удалось загрузить пользователей.</p>
+  ) : items.length === 0 ? (
+    <div class="empty"><Icon name="users" size={32} /><h2>Никого не нашли</h2></div>
+  ) : (
+    <>
+      <table class="tbl" data-users>
+        <thead><tr><th>Кто</th><th>Почта</th><th>Профили</th><th>Роль</th><th>Зарегистрирован</th><th>Вход</th></tr></thead>
+        <tbody>
+          {items.map((u) => (
+            <tr data-user={u.id}>
+              <td><a class="row-lnk" href={`/admin/users/${u.id}`}>{u.name || `id ${u.id}`}</a>{u.blocked && <span class="tag is-err" style="margin-left:6px">заблокирован</span>}</td>
+              <td data-l="Почта">{u.email || '—'}</td>
+              <td data-l="Профили">{[u.businessName, u.creatorName].filter(Boolean).join(' · ') || '—'}</td>
+              <td data-l="Роль">{u.role ? <span class="tag is-ok">{ROLE_TITLE[u.role]}</span> : '—'}</td>
+              <td class="num" data-l="Зарегистрирован">{when(u.createdAt)}</td>
+              <td class="num" data-l="Вход">{when(u.lastLoginAt)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <div class="pager">
+        {offset > 0 ? <a class="btn pill-ghost" href={`/admin/users${keep({ offset: Math.max(0, offset - 50) })}`}>Назад</a> : <span></span>}
+        {items.length === 50 && <a class="btn pill-ghost" href={`/admin/users${keep({ offset: offset + 50 })}`}>Дальше</a>}
+      </div>
+    </>
+  )}
+</Admin>

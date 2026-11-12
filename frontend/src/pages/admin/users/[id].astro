@@ -1,0 +1,118 @@
+---
+// Карточка пользователя: общие данные, профили, способы входа, задания и анкета, соцсети, входы, решения и жалобы.
+// Блокировка и разблокировка с причиной (блок — выход везде, контент скрыт из ленты); роль и сброс 2FA — только
+// администратор.
+import Admin from '../../../layouts/Admin.astro';
+import Icon from '../../../components/Icon.astro';
+import { ACTION_TITLE, adminGet, can, COMPLAINT_REASON, KIND_TITLE, PROVIDER_TITLE, ROLE_TITLE, when, type UserCard } from '../../../lib/admin';
+import { STATUS, PLATFORM_TITLE } from '../../../content/app';
+
+const adm = Astro.locals.admin!;
+const me = Astro.locals.me!;
+const id = Astro.params.id ?? '';
+const r = /^\d+$/.test(id) ? await adminGet<UserCard>(Astro.request, `/api/admin/users/${id}`) : null;
+if (!r || !r.ok) Astro.response.status = 404;
+const c = r && r.ok ? r.data : null;
+const u = c?.user;
+const self = u?.id === me.user.id;
+const canBlock = !!u && !self && can(adm, 'users.block') && (!u.role || can(adm, 'staff.block'));
+---
+<Admin title={u?.name || 'Пользователь'} page="users">
+  <a class="btn pill-text back-lnk" href="/admin/users"><Icon name="arrow-left" size={18} />Пользователи</a>
+  {!c || !u ? (
+    <div class="empty"><Icon name="inbox" size={32} /><h2>Не найдено</h2></div>
+  ) : (
+    <div class="rv">
+      <div class="rv-main">
+        <div class="head"><h1>{u.name || `id ${u.id}`}</h1>{u.blocked ? <span class="st" data-s="rejected">Заблокирован</span> : u.role ? <span class="st" data-s="published">{ROLE_TITLE[u.role]}</span> : null}</div>
+        {u.blocked && <p class="banner is-err" role="status"><Icon name="ban" size={20} />{u.blockedReason} · {when(u.blockedAt)}</p>}
+        <dl class="kv">
+          <div><dt>id</dt><dd>{u.id}</dd></div>
+          <div><dt>Почта</dt><dd>{u.email || '—'}</dd></div>
+          <div><dt>Город</dt><dd>{u.city || '—'}</dd></div>
+          <div><dt>Способы входа</dt><dd>{c.providers.map((p) => PROVIDER_TITLE[p] ?? p).join(', ') || '—'}</dd></div>
+          <div><dt>Бизнес</dt><dd>{c.business ? `${c.business.name}, ${c.business.city}` : '—'}</dd></div>
+          <div><dt>Автор</dt><dd>{c.creator ? `${c.creator.name}, ${c.creator.city}` : '—'}</dd></div>
+          <div><dt>Зарегистрирован</dt><dd>{when(u.createdAt)}</dd></div>
+          <div><dt>Последний вход</dt><dd>{when(u.lastLoginAt)}</dd></div>
+        </dl>
+
+        <section class="sec">
+          <h2 class="sec-h">Задания: {c.tasks.length}</h2>
+          {c.tasks.length > 0 && (
+            <table class="tbl">
+              <thead><tr><th>Название</th><th>Статус</th><th>Изменено</th></tr></thead>
+              <tbody>{c.tasks.map((t) => <tr><td>{t.status === 'pending_review' ? <a class="row-lnk" href={`/admin/review/task/${t.id}`}>{t.title || 'Без названия'}</a> : t.title || 'Без названия'}</td><td data-l="Статус"><span class="st" data-s={t.status}>{STATUS[t.status]}</span>{t.revision && <span class="tag" style="margin-left:6px">правка: {STATUS[t.revision.status]}</span>}</td><td class="num" data-l="Изменено">{when(t.updatedAt)}</td></tr>)}</tbody>
+            </table>
+          )}
+        </section>
+        <section class="sec">
+          <h2 class="sec-h">Анкета</h2>
+          {c.card ? <p><span class="st" data-s={c.card.status}>{STATUS[c.card.status]}</span> {c.card.name}, {c.card.city}</p> : <p class="muted">Нет</p>}
+        </section>
+        <section class="sec">
+          <h2 class="sec-h">Соцсети</h2>
+          {c.socials.length === 0 ? <p class="muted">Нет</p> : (
+            <ul class="rows">{c.socials.map((s) => <li><Icon name={s.status === 'verified' ? 'badge-check' : 'circle-alert'} size={20} /><div><p class="row-t">{PLATFORM_TITLE[s.platform] ?? s.platform} · {s.url ? <a href={s.url} target="_blank" rel="noopener nofollow ugc">{s.title || s.handle}</a> : s.title || s.handle}</p><p class="row-s">{s.status === 'verified' ? `подтверждено ${when(s.verifiedAt)}` : s.status}</p></div><span class="row-v">{s.followers.toLocaleString('ru-RU')}</span></li>)}</ul>
+          )}
+        </section>
+        <section class="sec">
+          <h2 class="sec-h">Входы</h2>
+          {c.logins.length === 0 ? <p class="muted">Нет записей</p> : (
+            <table class="tbl"><thead><tr><th>Когда</th><th>Способ</th><th>Устройство</th><th>Адрес</th></tr></thead>
+              <tbody>{c.logins.map((l) => <tr><td class="num">{when(l.at)}</td><td data-l="Способ">{PROVIDER_TITLE[l.method] ?? l.method}</td><td data-l="Устройство">{l.device}</td><td class="num" data-l="Адрес">{l.ip}</td></tr>)}</tbody></table>
+          )}
+        </section>
+      </div>
+      <aside class="rv-side">
+        {!self && (
+          <section class="rv-box">
+            <h2>Действия</h2>
+            {canBlock && (u.blocked ? (
+              <form class="rv-form" data-act={`POST /api/admin/users/${u.id}/unblock`} novalidate>
+                <label class="lbl" for="ub-r">Причина разблокировки</label>
+                <input class="inp" id="ub-r" name="reason" maxlength="500" data-input="reason" />
+                <p class="ferr" data-err="reason"></p>
+                <button class="btn pill-dark" type="submit">Разблокировать</button>
+              </form>
+            ) : (
+              <form class="rv-form" data-act={`POST /api/admin/users/${u.id}/block`} data-confirm="Заблокировать?|Вход закроется, все сеансы завершатся, задания и анкета пропадут из ленты.|Заблокировать" novalidate>
+                <label class="lbl" for="b-r">Причина блокировки</label>
+                <input class="inp" id="b-r" name="reason" maxlength="500" data-input="reason" />
+                <p class="ferr" data-err="reason"></p>
+                <button class="btn pill-danger-ol" type="submit" data-block><Icon name="ban" size={18} />Заблокировать</button>
+              </form>
+            ))}
+            {can(adm, 'staff.manage') && !u.blocked && (
+              <form class="rv-form" data-act={`PUT /api/admin/users/${u.id}/role`} novalidate>
+                <p class="lbl">Роль: {ROLE_TITLE[u.role]}</p>
+                <div class="tpls">
+                  {u.role !== 'moderator' && <button class="chip" type="submit" name="role" value="moderator">Сделать модератором</button>}
+                  {u.role !== 'admin' && <button class="chip" type="submit" name="role" value="admin" data-confirm="Сделать администратором?|Администратор управляет ролями, режимом проверки и видит журнал.|Сделать">Сделать администратором</button>}
+                  {u.role && <button class="chip" type="submit" name="role" value="" data-confirm="Снять роль?|Доступ к админке закроется.|Снять">Снять роль</button>}
+                </div>
+              </form>
+            )}
+            {can(adm, 'staff.manage') && u.role && (
+              <form class="rv-form" data-act={`POST /api/admin/users/${u.id}/reset-2fa`} data-confirm="Сбросить 2FA?|При следующем входе сотрудник настроит защиту заново.|Сбросить" data-done="2FA сброшена" novalidate>
+                <button class="btn pill-ghost" type="submit">Сбросить 2FA</button>
+              </form>
+            )}
+          </section>
+        )}
+        {c.decisions.length > 0 && (
+          <section class="rv-box">
+            <h2>Решения по его заданиям и анкете</h2>
+            <ul class="rv-hist">{c.decisions.map((d) => <li><span><b>{ACTION_TITLE[d.action]}</b> · {KIND_TITLE[d.type]} #{d.itemId}</span>{d.reason && <span class="muted">{d.reason}</span>}<span class="muted">{when(d.createdAt)}</span></li>)}</ul>
+          </section>
+        )}
+        {c.complaints.length > 0 && (
+          <section class="rv-box">
+            <h2>Жалобы на него: {c.complaints.length}</h2>
+            <ul class="rv-hist">{c.complaints.map((x) => <li><span><a href={`/admin/complaints/${x.subject}/${x.subjectId}`}>{COMPLAINT_REASON[x.reason] ?? x.reason}</a></span><span class="muted">{when(x.createdAt)}</span></li>)}</ul>
+          </section>
+        )}
+      </aside>
+    </div>
+  )}
+</Admin>

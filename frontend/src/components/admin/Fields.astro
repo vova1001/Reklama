@@ -1,0 +1,47 @@
+---
+// Все поля задания или анкеты строками «поле — значение» (для модератора); с live — правка: изменённые поля
+// подсвечены, рядом — что было.
+import { formatsTitle, rub, until } from '../../lib/format';
+import type { Task, Card } from '../../lib/auth';
+interface Props { task?: Task; live?: Task | null; card?: Card; liveCard?: Card | null }
+const { task, live, card, liveCard } = Astro.props;
+const blocks = (bs: { title: string; items: string[] }[]) => bs.map((b) => `${b.title ? b.title + ': ' : ''}${b.items.join(' · ')}`).join('\n');
+type Row = [string, string, string | null];
+const rows: Row[] = [];
+if (task) {
+  const v = (t: Task) => ({
+    'Название': t.title,
+    'Сферы': (t.categoryTitles?.length ? t.categoryTitles : t.categories).join(', '),
+    'Город': t.nationwide ? 'Вся Россия' : t.city,
+    'Форматы': formatsTitle(t.formats),
+    'Кто берёт': t.access === 'approval' ? 'С одобрением' : 'Любой автор',
+    'Просмотры': String(t.minViews),
+    'Оплата': rub(t.rewardKopecks),
+    'Срок': t.publishBy ? until(t.publishBy, t.publishTime) : '—',
+    'Описание': blocks(t.blocks),
+    'Фото': `${t.cover ? 'обложка + ' : ''}${t.photos.length}`,
+  });
+  const n = v(task), o = live ? v(live) : null;
+  for (const k of Object.keys(n) as (keyof typeof n)[]) rows.push([k, n[k] || '—', o ? o[k] || '—' : null]);
+}
+if (card) {
+  const v = (c: Card) => ({
+    'Имя': c.name,
+    'Город': c.city,
+    'Темы': (c.topicTitles?.length ? c.topicTitles : c.topics).join(', '),
+    'Соцсети': c.platforms.map((p) => `${p.kind}: ${p.title || p.handle} (${p.followersHidden ? 'скрыто' : p.followers})`).join('\n') || 'нет подтверждённых',
+    'О себе': blocks(c.blocks),
+    'Фото': `${c.avatar ? 'аватар + ' : ''}${c.works.length}`,
+  });
+  const n = v(card), o = liveCard ? v(liveCard) : null;
+  for (const k of Object.keys(n) as (keyof typeof n)[]) rows.push([k, n[k] || '—', o ? o[k] || '—' : null]);
+}
+---
+<dl class="rv-raw">
+  {rows.map(([k, nv, ov]) => (
+    <div class={ov !== null && ov !== nv ? 'is-changed' : undefined}>
+      <dt>{k}</dt>
+      <dd>{nv}{ov !== null && ov !== nv && <span class="json">было: {ov}</span>}</dd>
+    </div>
+  ))}
+</dl>

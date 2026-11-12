@@ -1,0 +1,57 @@
+---
+// Админка: тот же минимализм приложения, плотнее. Слева — разделы (по правам роли), справа — широкая колонка
+// (таблицы и списки). Телефон — разделы строкой прокрутки сверху. Страницы не кэшируются и не индексируются
+// (заголовки — в middleware).
+import Base from './Base.astro';
+import Mark from '../components/Mark.astro';
+import Icon from '../components/Icon.astro';
+import Overlays from '../components/app/Overlays.astro';
+import { can, ROLE_TITLE } from '../lib/admin';
+import '../styles/auth.css';
+import '../styles/app.css';
+import '../styles/admin.css';
+
+export type AdminPage = 'dashboard' | 'queue' | 'complaints' | 'users' | 'audit' | 'settings' | '2fa';
+interface Props { title: string; page: AdminPage; bare?: boolean }
+const { title, page, bare = false } = Astro.props;
+const me = Astro.locals.me!;
+const adm = Astro.locals.admin!;
+const nav: { id: AdminPage; title: string; icon: string; href: string; perm: string }[] = [
+  { id: 'dashboard', title: 'Сводка', icon: 'gauge', href: '/admin', perm: 'dashboard' },
+  { id: 'queue', title: 'Проверка', icon: 'list-checks', href: '/admin/queue', perm: 'review' },
+  { id: 'complaints', title: 'Жалобы', icon: 'flag', href: '/admin/complaints', perm: 'complaints' },
+  { id: 'users', title: 'Пользователи', icon: 'users', href: '/admin/users', perm: 'users.view' },
+  { id: 'audit', title: 'Журнал', icon: 'scroll-text', href: '/admin/audit', perm: 'audit.view' },
+  { id: 'settings', title: 'Настройки', icon: 'settings-2', href: '/admin/settings', perm: 'settings' },
+];
+const items = bare ? [] : nav.filter((n) => can(adm, n.perm));
+---
+<Base title={`${title} — админка Охвата`} description="Админка Охвата." noindex theme="#FFFFFF" bodyClass="app-body">
+  <div class="app adm" data-app data-admin data-role={adm.role} data-undo={adm.undoSeconds}>
+    <a class="skip" href="#main">К содержимому</a>
+    <aside class="rail" aria-label="Разделы админки">
+      <a class="rail-logo" href="/admin" aria-label="Админка — сводка"><Mark size={30} /><b>Охват</b></a>
+      <nav class="rail-nav" aria-label="Разделы">
+        {items.map((n) => (
+          <a class="nv" href={n.href} aria-current={page === n.id ? 'page' : undefined} data-tip={n.title}><Icon name={n.icon} size={24} /><span>{n.title}</span></a>
+        ))}
+      </nav>
+      <div class="adm-who">
+        <p class="adm-role"><Icon name="shield-check" size={18} /><span>{ROLE_TITLE[adm.role]}</span></p>
+        <p class="adm-mail">{me.user.email ?? me.user.name}</p>
+        <a class="nv" href="/app" data-tip="В приложение"><Icon name="arrow-left" size={24} /><span>В приложение</span></a>
+      </div>
+    </aside>
+    {!bare && (
+      <nav class="adm-tabs" aria-label="Разделы админки">
+        {items.map((n) => <a href={n.href} aria-current={page === n.id ? 'page' : undefined}><Icon name={n.icon} size={18} />{n.title}</a>)}
+        <a href="/app"><Icon name="arrow-left" size={18} />Приложение</a>
+      </nav>
+    )}
+    <main id="main" class="col is-adm" tabindex="-1">
+      <slot />
+    </main>
+    <Overlays />
+  </div>
+</Base>
+<script src="../scripts/admin/common.ts"></script>

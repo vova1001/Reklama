@@ -1,0 +1,58 @@
+---
+// Жалобы на предмет: сам предмет (как видят пользователи), все жалобы, решение — «Жалоба не подтвердилась»,
+// «Снять с публикации» (причину увидит владелец), «Заблокировать владельца».
+import Admin from '../../../../layouts/Admin.astro';
+import Icon from '../../../../components/Icon.astro';
+import TaskPage from '../../../../components/app/TaskPage.astro';
+import CreatorPage from '../../../../components/app/CreatorPage.astro';
+import { adminGet, COMPLAINT_REASON, SUBJECT_TITLE, when, type ComplaintCase } from '../../../../lib/admin';
+
+const { subject = '', id = '' } = Astro.params;
+const r = subject in SUBJECT_TITLE && /^\d+$/.test(id) ? await adminGet<ComplaintCase>(Astro.request, `/api/admin/complaints/${subject}/${id}`) : null;
+if (!r || !r.ok) Astro.response.status = 404;
+const c = r && r.ok ? r.data : null;
+const open = c?.complaints.some((x) => x.status === 'open');
+---
+<Admin title="Жалоба" page="complaints">
+  <a class="btn pill-text back-lnk" href="/admin/complaints"><Icon name="arrow-left" size={18} />Жалобы</a>
+  {!c ? (
+    <div class="empty"><Icon name="inbox" size={32} /><h2>Не найдено</h2></div>
+  ) : (
+    <div class="rv">
+      <div class="rv-main">
+        <p class="sub">{SUBJECT_TITLE[c.subject]} #{c.id}{c.target && <> · <a href={`/admin/users/${c.target.id}`}>{c.target.businessName || c.target.creatorName || c.target.name || c.target.email}</a></>}</p>
+        {c.task && <TaskPage task={c.task} />}
+        {c.card && <CreatorPage card={c.card} topics={c.card.topicTitles ?? c.card.topics} />}
+        {!c.task && !c.card && c.subject !== 'user' && <p class="banner">Уже не опубликовано.</p>}
+      </div>
+      <aside class="rv-side">
+        {open && (
+          <section class="rv-box" data-resolve>
+            <h2>Решение</h2>
+            <form class="rv-form" data-act={`POST /api/admin/complaints/${c.subject}/${c.id}/resolve`} data-done="/admin/complaints" novalidate>
+              <label class="lbl" for="c-note">Причина (увидит владелец)</label>
+              <textarea class="inp" id="c-note" name="note" maxlength="500" rows="3" data-input="note"></textarea>
+              <p class="ferr" data-err="note" role="alert"></p>
+              <button class="btn pill-ghost" type="submit" name="action" value="dismiss">Жалоба не подтвердилась</button>
+              {c.subject !== 'user' && <button class="btn pill-dark" type="submit" name="action" value="hide" data-confirm="Снять с публикации?|Владелец увидит причину и сможет исправить.|Снять">Снять с публикации</button>}
+              <button class="btn pill-danger-ol" type="submit" name="action" value="block" data-confirm="Заблокировать владельца?|Вход закроется, все сеансы завершатся, задания и анкета пропадут из ленты.|Заблокировать">Заблокировать владельца</button>
+            </form>
+          </section>
+        )}
+        <section class="rv-box">
+          <h2>Жалобы: {c.complaints.length}</h2>
+          <ul class="rv-hist">
+            {c.complaints.map((x) => (
+              <li>
+                <span><b>{COMPLAINT_REASON[x.reason] ?? x.reason}</b> · {x.status === 'open' ? 'открыта' : x.status === 'dismissed' ? 'не подтвердилась' : 'решена'}</span>
+                {x.comment && <span>{x.comment}</span>}
+                <span class="muted">{when(x.createdAt)} · {x.reporter || `id ${x.reporterId}`}</span>
+                {x.resolution && <span class="muted">Решение: {x.resolution}</span>}
+              </li>
+            ))}
+          </ul>
+        </section>
+      </aside>
+    </div>
+  )}
+</Admin>

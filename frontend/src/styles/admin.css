@@ -1,0 +1,120 @@
+/* Админка: те же токены и компоненты приложения (app.css), плотнее — таблицы и списки строками 44–48px.
+   Значения — только из токенов (project/design/tokens.md). */
+.col.is-adm > * { max-width: 1120px; }
+@media (min-width: 768px) { .col.is-adm { padding: 24px 28px 64px; } }
+.adm .rail-nav { gap: 2px; }
+.adm-who { margin-top: auto; display: grid; gap: 4px; }
+.adm-role { display: inline-flex; align-items: center; gap: 8px; padding: 0 10px; font-size: 14px; font-weight: 600; color: var(--color-emerald-ink); }
+.adm-mail { padding: 0 10px 6px; font-size: 13px; color: var(--color-gray); overflow-wrap: anywhere; }
+@media (min-width: 768px) and (max-width: 1199px) { .adm-role span, .adm-mail { display: none; } .adm-role { justify-content: center; } }
+
+/* телефон: разделы строкой */
+.adm-tabs { display: flex; gap: 4px; overflow-x: auto; padding: 10px 12px; border-bottom: 1px solid var(--color-line); scrollbar-width: none; position: sticky; top: 0; z-index: 30; background: var(--color-card); }
+.adm-tabs::-webkit-scrollbar { display: none; }
+.adm-tabs a { flex: none; display: inline-flex; align-items: center; gap: 6px; min-height: 44px; padding: 0 14px; border-radius: 999px; font-size: 15px; font-weight: 550; color: var(--color-gray); }
+.adm-tabs a[aria-current='page'] { background: var(--color-ink); color: #fff; }
+.adm-tabs a[aria-current='page'] .ic { color: #fff; }
+@media (min-width: 768px) { .adm-tabs { display: none; } }
+
+.adm h1 { font-size: 24px; }
+@media (min-width: 768px) { .adm h1 { font-size: 26px; } }
+.adm .sub { font-size: 14px; }
+
+/* цифры сводки */
+.stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0; margin-top: 16px; border-top: 1px solid var(--color-line); }
+@media (min-width: 768px) { .stats { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+.stat { padding: 16px 12px 16px 0; border-bottom: 1px solid var(--color-line); min-width: 0; }
+.stat dt { font-size: 14px; color: var(--color-gray); }
+.stat dd { margin-top: 4px; font-size: 28px; font-weight: 680; letter-spacing: -0.03em; font-variant-numeric: tabular-nums; }
+.stat dd small { font-size: 14px; font-weight: 500; color: var(--color-gray); letter-spacing: 0; }
+.stat a { color: inherit; }
+
+/* отбор очереди */
+.qf { display: grid; gap: 10px; margin-top: 16px; }
+.qf-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.qf .inp { height: 44px; font-size: 15px; border-radius: 12px; padding: 0 12px; flex: 1 1 160px; min-width: 0; }
+.qf .inp.sm { flex: 0 1 150px; }
+.qf .chip { min-height: 36px; font-size: 14px; padding: 0 12px; background: var(--color-card); box-shadow: inset 0 0 0 1px var(--color-line); color: var(--color-ink); }
+.qf .chip[aria-pressed='true'], .qf .chip[aria-current='true'] { background: var(--color-ink); color: #fff; box-shadow: none; }
+.qf-sum { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; font-size: 15px; color: var(--color-gray); }
+.qf-sum b { color: var(--color-ink); font-variant-numeric: tabular-nums; }
+.lbl-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+/* таблица: строка 48px, линии 1px, на телефоне — карточки строками */
+.tbl { width: 100%; margin-top: 12px; border-collapse: collapse; font-size: 15px; }
+.tbl th { text-align: left; font-size: 13px; font-weight: 600; color: var(--color-gray); padding: 8px 12px 8px 0; border-bottom: 1px solid var(--color-line); white-space: nowrap; }
+.tbl td { padding: 10px 12px 10px 0; border-bottom: 1px solid var(--color-line); vertical-align: middle; overflow-wrap: anywhere; }
+.tbl tr { position: relative; }
+.tbl td.num { font-variant-numeric: tabular-nums; white-space: nowrap; color: var(--color-gray); }
+.tbl a.row-lnk { color: var(--color-ink); font-weight: 600; }
+.tbl a.row-lnk::after { content: ''; position: absolute; inset: 0; }
+@media (hover: hover) { .tbl tbody tr:hover { background: var(--color-panel); } }
+.tbl .tag { display: inline-flex; align-items: center; min-height: 26px; padding: 0 10px; border-radius: 999px; background: var(--color-panel); font-size: 13px; font-weight: 550; white-space: nowrap; }
+.tbl .tag.is-err { background: rgba(var(--err), 0.07); color: var(--color-error); }
+.tbl .tag.is-ok { background: var(--color-emerald-soft); color: var(--color-emerald-ink); }
+@media (max-width: 767px) {
+  .tbl thead { display: none; }
+  .tbl, .tbl tbody, .tbl tr, .tbl td { display: block; width: 100%; }
+  .tbl tr { padding: 10px 0; border-bottom: 1px solid var(--color-line); }
+  .tbl td { border: 0; padding: 2px 0; }
+  .tbl td[data-l]::before { content: attr(data-l) ': '; color: var(--color-gray); font-size: 13px; }
+}
+.pager { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-top: 16px; }
+
+/* карточка проверки: слева — как увидят, справа — решения (липко) */
+.rv { display: grid; gap: 24px; margin-top: 12px; }
+@media (min-width: 1100px) { .rv { grid-template-columns: minmax(0, 1fr) 360px; align-items: start; } }
+.rv-side { display: grid; gap: 16px; }
+@media (min-width: 1100px) { .rv-side { position: sticky; top: 16px; } }
+.rv-box { padding: 16px; border-radius: 14px; box-shadow: inset 0 0 0 1px var(--color-line); }
+.rv-box h2 { font-size: 16px; font-weight: 650; }
+.rv-box .muted { margin-top: 2px; font-size: 14px; }
+.rv-acts { display: grid; gap: 8px; margin-top: 12px; }
+.rv-acts .btn { justify-content: space-between; width: 100%; }
+.kbd { display: inline-flex; align-items: center; justify-content: center; min-width: 24px; height: 24px; padding: 0 6px; border-radius: 6px; font-size: 13px; font-weight: 600; background: rgba(255, 255, 255, 0.18); }
+.pill-ghost .kbd, .pill-danger-ol .kbd { background: var(--color-panel); color: var(--color-gray); }
+.rv-form { display: grid; gap: 10px; margin-top: 12px; }
+.rv-form[hidden] { display: none; }
+.rv-form textarea.inp, .adm textarea.inp { height: auto; min-height: 88px; padding: 10px 12px; font-size: 15px; line-height: 1.45; resize: vertical; }
+.rv-form .inp { height: 44px; font-size: 15px; border-radius: 12px; padding: 0 12px; }
+.tpls { display: flex; flex-wrap: wrap; gap: 6px; }
+.tpls .chip { min-height: 32px; font-size: 13px; padding: 0 10px; text-align: left; white-space: normal; background: var(--color-card); box-shadow: inset 0 0 0 1px var(--color-line); color: var(--color-ink); }
+.tpls .chip[aria-pressed='true'] { background: var(--color-ink); color: #fff; box-shadow: none; }
+.notes { display: grid; gap: 8px; }
+.note-row { display: grid; gap: 4px; }
+.note-row .lbl { font-size: 14px; margin: 0; }
+.rv-lease { display: flex; align-items: center; gap: 8px; font-size: 14px; color: var(--color-gray); }
+.rv-lease.is-err { color: var(--color-error); }
+.rv-facts { display: grid; gap: 2px; margin-top: 8px; font-size: 14px; }
+.rv-facts div { display: flex; justify-content: space-between; gap: 12px; min-height: 32px; align-items: center; border-bottom: 1px solid var(--color-line); }
+.rv-facts div:last-child { border-bottom: 0; }
+.rv-facts dt { color: var(--color-gray); }
+.rv-facts dd { text-align: right; font-weight: 550; overflow-wrap: anywhere; }
+.rv-hist { display: grid; gap: 6px; margin-top: 8px; font-size: 14px; }
+.rv-hist li { display: grid; gap: 2px; padding-bottom: 6px; border-bottom: 1px solid var(--color-line); }
+.rv-hist li:last-child { border-bottom: 0; }
+.rv-hist .muted { font-size: 13px; margin: 0; }
+.rv-diff { margin-top: 16px; }
+.rv-diff summary { cursor: pointer; min-height: 44px; display: flex; align-items: center; font-size: 15px; font-weight: 600; }
+.rv-raw { display: grid; gap: 0; margin-top: 8px; font-size: 14px; }
+.rv-raw div { display: grid; grid-template-columns: 140px minmax(0, 1fr); gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--color-line); }
+.rv-raw dt { color: var(--color-gray); }
+.rv-raw dd { overflow-wrap: anywhere; white-space: pre-wrap; }
+.rv-raw .is-changed dd { background: var(--color-emerald-soft); border-radius: 6px; padding: 0 4px; }
+.keys { font-size: 13px; color: var(--color-gray); }
+
+/* 2FA */
+.tfa { max-width: 480px !important; }
+.tfa-qr { display: block; width: 216px; height: 216px; margin-top: 16px; border-radius: 12px; box-shadow: inset 0 0 0 1px var(--color-line); image-rendering: pixelated; }
+.tfa-key { margin-top: 8px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 15px; letter-spacing: 0.06em; overflow-wrap: anywhere; user-select: all; }
+.tfa .otp-one { height: 56px; font-size: 24px; letter-spacing: 0.3em; text-align: center; font-variant-numeric: tabular-nums; }
+.codes { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px 16px; margin-top: 12px; padding: 14px; border-radius: 12px; background: var(--color-panel);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 16px; user-select: all; }
+
+/* пользователь */
+.kv { display: grid; gap: 0; margin-top: 8px; font-size: 15px; }
+.kv div { display: grid; grid-template-columns: minmax(120px, 200px) minmax(0, 1fr); gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--color-line); }
+.kv dt { color: var(--color-gray); }
+.kv dd { overflow-wrap: anywhere; }
+.acts { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.json { margin-top: 4px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; color: var(--color-gray); white-space: pre-wrap; overflow-wrap: anywhere; }

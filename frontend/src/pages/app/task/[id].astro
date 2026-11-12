@@ -3,6 +3,7 @@
 import App from '../../../layouts/App.astro';
 import Icon from '../../../components/Icon.astro';
 import TaskPage from '../../../components/app/TaskPage.astro';
+import Complain from '../../../components/app/Complain.astro';
 import { fetchPublicTask } from '../../../lib/auth';
 
 const me = Astro.locals.me;
@@ -20,6 +21,7 @@ if (!task) Astro.response.status = 404;
       <div class="cta">
         <button class="btn pill-emerald" type="button" data-soon="Отклики появятся в ближайшем обновлении"><Icon name="send" size={18} />Откликнуться</button>
       </div>
+      <Complain subject="task" id={task.id} />
     </TaskPage>
   )}
 </App>

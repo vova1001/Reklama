@@ -1,0 +1,62 @@
+---
+// 2FA для админки: настройка (QR-код или ключ → первый код → резервные коды, показываются один раз) или
+// подтверждение кодом из приложения / резервным кодом. Подтверждение действует 12 часов.
+import Admin from '../../layouts/Admin.astro';
+import Icon from '../../components/Icon.astro';
+
+const tf = Astro.locals.admin!.twoFactor;
+const mode = !tf.enabled ? 'setup' : tf.verified ? 'done' : 'verify';
+const next = Astro.url.searchParams.get('next') ?? '';
+const safeNext = next.startsWith('/admin') && !next.startsWith('//') ? next : '/admin';
+---
+<Admin title="Двухфакторная защита" page="2fa" bare>
+  <div class="tfa" data-tfa={mode} data-next={safeNext}>
+    <h1>{mode === 'setup' ? 'Настройте вход по коду' : 'Подтвердите вход'}</h1>
+    {mode === 'setup' && (
+      <>
+        <p class="sub">Админка открывается только с кодом из приложения: Google Authenticator, Яндекс Ключ, 1Password и т. п.</p>
+        <div data-step="start">
+          <button class="btn pill-emerald" type="button" style="margin-top:20px" data-tfa-start><Icon name="shield-check" size={18} />Начать настройку</button>
+        </div>
+        <div data-step="scan" hidden>
+          <p class="muted" style="margin-top:16px">1. Отсканируйте QR-код в приложении или введите ключ вручную.</p>
+          <img class="tfa-qr" alt="QR-код для приложения" data-tfa-qr width="216" height="216" />
+          <p class="tfa-key" data-tfa-key></p>
+          <form class="form" data-tfa-confirm novalidate>
+            <div class="field">
+              <label class="lbl" for="tfa-code">2. Код из приложения</label>
+              <input class="inp otp-one" id="tfa-code" name="code" inputmode="numeric" autocomplete="one-time-code" maxlength="6" data-input="code" required />
+              <p class="ferr" data-err="code" role="alert"></p>
+            </div>
+            <button class="btn pill-emerald" type="submit">Включить</button>
+          </form>
+        </div>
+        <div data-step="codes" hidden>
+          <p class="banner is-ok" role="status"><Icon name="check" size={20} />Защита включена.</p>
+          <p class="muted" style="margin-top:16px">Резервные коды — на случай, если телефона не будет под рукой. Каждый работает один раз. Сохраните их сейчас — больше их не покажем.</p>
+          <div class="codes" data-tfa-codes></div>
+          <a class="btn pill-emerald" style="margin-top:20px" href={safeNext}>Я сохранил коды — в админку</a>
+        </div>
+      </>
+    )}
+    {mode === 'verify' && (
+      <>
+        <p class="sub">Введите код из приложения. Подтверждение действует 12 часов.</p>
+        <form class="form" data-tfa-verify novalidate>
+          <div class="field">
+            <label class="lbl" for="tfa-code">Код из приложения или резервный код</label>
+            <input class="inp otp-one" id="tfa-code" name="code" autocomplete="one-time-code" maxlength="11" data-input="code" autofocus required />
+            <p class="ferr" data-err="code" role="alert"></p>
+          </div>
+          <button class="btn pill-emerald" type="submit">Подтвердить</button>
+        </form>
+      </>
+    )}
+    {mode === 'done' && (
+      <>
+        <p class="sub">Вход подтверждён. Резервных кодов осталось: {tf.backupLeft}.</p>
+        <a class="btn pill-emerald" style="margin-top:20px" href={safeNext}>В админку</a>
+      </>
+    )}
+  </div>
+</Admin>

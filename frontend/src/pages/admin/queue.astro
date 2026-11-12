@@ -1,0 +1,109 @@
+---
+// Очередь проверки: задания, анкеты, правки опубликованного, свои сферы и форматы. Отбор (тип, сфера, город,
+// когда отправлено), поиск, «старые первыми». Взятые другими модераторами не видны. «Начать проверку» — берёт
+// первый по отбору и открывает карточку; дальше — следующий автоматически.
+import Admin from '../../layouts/Admin.astro';
+import Icon from '../../components/Icon.astro';
+import { adminGet, KIND_TITLE, qs, reviewHref, waited, type Queue, type ReviewKind } from '../../lib/admin';
+import { fetchCategories } from '../../lib/auth';
+
+const sp = Astro.url.searchParams;
+const kinds = sp.getAll('type').filter((k): k is ReviewKind => k in KIND_TITLE);
+const cats = sp.getAll('category');
+const city = (sp.get('city') ?? '').slice(0, 100);
+const q = (sp.get('q') ?? '').slice(0, 100);
+const sort = sp.get('sort') === 'newest' ? 'newest' : 'oldest';
+const period = sp.get('period') ?? '';
+const offset = Math.max(0, Number(sp.get('offset')) || 0);
+const PAGE = 50;
+
+// период — от и до по Москве (сервер принимает даты ГГГГ-ММ-ДД)
+const day = (d: number) => new Date(Date.now() + 3 * 3600_000 - d * 86400_000).toISOString().slice(0, 10);
+const PERIODS: Record<string, { title: string; from?: string; to?: string }> = {
+  today: { title: 'Сегодня', from: day(0) },
+  '3d': { title: '3 дня', from: day(2) },
+  week: { title: 'Неделя', from: day(6) },
+  older: { title: 'Старше недели', to: day(7) },
+};
+const per = PERIODS[period];
+const [r, categories] = await Promise.all([
+  adminGet<Queue>(Astro.request, `/api/admin/queue${qs({ type: kinds, category: cats, city, q, sort, from: per?.from, to: per?.to, limit: PAGE, offset })}`),
+  fetchCategories(Astro.request),
+]);
+const data = r.ok ? r.data : null;
+const catTitle = (s: string) => categories.common.find((c) => c.slug === s)?.title ?? s;
+const keep = (o: Record<string, string | number | undefined>) => qs({ type: kinds, category: cats, city, q, sort, period, ...o });
+---
+<Admin title="Проверка" page="queue">
+  <div class="head">
+    <div><h1>Проверка</h1>{data && <p class="sub">В очереди: <b>{data.total}</b>{data.oldest && <> · дольше всех ждёт <b>{waited(data.oldest)}</b></>}</p>}</div>
+    <button class="btn pill-emerald" type="button" data-start-review disabled={!data || data.total === 0}><Icon name="arrow-right" size={18} />Начать проверку</button>
+  </div>
+
+  <form class="qf" method="get" action="/admin/queue" data-queue-filter>
+    <div class="qf-row" role="group" aria-label="Тип">
+      {(Object.keys(KIND_TITLE) as ReviewKind[]).map((k) => (
+        <>
+          <input type="checkbox" class="lbl-sr" name="type" value={k} id={`t-${k}`} checked={kinds.includes(k)} tabindex="-1" aria-hidden="true" />
+          <button type="button" class="chip" aria-pressed={kinds.includes(k) ? "true" : "false"} data-toggle-input={`t-${k}`}>{KIND_TITLE[k]}</button>
+        </>
+      ))}
+    </div>
+    <div class="qf-row" role="group" aria-label="Сфера">
+      {categories.common.map((c) => (
+        <>
+          <input type="checkbox" class="lbl-sr" name="category" value={c.slug} id={`c-${c.slug}`} checked={cats.includes(c.slug)} tabindex="-1" aria-hidden="true" />
+          <button type="button" class="chip" aria-pressed={cats.includes(c.slug) ? "true" : "false"} data-toggle-input={`c-${c.slug}`}>{c.title}</button>
+        </>
+      ))}
+    </div>
+    <div class="qf-row">
+      <label class="lbl-sr" for="qf-q">Поиск</label>
+      <input class="inp" id="qf-q" name="q" value={q} placeholder="Название, имя или id" maxlength="100" />
+      <label class="lbl-sr" for="qf-city">Город</label>
+      <input class="inp sm" id="qf-city" name="city" value={city} placeholder="Город" maxlength="100" />
+      <input type="hidden" name="from" value={per?.from ?? ''} />
+      <input type="hidden" name="to" value={per?.to ?? ''} />
+      <input type="hidden" name="period" value={period} />
+      <input type="hidden" name="sort" value={sort} />
+      <button class="btn pill-dark" type="submit"><Icon name="search" size={18} />Найти</button>
+    </div>
+    <div class="qf-row">
+      <span class="muted">Отправлено:</span>
+      {Object.entries(PERIODS).map(([k, p]) => <a class="chip" aria-current={(period === k) ? 'true' : undefined} href={`/admin/queue${keep({ period: period === k ? '' : k })}`}>{p.title}</a>)}
+      <span class="muted" style="margin-left:8px">Порядок:</span>
+      <a class="chip" aria-current={(sort === 'oldest') ? 'true' : undefined} href={`/admin/queue${keep({ sort: 'oldest' })}`}>Старые первыми</a>
+      <a class="chip" aria-current={(sort === 'newest') ? 'true' : undefined} href={`/admin/queue${keep({ sort: 'newest' })}`}>Новые первыми</a>
+    </div>
+  </form>
+
+  {!data ? (
+    <p class="banner is-err" role="alert"><Icon name="circle-alert" size={20} />Не удалось загрузить очередь. Обновите страницу.</p>
+  ) : data.items.length === 0 ? (
+    <div class="empty"><Icon name="check" size={32} /><h2>Проверять нечего</h2><p>По этому отбору очередь пуста.</p></div>
+  ) : (
+    <>
+      <table class="tbl" data-queue>
+        <thead><tr><th>Тип</th><th>Название</th><th>Кто</th><th>Сфера</th><th>Город</th><th>Ждёт</th></tr></thead>
+        <tbody>
+          {data.items.map((it) => (
+            <tr data-q-item={`${it.type}:${it.id}`}>
+              <td data-l="Тип"><span class="tag">{KIND_TITLE[it.type]}</span>{it.mine && <span class="tag is-ok" style="margin-left:6px">В работе у вас</span>}</td>
+              <td><a class="row-lnk" href={reviewHref(it.type, it.id)}>{it.title || 'Без названия'}</a></td>
+              <td data-l="Кто">{it.ownerName || (it.ownerId ? `id ${it.ownerId}` : '—')}</td>
+              <td data-l="Сфера">{it.categories.map(catTitle).join(', ') || '—'}</td>
+              <td data-l="Город">{it.city || '—'}</td>
+              <td class="num" data-l="Ждёт">{waited(it.waitingSince)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {(offset > 0 || offset + PAGE < data.total) && (
+        <div class="pager">
+          {offset > 0 ? <a class="btn pill-ghost" href={`/admin/queue${keep({ offset: Math.max(0, offset - PAGE) })}`}>Назад</a> : <span></span>}
+          {offset + PAGE < data.total && <a class="btn pill-ghost" href={`/admin/queue${keep({ offset: offset + PAGE })}`}>Дальше</a>}
+        </div>
+      )}
+    </>
+  )}
+</Admin>

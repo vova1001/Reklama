@@ -1,0 +1,22 @@
+---
+// Что сказал модератор: отказ (причина) или «на доработку» (замечания по полям — слова ведут к полю в редакторе).
+// revision — это про правку опубликованного (опубликованная версия видна всем).
+import Icon from '../Icon.astro';
+import { FIELD_TITLE } from '../../content/app';
+interface Props { status?: string | null; reason?: string; notes?: Record<string, string> | null; revision?: boolean }
+const { status, reason = '', notes, revision = false } = Astro.props;
+const list = Object.entries(notes ?? {});
+const what = revision ? 'Изменения' : '';
+---
+{status === 'rejected' && (
+  <p class="banner is-err" role="note"><Icon name="circle-alert" size={20} /><span><b>{revision ? 'Изменения отклонены.' : 'Отклонено.'}</b> {reason}</span></p>
+)}
+{status === 'changes_requested' && list.length > 0 && (
+  <div class="banner is-err" role="note" data-review-notes>
+    <Icon name="circle-alert" size={20} />
+    <div>
+      <p><b>{what ? 'Изменения нужно поправить' : 'Нужно поправить'}</b></p>
+      <ul class="notes-l">{list.map(([f, n]) => <li><b>{FIELD_TITLE[f] ?? f}</b>: {n}</li>)}</ul>
+    </div>
+  </div>
+)}

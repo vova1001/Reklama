@@ -172,7 +172,9 @@ func (f *fakeStaffAccess) AddLoginEvent(_ context.Context, uid int64, method, ip
 	f.events = append(f.events, method+":"+ip)
 	return nil
 }
-func (f *fakeStaffAccess) DeleteLoginEventsBefore(context.Context, time.Time) (int64, error) { return 0, nil }
+func (f *fakeStaffAccess) DeleteLoginEventsBefore(context.Context, time.Time) (int64, error) {
+	return 0, nil
+}
 func (f *fakeStaffAccess) GrantBootstrapAdmin(_ context.Context, uid int64, e domain.AuditEntry) (domain.User, error) {
 	if e.Action != domain.AuditRoleBootstrap {
 		return domain.User{}, errors.New("действие журнала")

@@ -1,0 +1,29 @@
+---
+// «Пожаловаться» на задание, анкету или профиль: свой диалог — причина (одна из списка), комментарий по желанию
+// (для «Другое» — обязателен). Отправка — POST /api/complaints.
+import Icon from '../Icon.astro';
+import { COMPLAINT_REASONS } from '../../content/app';
+interface Props { subject: 'task' | 'creator_card' | 'user'; id: number }
+const { subject, id } = Astro.props;
+const dlgId = `cmp-${subject}-${id}`;
+---
+<button class="btn pill-text cmp-btn" type="button" data-complain={dlgId}><Icon name="flag" size={18} />Пожаловаться</button>
+<dialog class="dlg" id={dlgId} aria-labelledby={`${dlgId}-t`} data-complain-dlg data-subject={subject} data-id={id}>
+  <form class="dlg-card" method="dialog" novalidate>
+    <h2 id={`${dlgId}-t`}>Что не так?</h2>
+    <div class="cmp-reasons" role="radiogroup" aria-label="Причина">
+      {COMPLAINT_REASONS.map((r, i) => (
+        <button type="button" class="cmp-r" role="radio" aria-checked="false" tabindex={i === 0 ? '0' : '-1'} data-reason={r.id}>{r.title}</button>
+      ))}
+    </div>
+    <p class="ferr" data-err="reason" role="alert"></p>
+    <label class="lbl" for={`${dlgId}-c`}>Комментарий <span class="muted">по желанию</span></label>
+    <textarea class="inp cmp-c" id={`${dlgId}-c`} name="comment" maxlength="1000" rows="3" data-input="comment"></textarea>
+    <p class="ferr" data-err="comment" role="alert"></p>
+    <div class="dlg-act">
+      <button class="btn pill-ghost" type="button" value="cancel" data-cmp-cancel>Отмена</button>
+      <button class="btn pill-dark" type="button" data-cmp-send>Отправить</button>
+    </div>
+  </form>
+</dialog>
+<script src="../../scripts/complain.ts"></script>

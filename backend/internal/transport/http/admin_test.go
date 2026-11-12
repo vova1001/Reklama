@@ -38,7 +38,9 @@ func (f *fakeTwoFA) Verify(_ context.Context, _ domain.User, _, code string) err
 	}
 	return nil
 }
-func (f *fakeTwoFA) RegenerateBackup(context.Context, domain.User) ([]string, error) { return []string{"x"}, nil }
+func (f *fakeTwoFA) RegenerateBackup(context.Context, domain.User) ([]string, error) {
+	return []string{"x"}, nil
+}
 func (f *fakeTwoFA) Reset(_ context.Context, actor domain.User, _ int64) error {
 	return service.Authorize(actor, domain.PermManageStaff)
 }
@@ -59,7 +61,9 @@ func (f *fakeReview) Claim(_ context.Context, u domain.User, k domain.ReviewKind
 	}
 	return domain.Lease{Kind: k, ItemID: id, ModeratorID: u.ID, ExpiresAt: day}, service.Authorize(u, domain.PermReview)
 }
-func (f *fakeReview) Release(context.Context, domain.User, domain.ReviewKind, string) error { return nil }
+func (f *fakeReview) Release(context.Context, domain.User, domain.ReviewKind, string) error {
+	return nil
+}
 func (f *fakeReview) Next(_ context.Context, _ domain.User, _ domain.QueueFilter, _ domain.ReviewKind, skip string) (domain.QueueItem, error) {
 	if skip == "last" {
 		return domain.QueueItem{}, domain.ErrNotFound
@@ -148,7 +152,9 @@ func (fakeAuditRepo) SearchAudit(context.Context, domain.AuditFilter) ([]domain.
 
 type fakeSettingsRepo struct{ v string }
 
-func (f *fakeSettingsRepo) Setting(context.Context, string) (string, bool, error) { return f.v, f.v != "", nil }
+func (f *fakeSettingsRepo) Setting(context.Context, string) (string, bool, error) {
+	return f.v, f.v != "", nil
+}
 func (f *fakeSettingsRepo) SetSetting(_ context.Context, _, v string, _ int64, _ domain.AuditEntry) error {
 	f.v = v
 	return nil

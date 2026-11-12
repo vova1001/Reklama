@@ -1,0 +1,46 @@
+---
+// Сводка: что ждёт проверки (по видам, сколько ждёт самое старое), решения за сегодня и неделю, среднее время
+// проверки, новые пользователи, открытые жалобы.
+import Admin from '../../layouts/Admin.astro';
+import Icon from '../../components/Icon.astro';
+import { adminGet, can, KIND_TITLE, waited, type Dashboard } from '../../lib/admin';
+
+const adm = Astro.locals.admin!;
+const r = await adminGet<Dashboard>(Astro.request, '/api/admin/dashboard');
+const d = r.ok ? r.data : null;
+const inQueue = d?.queue.reduce((s, q) => s + q.total, 0) ?? 0;
+const avg = d ? (d.avgReviewSeconds < 3600 ? `${Math.round(d.avgReviewSeconds / 60)} мин` : `${(d.avgReviewSeconds / 3600).toFixed(1).replace('.', ',')} ч`) : '—';
+---
+<Admin title="Сводка" page="dashboard">
+  <div class="head"><h1>Сводка</h1>{can(adm, 'review') && <a class="btn pill-emerald" href="/admin/queue"><Icon name="list-checks" size={18} />К проверке</a>}</div>
+  {!d ? (
+    <p class="banner is-err" role="alert"><Icon name="circle-alert" size={20} />Не удалось загрузить сводку. Обновите страницу.</p>
+  ) : (
+    <>
+      <dl class="stats" data-stats>
+        <div class="stat"><dt>В очереди сейчас</dt><dd data-stat="queue">{inQueue}</dd></div>
+        <div class="stat"><dt>Решено сегодня</dt><dd>{d.decidedToday} <small>за неделю {d.decidedWeek}</small></dd></div>
+        <div class="stat"><dt>Среднее время проверки</dt><dd>{avg} <small>за 7 дней</small></dd></div>
+        <div class="stat"><dt>Новые пользователи</dt><dd>{d.usersToday} <small>за неделю {d.usersWeek}</small></dd></div>
+        <div class="stat"><dt>Открытые жалобы</dt><dd><a href="/admin/complaints">{d.openComplaints}</a></dd></div>
+      </dl>
+      <section class="sec" aria-labelledby="q-h">
+        <h2 class="sec-h" id="q-h">Ждут проверки</h2>
+        {d.queue.length === 0 ? <p class="muted">Очередь пуста.</p> : (
+          <table class="tbl">
+            <thead><tr><th>Что</th><th>Сколько</th><th>Ждёт дольше всех</th></tr></thead>
+            <tbody>
+              {d.queue.map((q) => (
+                <tr>
+                  <td><a class="row-lnk" href={`/admin/queue?type=${q.type}`}>{KIND_TITLE[q.type]}</a></td>
+                  <td class="num" data-l="Сколько">{q.total}</td>
+                  <td class="num" data-l="Ждёт">{waited(q.oldest)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </section>
+    </>
+  )}
+</Admin>
