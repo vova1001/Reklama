@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -78,6 +79,7 @@ type adminEnv struct {
 	staff    *service.StaffUsers
 	compl    *service.Complaints
 	settings *service.Settings
+	box      *service.NoticesBox
 	notified []service.DecisionNotice
 	mu       sync.Mutex
 }
@@ -120,6 +122,7 @@ func newAdminEnv(t *testing.T) *adminEnv {
 		service.ReviewConfig{})
 	e.staff = service.NewStaffUsers(e.admin, nil, e.clock, func(err error) bool { return errors.Is(err, repository.ErrLastAdmin) })
 	e.compl = service.NewComplaints(e.admin, targets{e.list, e.admin}, e.mod, e.staff, e.clock, service.ComplaintsConfig{PerDay: 3})
+	e.box = service.NewNotices(repository.NewNotices(pool))
 	return e
 }
 
@@ -367,6 +370,18 @@ func TestAdminReviewFlow(t *testing.T) {
 	if len(e.notified) != 1 || e.notified[0].Action != domain.ActionRework || e.notified[0].Path == "" {
 		t.Errorf("уведомление: %+v", e.notified)
 	}
+	// in-app уведомление: появилось вместе с применением решения, свои поля, непрочитанное; чужим не видно
+	items, unread, err := e.box.List(e.ctx, biz, 50)
+	if err != nil || len(items) != 1 || unread != 1 {
+		t.Fatalf("ящик: %v %+v unread=%d", err, items, unread)
+	}
+	if items[0].Action != domain.ActionRework || !strings.Contains(items[0].Reason, "Уточните") ||
+		items[0].Path != "/app/tasks/"+id || items[0].Title != "Обзор кофейни" || items[0].ReadAt != nil {
+		t.Errorf("уведомление о доработке: %+v", items[0])
+	}
+	if _, n, _ := e.box.List(e.ctx, modA, 50); n != 0 {
+		t.Errorf("чужой ящик не пуст: %d", n)
+	}
 	// владелец поправил и отправил снова → одобрение → опубликовано
 	in := service.TaskInput{Title: "Обзор кофейни «Зерно»", City: got.City, Categories: got.Categories, Formats: got.Formats, Access: got.Access,
 		MinViews: got.MinViews, RewardKopecks: got.RewardKopecks, PublishBy: got.PublishBy.Format(time.DateOnly), Blocks: got.Blocks}
@@ -388,6 +403,26 @@ func TestAdminReviewFlow(t *testing.T) {
 	}
 	if pub, err := e.list.PublishedTask(e.ctx, tk.ID); err != nil || pub.Title != "Обзор кофейни «Зерно»" {
 		t.Fatalf("опубликовано: %v %+v", err, pub)
+	}
+	// второе уведомление — об одобрении; чужое не читаем, своё — по одному и все сразу
+	items, unread, err = e.box.List(e.ctx, biz, 50)
+	if err != nil || len(items) != 2 || unread != 2 || items[0].Action != domain.ActionApprove {
+		t.Fatalf("ящик после одобрения: %v %+v unread=%d", err, items, unread)
+	}
+	if err := e.box.MarkRead(e.ctx, biz, items[0].ID); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.box.MarkRead(e.ctx, modA, items[1].ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, n, _ := e.box.List(e.ctx, biz, 50); n != 1 {
+		t.Errorf("чужое прочтение не должно менять счётчик: %d", n)
+	}
+	if err := e.box.MarkAllRead(e.ctx, biz); err != nil {
+		t.Fatal(err)
+	}
+	if _, n, _ := e.box.List(e.ctx, biz, 50); n != 0 {
+		t.Errorf("после всех прочтений: %d", n)
 	}
 
 	// правка опубликованного: новая версия ждёт, старая видна всем
@@ -420,6 +455,29 @@ func TestAdminReviewFlow(t *testing.T) {
 	}
 	if pub, _ := e.list.PublishedTask(e.ctx, tk.ID); pub.Title != in.Title || pub.Revision != nil {
 		t.Errorf("после одобрения правки: %+v", pub)
+	}
+
+	// отклонение с причиной: причина дошла до уведомления владельца дословно
+	tk3 := e.task(t, biz, "Третье задание")
+	if _, err := e.tasks.Submit(e.ctx, biz, tk3.ID); err != nil {
+		t.Fatal(err)
+	}
+	id3 := strconv.FormatInt(tk3.ID, 10)
+	if _, err := e.review.Claim(e.ctx, modA, domain.KindTask, id3); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.review.Decide(e.ctx, modA, domain.KindTask, id3, service.DecisionInput{Action: domain.ActionReject,
+		Reason: "В тексте контакты для связи в обход площадки"}); err != nil {
+		t.Fatal(err)
+	}
+	e.clock.add(11 * time.Second)
+	if n, _ := e.review.ApplyDue(e.ctx); n != 1 {
+		t.Fatal("отклонение не применено")
+	}
+	items, _, err = e.box.List(e.ctx, biz, 50)
+	if err != nil || len(items) != 4 || items[0].Action != domain.ActionReject || items[0].Reason != "В тексте контакты для связи в обход площадки" ||
+		items[0].Kind != domain.KindTask || items[0].ItemID != tk3.ID {
+		t.Fatalf("уведомление об отказе: %v %+v", err, items)
 	}
 
 	// жалобы: на своё — нельзя; лимит; «снять» — задание отклонено
@@ -491,6 +549,11 @@ func TestAdminReviewFlow(t *testing.T) {
 	}
 	if u, err := e.staff.SetRole(e.ctx, adm, biz.ID, domain.RoleModerator); err != nil || u.StaffRole != domain.RoleModerator {
 		t.Fatalf("назначение: %v %+v", err, u)
+	}
+	// полного администратора через API не выдать — только через ADMIN_EMAILS
+	var ve *service.ValidationError
+	if _, err := e.staff.SetRole(e.ctx, adm, biz.ID, domain.RoleAdmin); !errors.As(err, &ve) {
+		t.Errorf("администратор через API: %v", err)
 	}
 	if _, err := e.staff.SetRole(e.ctx, adm, adm.ID, domain.RoleNone); !errors.Is(err, service.ErrSelfAction) {
 		t.Errorf("себе: %v", err)
