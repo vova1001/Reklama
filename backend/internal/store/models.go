@@ -189,6 +189,20 @@ type ModerationLog struct {
 	Auto       bool
 }
 
+type Notification struct {
+	ID         int64
+	UserID     int64
+	DecisionID int64
+	Kind       string
+	ItemID     int64
+	Action     string
+	Title      string
+	Reason     string
+	Path       string
+	ReadAt     pgtype.Timestamptz
+	CreatedAt  pgtype.Timestamptz
+}
+
 type PageSlug struct {
 	Kind      string
 	Slug      string
