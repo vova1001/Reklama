@@ -1,0 +1,52 @@
+---
+// Уведомления: решения модератора (опубликовано / отклонено с причиной / на доработку с замечаниями) и ссылка,
+// где поправить. Открытие списка помечает всё прочитанным; непрочитанные подсвечены.
+import App from '../../layouts/App.astro';
+import Icon from '../../components/Icon.astro';
+import { fetchNotifications, type Notice } from '../../lib/auth';
+import { when } from '../../lib/admin';
+
+const me = Astro.locals.me;
+if (!me) return Astro.redirect('/login', 303);
+const r = await fetchNotifications(Astro.request, 50);
+const items: Notice[] = r?.items ?? [];
+
+const ACT: Record<string, { t: string; icon: string; cls: string }> = {
+  approve: { t: 'Опубликовано', icon: 'check', cls: 'is-ok' },
+  reject: { t: 'Отклонено', icon: 'circle-alert', cls: 'is-err' },
+  rework: { t: 'Вернуто на доработку', icon: 'pencil', cls: 'is-warn' },
+};
+const kindOf = (k: string) => (k.startsWith('card') ? 'Анкета' : k.startsWith('page') ? 'Страница' : 'Задание');
+---
+<App title="Уведомления" page="notifications">
+  <div class="head"><h1>Уведомления</h1></div>
+  {items.length === 0 ? (
+    <div class="empty"><Icon name="inbox" size={32} /><h2>Пока пусто</h2><p>Решения по заданиям, анкете и странице — здесь. Обычно проверяем в течение дня.</p><a class="btn pill-ghost" href="/app">В ленту</a></div>
+  ) : (
+    <ul class="ntf" data-notifications>
+      {items.map((n) => {
+        const a = ACT[n.action] ?? ACT.approve;
+        return (
+          <li class={`ntf-it ${n.readAt ? '' : 'is-new'}`}>
+            <a class="ntf-lnk" href={n.path || '/app'}>
+              <span class={`ntf-ic ${a.cls}`}><Icon name={a.icon} size={20} /></span>
+              <span class="ntf-b">
+                <span class="ntf-t"><b>{a.t}</b> · {kindOf(n.kind)}{n.title ? ` «${n.title}»` : ''}</span>
+                {n.reason && <span class="ntf-r">{n.reason}</span>}
+                <span class="muted">{when(n.createdAt)}</span>
+              </span>
+              <Icon name="chevron-right" size={20} class="ntf-go" />
+            </a>
+          </li>
+        );
+      })}
+    </ul>
+  )}
+</App>
+<script>
+  import { api } from '../../lib/client';
+  // Списком ознакомились — всё прочитанным; бейдж у колокольчика сбросится при следующей загрузке страницы.
+  api('POST', '/api/me/notifications/read').then(() => {
+    document.querySelectorAll('[data-bell-count]').forEach((el) => el.setAttribute('hidden', ''));
+  });
+</script>

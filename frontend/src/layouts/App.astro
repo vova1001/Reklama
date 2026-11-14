@@ -7,6 +7,7 @@ import Mark from '../components/Mark.astro';
 import Nav from '../components/app/Nav.astro';
 import ModeSwitch from '../components/app/ModeSwitch.astro';
 import AccountMenu from '../components/app/AccountMenu.astro';
+import Bell from '../components/app/Bell.astro';
 import BottomNav from '../components/app/BottomNav.astro';
 import Overlays from '../components/app/Overlays.astro';
 import type { Page } from '../content/app';
@@ -29,12 +30,14 @@ Astro.response.headers.set('Cache-Control', 'private, no-store');
       <a class="rail-logo" href="/app" aria-label="Охват — лента"><Mark size={30} /><b>Охват</b></a>
       <nav class="rail-nav" aria-label="Разделы"><Nav page={page} variant="rail" /></nav>
       <ModeSwitch mode={me.user.mode} id="mode-rail" class="rail-mode" />
+      <Bell />
       <AccountMenu me={me} id="menu-rail" up />
     </aside>
 
     <header class="mbar">
       <a class="rail-logo" href="/app" aria-label="Охват — лента"><Mark size={30} /></a>
       <ModeSwitch mode={me.user.mode} id="mode-bar" />
+      <Bell />
       <AccountMenu me={me} id="menu-bar" />
     </header>
 

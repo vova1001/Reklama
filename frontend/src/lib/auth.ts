@@ -98,6 +98,13 @@ export async function fetchCard(req: Request): Promise<Card | null | undefined> 
   return r === null ? undefined : r.card;
 }
 
+export type Notice = components['schemas']['Notice'];
+export interface NotificationsResult { items: Notice[]; unread: number }
+/** Уведомления в приложении; null — API недоступно. */
+export function fetchNotifications(req: Request, limit = 50): Promise<NotificationsResult | null> {
+  return getJSON<NotificationsResult>(`/api/me/notifications?limit=${limit}`, visitorHeaders(req));
+}
+
 /** Общие категории и свои (пусто — API недоступно). */
 export async function fetchCategories(req: Request): Promise<{ common: CategoryItem[]; own: CategoryItem[] }> {
   return (await getJSON<{ common: CategoryItem[]; own: CategoryItem[] }>('/api/me/categories', visitorHeaders(req))) ?? { common: [], own: [] };

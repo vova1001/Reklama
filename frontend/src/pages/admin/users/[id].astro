@@ -88,9 +88,9 @@ const canBlock = !!u && !self && can(adm, 'users.block') && (!u.role || can(adm,
                 <p class="lbl">Роль: {ROLE_TITLE[u.role]}</p>
                 <div class="tpls">
                   {u.role !== 'moderator' && <button class="chip" type="submit" name="role" value="moderator">Сделать модератором</button>}
-                  {u.role !== 'admin' && <button class="chip" type="submit" name="role" value="admin" data-ask="Сделать администратором?|Администратор управляет ролями, режимом проверки и видит журнал.|Сделать">Сделать администратором</button>}
                   {u.role && <button class="chip" type="submit" name="role" value="" data-ask="Снять роль?|Доступ к админке закроется.|Снять">Снять роль</button>}
                 </div>
+                <p class="muted" style="margin-top:8px">Полных администраторов добавляет владелец через ADMIN_EMAILS — здесь только модераторы.</p>
               </form>
             )}
             {can(adm, 'staff.manage') && u.role && (

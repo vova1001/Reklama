@@ -1,0 +1,9 @@
+---
+// Колокольчик уведомлений: рядом с меню аккаунта. Бейдж непрочитанных заполняется после загрузки (scripts/app.ts),
+// чтобы страницы не ждали лишний запрос при рендере.
+import Icon from '../Icon.astro';
+---
+<a class="bell" href="/app/notifications" aria-label="Уведомления" data-tip="Уведомления">
+  <Icon name="bell-ring" size={22} />
+  <span class="bell-n" data-bell-count hidden></span>
+</a>

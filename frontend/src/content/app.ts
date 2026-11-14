@@ -6,7 +6,7 @@ export const MODES: { id: Mode; title: string; icon: string }[] = [
   { id: 'creator', title: 'Автор', icon: 'video' },
 ];
 
-export type Page = 'feed' | 'create' | 'my' | 'profile' | 'settings';
+export type Page = 'feed' | 'create' | 'my' | 'profile' | 'settings' | 'notifications';
 
 /** Навигация: mode — пункт только для режима (Создать и Мои — у бизнеса, Анкета — у автора). */
 export const NAV: { id: Page; title: string; icon: string; href: string; mode?: Mode }[] = [
