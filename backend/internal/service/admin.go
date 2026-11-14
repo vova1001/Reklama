@@ -343,7 +343,7 @@ func (s *Settings) Get(ctx context.Context, u domain.User) (AdminSettings, error
 	s.mu.Lock()
 	s.at = time.Time{}
 	s.mu.Unlock()
-	return AdminSettings{ModerationMode: s.ModerationMode(ctx), ModerationDefault: s.def}
+	return AdminSettings{ModerationMode: s.ModerationMode(ctx), ModerationDefault: s.def}, nil
 }
 
 // SetModerationMode — переключить режим проверки (auto | manual) с записью в журнал.
@@ -363,7 +363,7 @@ func (s *Settings) SetModerationMode(ctx context.Context, u domain.User, mode do
 	s.mu.Lock()
 	s.cached, s.at = mode, s.clock.Now()
 	s.mu.Unlock()
-	return AdminSettings{ModerationMode: mode, ModerationDefault: s.def}
+	return AdminSettings{ModerationMode: mode, ModerationDefault: s.def}, nil
 }
 
 // ===== сводка =====
