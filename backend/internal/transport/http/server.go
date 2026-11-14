@@ -122,6 +122,7 @@ type Services struct {
 	Social     SocialService // nil — подтверждение соцсетей выключено
 	Pages      PageService   // nil — страниц бизнеса и авторов нет
 	Videos     VideoService  // nil — загрузка видео выключена
+	Notices    NoticesService
 	// Админка (nil TwoFactor — админка выключена).
 	TwoFactor  TwoFactorService
 	Review     ReviewService
@@ -171,6 +172,7 @@ type Server struct {
 	social     SocialService
 	pages      PageService
 	videos     VideoService
+	notices    NoticesService
 	twoFactor  TwoFactorService
 	review     ReviewService
 	complaints ComplaintService
@@ -189,7 +191,7 @@ func New(svc Services, opt Options) *Server {
 	return &Server{
 		home: svc.Home, health: svc.Health, auth: svc.Auth, profiles: svc.Profiles, tasks: svc.Tasks, cards: svc.Cards,
 		categories: svc.Categories, formats: svc.Formats, media: svc.Media, drafts: svc.Drafts, social: svc.Social,
-		pages: svc.Pages, videos: svc.Videos,
+		pages: svc.Pages, videos: svc.Videos, notices: svc.Notices,
 		twoFactor: svc.TwoFactor, review: svc.Review, complaints: svc.Complaints, staffUsers: svc.StaffUsers, audit: svc.Audit,
 		settings: svc.Settings, dashboard: svc.Dashboard, opt: opt,
 	}
@@ -286,6 +288,9 @@ func (s *Server) Routes() http.Handler {
 				r.Delete("/pages/{kind}/revision", s.discardPageRevision)
 			}
 			r.Delete("/media/{id}", s.deleteMedia)
+
+			r.Get("/notifications", s.getNotifications)
+			r.Post("/notifications/read", s.postNotificationsRead)
 
 			r.Get("/drafts/{form}", s.getDraft)
 			r.With(limit(s.opt.DraftLimiter, byUser("draft:"))).Put("/drafts/{form}", s.putDraft)

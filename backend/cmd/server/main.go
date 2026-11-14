@@ -185,7 +185,7 @@ func run(log *slog.Logger) error {
 	api := httpapi.New(httpapi.Services{
 		Home: service.NewHome(repository.NewHome(pool)), Health: service.NewHealth(repository.NewHealth(pool)),
 		Auth: auth, Profiles: profiles, Tasks: tasks, Cards: cards, Categories: service.NewCategories(catRepo), Formats: service.NewFormats(listRepo), Media: media, Drafts: drafts, Social: social,
-		Pages: pages, Videos: media,
+		Pages: pages, Videos: media, Notices: service.NewNotices(repository.NewNotices(pool)),
 		TwoFactor: adm.twoFactor, Review: adm.review, Complaints: adm.complaints, StaffUsers: adm.users, Audit: service.NewAuditLog(adminRepo),
 		Settings: settings, Dashboard: service.NewDashboard(adminRepo, nil),
 	}, opts)
