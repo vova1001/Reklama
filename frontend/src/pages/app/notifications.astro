@@ -1,6 +1,6 @@
 ---
-// Уведомления: решения модератора (опубликовано / отклонено с причиной / на доработку с замечаниями) и ссылка,
-// где поправить. Открытие списка помечает всё прочитанным; непрочитанные подсвечены.
+// Уведомления: решения модератора (опубликовано / отклонено с причиной / на доработку с замечаниями), смена роли
+// и ссылка, где поправить. Открытие списка помечает всё прочитанным; непрочитанные подсвечены.
 import App from '../../layouts/App.astro';
 import Icon from '../../components/Icon.astro';
 import { fetchNotifications, type Notice } from '../../lib/auth';
@@ -15,8 +15,9 @@ const ACT: Record<string, { t: string; icon: string; cls: string }> = {
   approve: { t: 'Опубликовано', icon: 'check', cls: 'is-ok' },
   reject: { t: 'Отклонено', icon: 'circle-alert', cls: 'is-err' },
   rework: { t: 'Вернуто на доработку', icon: 'pencil', cls: 'is-warn' },
+  role: { t: 'Роль изменена', icon: 'user-round', cls: 'is-ok' },
 };
-const kindOf = (k: string) => (k.startsWith('card') ? 'Анкета' : k.startsWith('page') ? 'Страница' : 'Задание');
+const kindOf = (k: string) => (k === 'role' ? 'Аккаунт' : k.startsWith('card') ? 'Анкета' : k.startsWith('page') ? 'Страница' : 'Задание');
 ---
 <App title="Уведомления" page="notifications">
   <div class="head"><h1>Уведомления</h1></div>
