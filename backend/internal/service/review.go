@@ -28,7 +28,10 @@ type ReviewRepository interface {
 	// UndoDecision — своё ждущее до применения; иначе domain.ErrNotFound.
 	UndoDecision(ctx context.Context, id, moderatorID int64, now time.Time, e domain.AuditEntry) (domain.ReviewDecision, error)
 	ClaimDueDecision(ctx context.Context, now, lockUntil time.Time) (domain.ReviewDecision, error)
-	FinishDecision(ctx context.Context, d domain.ReviewDecision, state, errText string, at time.Time, e domain.AuditEntry) error
+	// FinishDecision — итог решения; n != nil — уведомление владельцу, пишется в той же транзакции (только applied).
+	FinishDecision(ctx context.Context, d domain.ReviewDecision, state, errText string, at time.Time, e domain.AuditEntry, n *domain.Notice) error
+	// DeleteOldNotifications — убрать прочитанные уведомления старше порога (подметание исполнителя).
+	DeleteOldNotifications(ctx context.Context, before time.Time) error
 	NextDecisionAt(ctx context.Context) (*time.Time, error)
 	OwnerDecisions(ctx context.Context, ownerID int64, limit int) ([]domain.ReviewDecision, error)
 	ComplaintsAgainst(ctx context.Context, userID int64, limit int) ([]domain.Complaint, error)
@@ -635,12 +638,17 @@ func (s *Review) apply(ctx context.Context, d domain.ReviewDecision) error {
 		state, errText = domain.DecisionFailed, "статус уже изменился"
 		s.d.Log.WarnContext(ctx, "решение не применено", "decision", d.ID, "err", derr)
 	}
+	var n *domain.Notice
+	if state == domain.DecisionApplied {
+		title, path := s.noticeTarget(ctx, d)
+		n = &domain.Notice{Kind: d.Kind, ItemID: d.ItemID, Action: d.Action, Title: title, Reason: d.Reason, Path: path}
+	}
 	mod := domain.User{ID: d.ModeratorID, Name: "исполнитель решений"}
 	e := auditFor(ctx, mod, domain.AuditDecisionApplied, string(d.Kind), strconv.FormatInt(d.ItemID, 10))
 	e.ActorLabel, e.ActorRole = "система (решение модератора)", ""
 	e.After = map[string]any{"decision": d.ID, "action": d.Action, "state": state}
 	e.Reason = errText
-	if err := s.d.Repo.FinishDecision(ctx, d, state, errText, s.d.Clock.Now(), e); err != nil {
+	if err := s.d.Repo.FinishDecision(ctx, d, state, errText, s.d.Clock.Now(), e, n); err != nil {
 		return err
 	}
 	if state == domain.DecisionApplied && s.d.Notifier != nil {
@@ -649,28 +657,34 @@ func (s *Review) apply(ctx context.Context, d domain.ReviewDecision) error {
 	return nil
 }
 
-func (s *Review) notify(ctx context.Context, d domain.ReviewDecision) {
-	n := DecisionNotice{Kind: d.Kind, Action: d.Action, Reason: d.Reason, Notes: d.Notes}
+// noticeTarget — название и адрес для уведомления владельца о решении.
+func (s *Review) noticeTarget(ctx context.Context, d domain.ReviewDecision) (title, path string) {
 	switch subjectOf(d.Kind) {
 	case domain.SubjectTask:
-		n.Path = "/app/tasks/" + strconv.FormatInt(d.ItemID, 10)
+		path = "/app/tasks/" + strconv.FormatInt(d.ItemID, 10)
 		if t, err := s.d.Content.Task(ctx, d.ItemID); err == nil {
-			n.Title = t.Title
+			title = t.Title
 		}
 	case domain.SubjectPage:
-		n.Path = "/app/page"
+		path = "/app/page"
 		if s.d.Pages != nil {
 			if p, err := s.d.Pages.PageByID(ctx, d.ItemID); err == nil {
-				n.Title = p.Title
-				n.Path += "?kind=" + string(p.Kind)
+				title = p.Title
+				path += "?kind=" + string(p.Kind)
 			}
 		}
 	default:
-		n.Path = "/app/card"
+		path = "/app/card"
 		if c, err := s.d.Content.Card(ctx, d.ItemID); err == nil {
-			n.Title = c.Name
+			title = c.Name
 		}
 	}
+	return title, path
+}
+
+func (s *Review) notify(ctx context.Context, d domain.ReviewDecision) {
+	title, path := s.noticeTarget(ctx, d)
+	n := DecisionNotice{Kind: d.Kind, Action: d.Action, Reason: d.Reason, Notes: d.Notes, Title: title, Path: path}
 	if err := s.d.Notifier.NotifyDecision(ctx, d.OwnerID, n); err != nil {
 		s.d.Log.WarnContext(ctx, "уведомление о решении не отправлено", "decision", d.ID, "err", err)
 	}
@@ -688,6 +702,9 @@ func (s *Review) Run(ctx context.Context) {
 		if now.Sub(lastSweep) > time.Hour {
 			if _, err := s.d.Repo.DeleteExpiredLeases(ctx, now.Add(-time.Hour)); err != nil && ctx.Err() == nil {
 				s.d.Log.WarnContext(ctx, "аренды: очистка", "err", err)
+			}
+			if err := s.d.Repo.DeleteOldNotifications(ctx, now.Add(-30*24*time.Hour)); err != nil && ctx.Err() == nil {
+				s.d.Log.WarnContext(ctx, "уведомления: очистка", "err", err)
 			}
 			lastSweep = now
 		}

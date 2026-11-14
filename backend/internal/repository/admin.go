@@ -351,8 +351,9 @@ func (r *Admin) ClaimDueDecision(ctx context.Context, now, lockUntil time.Time) 
 }
 
 // FinishDecision — решение применено (applied) или не применилось (failed, с причиной); аренда элемента снимается,
-// в журнал — итог.
-func (r *Admin) FinishDecision(ctx context.Context, d domain.ReviewDecision, state, errText string, at time.Time, e domain.AuditEntry) error {
+// в журнал — итог. Уведомление владельцу (n != nil) пишется в этой же транзакции: оно появляется ровно тогда,
+// когда решение применено; UNIQUE(decision_id) страхует от дубля при повторе.
+func (r *Admin) FinishDecision(ctx context.Context, d domain.ReviewDecision, state, errText string, at time.Time, e domain.AuditEntry, n *domain.Notice) error {
 	err := r.inTx(ctx, func(q *store.Queries) error {
 		applied := pgtype.Timestamptz{}
 		if state == domain.DecisionApplied {
@@ -364,9 +365,19 @@ func (r *Admin) FinishDecision(ctx context.Context, d domain.ReviewDecision, sta
 		if err := q.DeleteLease(ctx, store.DeleteLeaseParams{Kind: string(d.Kind), ItemID: strconv.FormatInt(d.ItemID, 10)}); err != nil {
 			return err
 		}
+		if state == domain.DecisionApplied && n != nil {
+			if err := insertNotification(ctx, q, d.OwnerID, d.ID, *n); err != nil {
+				return err
+			}
+		}
 		return insertAudit(ctx, q, e)
 	})
 	return dbErr("итог решения", err)
+}
+
+// DeleteOldNotifications — убрать прочитанные уведомления старше порога.
+func (r *Admin) DeleteOldNotifications(ctx context.Context, before time.Time) error {
+	return dbErr("очистка уведомлений", r.q.DeleteOldNotifications(ctx, ts(before)))
 }
 
 // NextDecisionAt — когда применить ближайшее ждущее решение; nil — ждущих нет.
