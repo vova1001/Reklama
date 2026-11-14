@@ -1483,7 +1483,6 @@ paths:
       operationId: adminSettings
       tags: [admin]
       security: [{ session: [] }]
-      parameters: [{ $ref: "#/components/parameters/CSRF" }]
       responses:
         "200": { description: Настройки, content: { application/json: { schema: { $ref: "#/components/schemas/AdminSettings" } } } }
         "403": { $ref: "#/components/responses/AdminForbidden" }
@@ -2516,7 +2515,7 @@ components:
         blockedAt: { type: string, format: date-time, nullable: true }
         blockedReason: { type: string }
         createdAt: { type: string, format: date-time }
-        lastLoginAt: { type: string, format: date-time, nullable: true }
+        lastLoginAt: { type: string, format: date-time }
     Complaint:
       type: object
       required: [id, subject, subjectId, reporterId, reason, comment, status, action, resolution, resolvedAt, createdAt]
@@ -2531,7 +2530,7 @@ components:
         status: { type: string, enum: [open, resolved, dismissed] }
         action: { type: string }
         resolution: { type: string }
-        resolvedAt: { type: string, format: date-time, nullable: true }
+        resolvedAt: { type: string, format: date-time }
         createdAt: { type: string, format: date-time }
     StatusChange:
       type: object
