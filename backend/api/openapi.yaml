@@ -1483,6 +1483,7 @@ paths:
       operationId: adminSettings
       tags: [admin]
       security: [{ session: [] }]
+      parameters: [{ $ref: "#/components/parameters/CSRF" }]
       responses:
         "200": { description: Настройки, content: { application/json: { schema: { $ref: "#/components/schemas/AdminSettings" } } } }
         "403": { $ref: "#/components/responses/AdminForbidden" }
@@ -1576,7 +1577,6 @@ paths:
       responses:
         "200": { description: Черновик, content: { application/json: { schema: { $ref: "#/components/schemas/PageResult" } } } }
         "401": { $ref: "#/components/responses/Unauthorized" }
-        "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
         "409": { $ref: "#/components/responses/Conflict" }
   /api/me/pages/{kind}/revision:
@@ -1843,7 +1843,7 @@ components:
       required: [email, code]
       additionalProperties: false
       properties:
-        email: { type: string, example: anna@mail.ru }
+        email: { type: string }
         code: { type: string, pattern: "^[0-9]{6}$" }
     TelegramLogin:
       type: object
@@ -2312,8 +2312,8 @@ components:
         title: { type: string, maxLength: 80 }
         city: { type: string, maxLength: 80 }
         spheres: { type: array, maxItems: 5, items: { type: string } }
-        logo: { type: string, description: "id фото page_logo или \"\"" }
-        cover: { type: string, description: "id фото page_cover или \"\"" }
+        logo: { type: string, description: id фото page_logo или "" }
+        cover: { type: string, description: id фото page_cover или "" }
         blocks: { type: array, maxItems: 20, items: { $ref: "#/components/schemas/PageBlockInput" } }
     PageVideo:
       type: object
