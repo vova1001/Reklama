@@ -1,24 +1,9 @@
 ---
-// Колокольчик уведомлений: рядом с меню аккаунта. В левой колонке от 1200px — полноценный пункт с подписью
-// «Уведомления» (как остальные), уже и в шапке телефона — только значок. Бейдж непрочитанных заполняется после
-// загрузки (scripts/app.ts), чтобы страницы не ждали лишний запрос при рендере.
+// Колокольчик уведомлений в шапке телефона (в левой колонке уведомления — пункт навигации, Nav.astro).
+// Бейдж непрочитанных заполняется после загрузки (scripts/app.ts), чтобы страницы не ждали лишний запрос при рендере.
 import Icon from '../Icon.astro';
 ---
 <a class="bell" href="/app/notifications" aria-label="Уведомления" data-tip="Уведомления">
   <Icon name="bell-ring" size={22} />
-  <span class="bell-t">Уведомления</span>
   <span class="bell-n" data-bell-count hidden></span>
 </a>
-<style>
-  .bell-t { display: none; }
-  @media (min-width: 1200px) {
-    .rail .bell {
-      width: 100%; height: auto; min-height: 48px; margin: 4px 0 0; padding: 0 12px;
-      display: flex; align-items: center; justify-content: flex-start; gap: 14px;
-      font-size: 16px; font-weight: 500; color: var(--color-gray);
-    }
-    .rail .bell:hover { color: var(--color-ink); }
-    .rail .bell-t { display: inline; }
-    .rail .bell-n { position: static; margin-left: auto; }
-  }
-</style>

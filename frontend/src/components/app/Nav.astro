@@ -1,14 +1,17 @@
 ---
 // Пункты навигации: в левой колонке (иконка + подпись; в узкой — только иконка с подсказкой) и внизу на телефоне.
-// Пункты одного режима скрываются по data-mode корня (data-for-mode).
+// Пункты одного режима скрываются по data-mode корня (data-for-mode). Пункты с rail (Уведомления) — только в левой
+// колонке: на телефоне уведомления — колокольчик в шапке. Бейдж непрочитанных заполняется после загрузки (scripts/app.ts).
 import Icon from '../Icon.astro';
 import { NAV, type Page } from '../../content/app';
 interface Props { page: Page; variant: 'rail' | 'bottom' }
 const { page, variant } = Astro.props;
 const cls = variant === 'rail' ? 'nv' : 'bn-it';
+const items = NAV.filter((n) => variant === 'rail' || !n.rail);
 ---
-{NAV.map((n) => (
+{items.map((n) => (
   <a class={cls} href={n.href} data-for-mode={n.mode} aria-current={page === n.id ? 'page' : undefined} data-tip={variant === 'rail' ? n.title : undefined} data-nav={n.id}>
     <Icon name={n.icon} size={24} /><span>{n.title}</span>
+    {n.id === 'notifications' && <span class="bell-n" data-bell-count hidden></span>}
   </a>
 ))}

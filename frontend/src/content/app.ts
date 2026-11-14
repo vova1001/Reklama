@@ -8,12 +8,13 @@ export const MODES: { id: Mode; title: string; icon: string }[] = [
 
 export type Page = 'feed' | 'create' | 'my' | 'profile' | 'settings' | 'notifications';
 
-/** Навигация: mode — пункт только для режима (Создать и Мои — у бизнеса, Анкета — у автора). */
-export const NAV: { id: Page; title: string; icon: string; href: string; mode?: Mode }[] = [
+/** Навигация: mode — пункт только для режима (Создать и Мои — у бизнеса, Анкета — у автора); rail — только в левой колонке. */
+export const NAV: { id: Page; title: string; icon: string; href: string; mode?: Mode; rail?: boolean }[] = [
   { id: 'feed', title: 'Лента', icon: 'house', href: '/app' },
   { id: 'create', title: 'Создать', icon: 'square-plus', href: '/app/tasks/new', mode: 'business' },
   { id: 'my', title: 'Мои', icon: 'list', href: '/app/tasks', mode: 'business' },
   { id: 'create', title: 'Анкета', icon: 'id-card', href: '/app/card', mode: 'creator' },
+  { id: 'notifications', title: 'Уведомления', icon: 'bell-ring', href: '/app/notifications', rail: true },
   { id: 'profile', title: 'Профиль', icon: 'user-round', href: '/app/profile' },
   { id: 'settings', title: 'Настройки', icon: 'settings-2', href: '/app/settings' },
 ];
