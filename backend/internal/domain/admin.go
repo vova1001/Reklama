@@ -236,6 +236,19 @@ type ReviewDecision struct {
 	CreatedAt    time.Time
 }
 
+// Notice — уведомление пользователю в приложении (решение модератора и др.): косвенный ящик уведомлений.
+type Notice struct {
+	ID        int64
+	Kind      ReviewKind
+	ItemID    int64
+	Action    ReviewAction
+	Title     string // название задания, анкеты или страницы
+	Reason    string // причина отказа / сводка замечаний
+	Path      string // где посмотреть: /app/tasks/12, /app/card, /app/page?kind=...
+	ReadAt    *time.Time
+	CreatedAt time.Time
+}
+
 // RejectTemplate — шаблон причины отказа.
 type RejectTemplate struct {
 	ID   string

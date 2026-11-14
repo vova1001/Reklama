@@ -209,6 +209,10 @@ func (s *StaffUsers) SetRole(ctx context.Context, u domain.User, id int64, role 
 	if !domain.ValidStaffRole(role) {
 		return domain.User{}, &ValidationError{Fields: map[string]string{"role": "Роль — модератор, администратор или без роли"}}
 	}
+	// Полный администратор назначается только через ADMIN_EMAILS (bootstrap при входе) — здесь модераторы.
+	if role == domain.RoleAdmin {
+		return domain.User{}, &ValidationError{Fields: map[string]string{"role": "Администраторов добавляет владелец через ADMIN_EMAILS. Здесь можно назначить только модератора"}}
+	}
 	if id == u.ID {
 		return domain.User{}, ErrSelfAction
 	}
@@ -339,7 +343,7 @@ func (s *Settings) Get(ctx context.Context, u domain.User) (AdminSettings, error
 	s.mu.Lock()
 	s.at = time.Time{}
 	s.mu.Unlock()
-	return AdminSettings{ModerationMode: s.ModerationMode(ctx), ModerationDefault: s.def}, nil
+	return AdminSettings{ModerationMode: s.ModerationMode(ctx), ModerationDefault: s.def}
 }
 
 // SetModerationMode — переключить режим проверки (auto | manual) с записью в журнал.
@@ -359,7 +363,7 @@ func (s *Settings) SetModerationMode(ctx context.Context, u domain.User, mode do
 	s.mu.Lock()
 	s.cached, s.at = mode, s.clock.Now()
 	s.mu.Unlock()
-	return AdminSettings{ModerationMode: mode, ModerationDefault: s.def}, nil
+	return AdminSettings{ModerationMode: mode, ModerationDefault: s.def}
 }
 
 // ===== сводка =====
