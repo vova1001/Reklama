@@ -153,6 +153,32 @@ html:has(body.app-body) { background: var(--color-card); scroll-padding: 72px 0 
 @media (min-width: 768px) { .mbar { display: none; } }
 @media (max-width: 359px) { .mbar .mseg .ic { display: none; } }
 
+/* уведомления: колокольчик и список */
+.bell {
+  position: relative; display: grid; place-items: center; width: 40px; height: 40px; margin: 4px auto; border-radius: 12px;
+  color: var(--color-ink);
+}
+@media (hover: hover) { .bell:hover { background: var(--color-panel); } }
+.mbar .bell { margin: 0; }
+.bell-n {
+  position: absolute; top: 2px; right: 0; min-width: 17px; height: 17px; padding: 0 4px; border-radius: 999px;
+  background: var(--color-emerald); color: #fff; font-size: 11px; font-weight: 650; line-height: 17px; text-align: center;
+}
+.ntf { display: grid; gap: 8px; margin: 4px 0 24px; padding: 0; list-style: none; }
+.ntf-it { border: 1px solid var(--color-line); border-radius: var(--radius-card); background: var(--color-card); }
+.ntf-it.is-new { border-color: rgba(15, 117, 83, 0.35); background: var(--color-emerald-soft); }
+.ntf-lnk { display: flex; align-items: center; gap: 12px; padding: 14px 16px; color: var(--color-ink); }
+.ntf-ic { display: grid; place-items: center; flex: none; width: 36px; height: 36px; border-radius: 50%; }
+.ntf-ic.is-ok { background: var(--color-emerald-soft); color: var(--color-emerald-ink); }
+.ntf-ic.is-err { background: rgba(var(--err), 0.07); color: var(--color-error); }
+.ntf-ic.is-warn { background: var(--color-sunken); color: var(--color-gray); }
+.ntf-b { display: grid; gap: 2px; min-width: 0; flex: 1; }
+.ntf-t { font-size: 15px; line-height: 1.35; }
+.ntf-t b { font-weight: 650; }
+.ntf-r { font-size: 14px; color: var(--color-gray); overflow-wrap: anywhere; }
+.ntf-b .muted { font-size: 13px; color: var(--color-gray); }
+.ntf-go { flex: none; color: var(--color-gray); }
+
 /* нижняя навигация (телефон) */
 .bn {
   position: fixed; left: 0; right: 0; bottom: 0; z-index: 40; display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr);
