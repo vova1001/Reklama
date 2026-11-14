@@ -1063,6 +1063,42 @@ paths:
         "200": { description: Анкета без правки, content: { application/json: { schema: { $ref: "#/components/schemas/CardResult" } } } }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "409": { $ref: "#/components/responses/Conflict" }
+  /api/me/notifications:
+    get:
+      summary: Уведомления в приложении (решения модератора и др.)
+      description: Последние уведомления текущего пользователя, новые сверху, и счётчик непрочитанных. Появляются вместе с применением решения модератора (отложенно, в окне отмены 10 с).
+      operationId: getNotifications
+      tags: [notifications]
+      security: [{ session: [] }]
+      parameters:
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 100 }, description: Сколько последних (по умолчанию 50) }
+      responses:
+        "200":
+          description: Уведомления и счётчик непрочитанных
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/NotificationsResult" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+  /api/me/notifications/read:
+    post:
+      summary: Пометить уведомления прочитанными
+      description: 'Тело {"id": N} — прочитать одно; пустое тело — все. Чужие и уже прочитанные игнорируются.'
+      operationId: readNotifications
+      tags: [notifications]
+      security: [{ session: [] }]
+      parameters: [{ $ref: "#/components/parameters/CSRF" }]
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                id: { type: integer, format: int64, minimum: 1 }
+      responses:
+        "204": { description: Прочитано }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
   /api/complaints:
     post:
       summary: Пожаловаться на задание, анкету или профиль
@@ -1540,6 +1576,7 @@ paths:
       responses:
         "200": { description: Черновик, content: { application/json: { schema: { $ref: "#/components/schemas/PageResult" } } } }
         "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
         "409": { $ref: "#/components/responses/Conflict" }
   /api/me/pages/{kind}/revision:
@@ -1806,7 +1843,7 @@ components:
       required: [email, code]
       additionalProperties: false
       properties:
-        email: { type: string }
+        email: { type: string, example: anna@mail.ru }
         code: { type: string, pattern: "^[0-9]{6}$" }
     TelegramLogin:
       type: object
@@ -2133,6 +2170,27 @@ components:
           allOf:
             - { $ref: "#/components/schemas/Revision" }
             - { type: object, required: [card], properties: { card: { $ref: "#/components/schemas/Card" } } }
+    Notice:
+      type: object
+      required: [id, kind, itemId, action, title, reason, path, createdAt]
+      properties:
+        id: { type: integer, format: int64 }
+        kind: { type: string, description: "task | task_revision | card | card_revision | page | page_revision" }
+        itemId: { type: integer, format: int64 }
+        action: { type: string, enum: [approve, reject, rework] }
+        title: { type: string, description: Название задания, анкеты или страницы }
+        reason: { type: string, description: Причина отказа или сводка замечаний }
+        path: { type: string, description: Где посмотреть в приложении }
+        readAt: { type: string, format: date-time, nullable: true }
+        createdAt: { type: string, format: date-time }
+    NotificationsResult:
+      type: object
+      required: [items, unread]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/Notice" }
+        unread: { type: integer, format: int64, description: Сколько непрочитанных }
     DraftResult:
       type: object
       required: [draft]
@@ -2254,8 +2312,8 @@ components:
         title: { type: string, maxLength: 80 }
         city: { type: string, maxLength: 80 }
         spheres: { type: array, maxItems: 5, items: { type: string } }
-        logo: { type: string, description: id фото page_logo или "" }
-        cover: { type: string, description: id фото page_cover или "" }
+        logo: { type: string, description: "id фото page_logo или \"\"" }
+        cover: { type: string, description: "id фото page_cover или \"\"" }
         blocks: { type: array, maxItems: 20, items: { $ref: "#/components/schemas/PageBlockInput" } }
     PageVideo:
       type: object
