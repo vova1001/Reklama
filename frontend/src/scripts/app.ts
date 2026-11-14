@@ -305,6 +305,31 @@ function initForms() {
   });
 }
 
+// ===== уведомления: бейдж непрочитанных у колокольчика (живой: раз в минуту и при возврате во вкладку) =====
+function initBell() {
+  const paint = (unread: number) => {
+    $$('[data-bell-count]').forEach((el) => {
+      if (!unread) {
+        el.setAttribute('hidden', '');
+        return;
+      }
+      el.textContent = unread > 99 ? '99+' : String(unread);
+      el.removeAttribute('hidden');
+    });
+  };
+  const check = () => {
+    if (document.hidden) return;
+    api<{ unread: number }>('GET', '/api/me/notifications?limit=1').then((r) => {
+      if (r.ok) paint(r.data.unread);
+    });
+  };
+  check();
+  window.setInterval(check, 60_000);
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) check();
+  });
+}
+
 if (app) {
   initModeSwitch();
   initMenus();
@@ -312,4 +337,5 @@ if (app) {
   initNudge();
   initTabs();
   initForms();
+  initBell();
 }
