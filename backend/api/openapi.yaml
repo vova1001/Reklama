@@ -2515,7 +2515,7 @@ components:
         blockedAt: { type: string, format: date-time, nullable: true }
         blockedReason: { type: string }
         createdAt: { type: string, format: date-time }
-        lastLoginAt: { type: string, format: date-time }
+        lastLoginAt: { type: string, format: date-time, nullable: true }
     Complaint:
       type: object
       required: [id, subject, subjectId, reporterId, reason, comment, status, action, resolution, resolvedAt, createdAt]
@@ -2530,7 +2530,7 @@ components:
         status: { type: string, enum: [open, resolved, dismissed] }
         action: { type: string }
         resolution: { type: string }
-        resolvedAt: { type: string, format: date-time }
+        resolvedAt: { type: string, format: date-time, nullable: true }
         createdAt: { type: string, format: date-time }
     StatusChange:
       type: object
@@ -2618,7 +2618,7 @@ components:
         tasks: { type: array, items: { $ref: "#/components/schemas/Task" } }
         card: { nullable: true, allOf: [{ $ref: "#/components/schemas/Card" }] }
         socials:
-          type: array
+      type: array
           items:
             type: object
             required: [platform, type, title, handle, url, status, followers, verifiedAt]
