@@ -18,8 +18,9 @@ export function until(iso: string | null | undefined, time = ''): string {
 }
 /** Названия форматов через запятую. */
 export const formatsTitle = (ids: string[]) => ids.map((f) => FORMATS.find((x) => x.id === f)?.title ?? f).join(', ');
-/** Условие выполнения: «от 5 000 просм.». */
-export const goal = (views: number) => (views ? `от ${num(views)} просм.` : '');
+/** Условие выполнения: «от 5 000 просм.»; kind — цель задания (views | subscribers | clicks | guests). */
+export const goal = (n: number, kind = 'views') => (n ? `от ${num(n)} ${GOAL_UNIT[kind] ?? GOAL_UNIT.views}` : '');
+const GOAL_UNIT: Record<string, string> = { views: 'просм.', subscribers: 'подписчиков', clicks: 'переходов', guests: 'гостей' };
 
 // ===== подтверждённые соцсети (задача 12) =====
 const DAY_MSK = new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'long', timeZone: 'Europe/Moscow' });

@@ -7,7 +7,7 @@ import type { Task } from '../../lib/auth';
 interface Props { task: Task }
 const { task: t } = Astro.props;
 const where = t.nationwide ? 'Вся Россия' : t.city;
-const g = goal(t.minViews);
+const g = goal(t.minViews, t.goal);
 const due = until(t.publishBy, t.publishTime);
 const brief = [t.rewardKopecks ? rub(t.rewardKopecks) : '', g].filter(Boolean).join(' · ');
 ---

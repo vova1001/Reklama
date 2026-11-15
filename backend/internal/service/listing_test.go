@@ -182,7 +182,9 @@ func TestTaskShape(t *testing.T) {
 		{"свой формат короткий", func(in *TaskInput) { in.Formats = []string{"reels", "я"} }, "formats"},
 		{"свой формат ссылка", func(in *TaskInput) { in.Formats = []string{"vk.com/clip"} }, "formats"},
 		{"свой формат без букв", func(in *TaskInput) { in.Formats = []string{"123"} }, "formats"},
-		{"форматов много", func(in *TaskInput) { in.Formats = []string{"reels", "shorts", "tiktok", "Stories"} }, "formats"},
+		{"форматов много", func(in *TaskInput) {
+			in.Formats = []string{"reels", "shorts", "tiktok", "youtube", "vk_clips", "telegram", "a1", "a2", "a3", "a4", "a5"}
+		}, "formats"},
 		{"сфер много", func(in *TaskInput) { in.Categories = []string{"a", "b", "c", "d", "e", "f"} }, "categories"},
 		{"тип", func(in *TaskInput) { in.Access = "vip" }, "access"},
 		{"просмотры", func(in *TaskInput) { in.MinViews = -1 }, "minViews"},

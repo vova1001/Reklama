@@ -25,6 +25,7 @@ type taskContentRow struct {
 	Categories    []string   `json:"categories"`
 	Formats       []string   `json:"formats"`
 	Access        string     `json:"access"`
+	Goal          string     `json:"goal,omitempty"`
 	MinViews      int64      `json:"minViews"`
 	RewardKopecks int64      `json:"rewardKopecks"`
 	PublishBy     *time.Time `json:"publishBy,omitempty"`
@@ -33,6 +34,7 @@ type taskContentRow struct {
 	Blocks        []blockRow `json:"blocks"`
 	Cover         string     `json:"cover,omitempty"`
 	Photos        []string   `json:"photos"`
+	Videos        []string   `json:"videos,omitempty"`
 }
 
 type cardContentRow struct {
@@ -63,8 +65,8 @@ func blocksFromRows(rows []blockRow) []domain.Block {
 func taskRevisionJSON(t domain.Task) ([]byte, error) {
 	b, err := json.Marshal(taskContentRow{
 		Title: t.Title, City: t.City, Nationwide: t.Nationwide, Categories: nonNil(t.Categories), Formats: nonNil(t.Formats),
-		Access: t.Access, MinViews: t.MinViews, RewardKopecks: t.RewardKopecks, PublishBy: t.PublishBy,
-		PublishTime: t.PublishTime, DeadlineAt: t.DeadlineAt, Blocks: blockRows(t.Blocks), Cover: t.Cover, Photos: nonNil(t.Photos),
+		Access: t.Access, Goal: t.Goal, MinViews: t.MinViews, RewardKopecks: t.RewardKopecks, PublishBy: t.PublishBy,
+		PublishTime: t.PublishTime, DeadlineAt: t.DeadlineAt, Blocks: blockRows(t.Blocks), Cover: t.Cover, Photos: nonNil(t.Photos), Videos: nonNil(t.Videos),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("правка задания в JSON: %w", err)
@@ -79,8 +81,8 @@ func taskRevisionOf(raw []byte) (domain.Task, error) {
 	}
 	return domain.Task{
 		Title: r.Title, City: r.City, Nationwide: r.Nationwide, Categories: nonNil(r.Categories), Formats: nonNil(r.Formats),
-		Access: r.Access, MinViews: r.MinViews, RewardKopecks: r.RewardKopecks, PublishBy: r.PublishBy,
-		PublishTime: r.PublishTime, DeadlineAt: r.DeadlineAt, Blocks: blocksFromRows(r.Blocks), Cover: r.Cover, Photos: nonNil(r.Photos),
+		Access: r.Access, Goal: r.Goal, MinViews: r.MinViews, RewardKopecks: r.RewardKopecks, PublishBy: r.PublishBy,
+		PublishTime: r.PublishTime, DeadlineAt: r.DeadlineAt, Blocks: blocksFromRows(r.Blocks), Cover: r.Cover, Photos: nonNil(r.Photos), Videos: nonNil(r.Videos),
 	}, nil
 }
 
@@ -262,8 +264,8 @@ func (r *Listings) ApplyTaskRevision(ctx context.Context, id int64, revStatus do
 		row, err = q.ReplaceTaskContent(ctx, store.ReplaceTaskContentParams{
 			ID: id, Status: string(domain.StatusPublished), RevisionStatus: string(revStatus),
 			Title: rev.Title, City: rev.City, Nationwide: rev.Nationwide, Categories: nonNil(rev.Categories), Formats: nonNil(rev.Formats),
-			Access: rev.Access, MinViews: rev.MinViews, RewardKopecks: rev.RewardKopecks, PublishBy: date(rev.PublishBy),
-			PublishTime: clockTime(rev.PublishTime), DeadlineAt: tsOpt(rev.DeadlineAt), Blocks: blocks, Cover: text(rev.Cover), Photos: nonNil(rev.Photos),
+			Access: rev.Access, Goal: rev.Goal, MinViews: rev.MinViews, RewardKopecks: rev.RewardKopecks, PublishBy: date(rev.PublishBy),
+			PublishTime: clockTime(rev.PublishTime), DeadlineAt: tsOpt(rev.DeadlineAt), Blocks: blocks, Cover: text(rev.Cover), Photos: nonNil(rev.Photos), Videos: nonNil(rev.Videos),
 		})
 		if err != nil {
 			return err

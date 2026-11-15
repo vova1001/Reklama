@@ -405,6 +405,8 @@ type Task struct {
 	RevisionStatus      pgtype.Text
 	RevisionReason      string
 	RevisionSubmittedAt pgtype.Timestamptz
+	Goal                string
+	Videos              []string
 }
 
 type TelegramChannel struct {

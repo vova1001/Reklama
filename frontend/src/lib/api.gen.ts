@@ -484,7 +484,7 @@ export interface paths {
         /** Сохранить черновик (или правку отклонённого) */
         put: operations["updateTask"];
         post?: never;
-        /** Удалить черновик или отклонённое */
+        /** Удалить черновик, отклонённое или архивное */
         delete: operations["deleteTask"];
         options?: never;
         head?: never;
@@ -505,8 +505,9 @@ export interface paths {
         /**
          * Отправить на проверку
          * @description Из `draft` или `rejected` в `pending_review` (при `MODERATION_MODE=auto` — сразу `published`). Обязательно:
-         *     название 5–100, город (или «Вся Россия»), сфера, формат, просмотры, оплата от 100 ₽, срок — от
-         *     завтра до 90 дней (по Москве), хотя бы один блок с пунктами (заголовок блока — по желанию).
+         *     название 5–100, город (или «Вся Россия»), сфера, формат, число по цели (`goal`: просмотры, подписчики,
+         *     переходы или гости), оплата от 100 ₽, срок — от завтра до 90 дней (по Москве), хотя бы один блок с пунктами
+         *     (заголовок блока — по желанию).
          */
         post: operations["submitTask"];
         delete?: never;
@@ -528,6 +529,50 @@ export interface paths {
         put?: never;
         /** Вернуть в черновик (с проверки или снять с публикации) */
         post: operations["withdrawTask"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/tasks/{id}/archive": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["TaskID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Убрать задание в архив
+         * @description Из `published`, `expired` или `rejected` в `archived` (только владелец, вручную). Из ленты исчезает.
+         */
+        post: operations["archiveTask"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/tasks/{id}/unarchive": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["TaskID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Вернуть задание из архива
+         * @description Из `archived` в `draft` (только владелец); дальше — правка и отправка на проверку как обычно.
+         */
+        post: operations["unarchiveTask"];
         delete?: never;
         options?: never;
         head?: never;
@@ -881,6 +926,46 @@ export interface paths {
         post?: never;
         /** Удалить правку опубликованной анкеты */
         delete: operations["discardCardRevision"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/notifications": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Уведомления в приложении (решения модератора и др.)
+         * @description Последние уведомления текущего пользователя, новые сверху, и счётчик непрочитанных. Появляются вместе с применением решения модератора (отложенно, в окне отмены 10 с).
+         */
+        get: operations["getNotifications"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/notifications/read": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Пометить уведомления прочитанными
+         * @description Тело {"id": N} — прочитать одно; пустое тело — все. Чужие и уже прочитанные игнорируются.
+         */
+        post: operations["readNotifications"];
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -1535,10 +1620,11 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Загрузить видео для страницы (MP4 или WebM как есть, без перекодирования)
+         * Загрузить видео для страницы или задания (MP4 или WebM как есть, без перекодирования)
          * @description multipart/form-data, поле `file`. Тип — по содержимому; до `VIDEO_MAX_MB` (50) МБ, в квоте фото пользователя;
          *     одновременно — 2 загрузки на сервер (иначе 503 `busy`). Кадр-заставку сайт снимает сам и грузит как фото
-         *     `video_poster`. Неприкреплённое удаляется через сутки.
+         *     `video_poster`. Неприкреплённое удаляется через сутки. Назначение — query `purpose`: `page_video` (по умолчанию)
+         *     или `task_video` (видео задания, до 2 в черновике).
          */
         post: operations["uploadVideo"];
         delete?: never;
@@ -1834,10 +1920,10 @@ export interface components {
             completion: number;
         };
         /**
-         * @description Черновик | на проверке | опубликовано | отклонено (с причиной) | завершено (срок публикации прошёл, только задания) | на доработке (замечания в reviewNotes)
+         * @description Черновик | на проверке | опубликовано | отклонено (с причиной) | завершено (срок публикации прошёл, только задания) | на доработке (замечания в reviewNotes) | в архиве (только задания, убрал владелец)
          * @enum {string}
          */
-        Status: "draft" | "pending_review" | "published" | "rejected" | "expired" | "changes_requested";
+        Status: "draft" | "pending_review" | "published" | "rejected" | "expired" | "changes_requested" | "archived";
         /** @description Динамический блок: text — абзацы, list — пункты, links — ссылки https://… */
         Block: {
             /** @enum {string} */
@@ -1884,8 +1970,13 @@ export interface components {
             /** @enum {string} */
             access: "open" | "approval" | "";
             /**
+             * @description Цель задания: просмотры (по умолчанию) | подписчики | переходы по ссылке | гости (офлайн-точка)
+             * @enum {string}
+             */
+            goal?: "views" | "subscribers" | "clicks" | "guests" | "";
+            /**
              * Format: int64
-             * @description Условие выполнения — просмотры
+             * @description Условие выполнения — число по цели (goal): просмотры, подписчики, переходы или гости
              */
             minViews: number;
             /** Format: int64 */
@@ -1899,6 +1990,8 @@ export interface components {
             cover: string;
             /** @description id фото task_photo по порядку */
             photos: string[];
+            /** @description id видео task_video по порядку */
+            videos: string[];
         };
         Task: {
             /** Format: int64 */
@@ -1915,7 +2008,15 @@ export interface components {
             formats: string[];
             /** @enum {string} */
             access: "open" | "approval";
-            /** Format: int64 */
+            /**
+             * @description Цель задания
+             * @enum {string}
+             */
+            goal: "views" | "subscribers" | "clicks" | "guests";
+            /**
+             * Format: int64
+             * @description Число по цели (goal)
+             */
             minViews: number;
             /** Format: int64 */
             rewardKopecks: number;
@@ -1931,6 +2032,7 @@ export interface components {
             blocks: components["schemas"]["Block"][];
             cover: components["schemas"]["Photo"] | null;
             photos: components["schemas"]["Photo"][];
+            videos: components["schemas"]["TaskVideo"][];
             /** @description Название бизнеса (только в ленте) */
             brand?: string;
             /** @description Адрес опубликованной страницы бизнеса (/b/<slug>); нет — не приходит */
@@ -2065,6 +2167,34 @@ export interface components {
                 card: components["schemas"]["Card"];
             };
         };
+        Notice: {
+            /** Format: int64 */
+            id: number;
+            /** @description task | task_revision | card | card_revision | page | page_revision */
+            kind: string;
+            /** Format: int64 */
+            itemId: number;
+            /** @enum {string} */
+            action: "approve" | "reject" | "rework";
+            /** @description Название задания */
+            title: string;
+            /** @description Причина отказа или сводка замечаний */
+            reason: string;
+            /** @description Где посмотреть в приложении */
+            path: string;
+            /** Format: date-time */
+            readAt?: string | null;
+            /** Format: date-time */
+            createdAt: string;
+        };
+        NotificationsResult: {
+            items: components["schemas"]["Notice"][];
+            /**
+             * Format: int64
+             * @description Сколько непрочитанных
+             */
+            unread: number;
+        };
         DraftResult: {
             draft: {
                 form: string;
@@ -2104,7 +2234,7 @@ export interface components {
          * @description Аватар 1:1 | обложка задания 16:9 | пример к заданию | аватар анкеты 1:1 | пример работы | логотип страницы 1:1 | обложка страницы 3:1 | фото страницы | заставка видео
          * @enum {string}
          */
-        MediaPurpose: "avatar" | "task_cover" | "task_photo" | "card_avatar" | "card_work" | "page_logo" | "page_cover" | "page_photo" | "video_poster";
+        MediaPurpose: "avatar" | "task_cover" | "task_photo" | "task_video" | "card_avatar" | "card_work" | "page_logo" | "page_cover" | "page_photo" | "video_poster";
         Media: components["schemas"]["Photo"] & {
             purpose: components["schemas"]["MediaPurpose"];
             width: number;
@@ -2258,6 +2388,11 @@ export interface components {
             src: string;
             /** Format: int64 */
             bytes: number;
+        };
+        TaskVideo: {
+            id: string;
+            /** @description /media/{id}/video */
+            src: string;
         };
         /** @enum {string} */
         ReviewKind: "task" | "task_revision" | "card" | "card_revision" | "page" | "page_revision" | "category" | "format";
@@ -3546,6 +3681,64 @@ export interface operations {
             409: components["responses"]["Conflict"];
         };
     };
+    archiveTask: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Значение из `GET /api/auth/config` (равно cookie `ohvat_csrf`) */
+                "X-CSRF-Token": components["parameters"]["CSRF"];
+            };
+            path: {
+                id: components["parameters"]["TaskID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description В архиве */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Task"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    unarchiveTask: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Значение из `GET /api/auth/config` (равно cookie `ohvat_csrf`) */
+                "X-CSRF-Token": components["parameters"]["CSRF"];
+            };
+            path: {
+                id: components["parameters"]["TaskID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Черновик */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Task"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
     getCard: {
         parameters: {
             query?: never;
@@ -4177,6 +4370,60 @@ export interface operations {
             };
             401: components["responses"]["Unauthorized"];
             409: components["responses"]["Conflict"];
+        };
+    };
+    getNotifications: {
+        parameters: {
+            query?: {
+                /** @description Сколько последних (по умолчанию 50) */
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Уведомления и счётчик непрочитанных */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationsResult"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    readNotifications: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Значение из `GET /api/auth/config` (равно cookie `ohvat_csrf`) */
+                "X-CSRF-Token": components["parameters"]["CSRF"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": {
+                    /** Format: int64 */
+                    id?: number;
+                };
+            };
+        };
+        responses: {
+            /** @description Прочитано */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
         };
     };
     createComplaint: {

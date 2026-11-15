@@ -26,6 +26,7 @@ type taskIn struct {
 	Categories    []string   `json:"categories"`
 	Formats       []string   `json:"formats"`
 	Access        string     `json:"access"`
+	Goal          string     `json:"goal"`
 	MinViews      int64      `json:"minViews"`
 	RewardKopecks int64      `json:"rewardKopecks"`
 	PublishBy     string     `json:"publishBy"`
@@ -33,6 +34,7 @@ type taskIn struct {
 	Blocks        []blockDTO `json:"blocks"`
 	Cover         string     `json:"cover"`
 	Photos        []string   `json:"photos"`
+	Videos        []string   `json:"videos"`
 }
 
 type cardIn struct {
@@ -63,6 +65,7 @@ type taskDTO struct {
 	CategoryTitles []string   `json:"categoryTitles,omitempty"`
 	Formats        []string   `json:"formats"`
 	Access         string     `json:"access"`
+	Goal           string     `json:"goal"`
 	MinViews       int64      `json:"minViews"`
 	RewardKopecks  int64      `json:"rewardKopecks"`
 	PublishBy      *string    `json:"publishBy"`
@@ -71,6 +74,7 @@ type taskDTO struct {
 	Blocks         []blockDTO `json:"blocks"`
 	Cover          *photoDTO  `json:"cover"`
 	Photos         []photoDTO `json:"photos"`
+	Videos         []videoDTO `json:"videos"`
 	Brand          string     `json:"brand,omitempty"`
 	BrandSlug      string     `json:"brandSlug,omitempty"` // адрес страницы бизнеса /b/<slug>
 	CreatedAt      time.Time  `json:"createdAt"`
@@ -219,8 +223,8 @@ func toBlocksDTO(bs []domain.Block) []blockDTO {
 func (in taskIn) toService() service.TaskInput {
 	return service.TaskInput{
 		Title: in.Title, City: in.City, Nationwide: in.Nationwide, Categories: in.Categories, Formats: in.Formats,
-		Access: in.Access, MinViews: in.MinViews, RewardKopecks: in.RewardKopecks,
-		PublishBy: in.PublishBy, PublishTime: in.PublishTime, Blocks: blocksIn(in.Blocks), Cover: in.Cover, Photos: in.Photos,
+		Access: in.Access, Goal: in.Goal, MinViews: in.MinViews, RewardKopecks: in.RewardKopecks,
+		PublishBy: in.PublishBy, PublishTime: in.PublishTime, Blocks: blocksIn(in.Blocks), Cover: in.Cover, Photos: in.Photos, Videos: in.Videos,
 	}
 }
 
@@ -243,6 +247,15 @@ func photos(ids []string) []photoDTO {
 	return out
 }
 
+// videosOf — видео-примеры задания (адрес файла; байты здесь не нужны).
+func videosOf(ids []string) []videoDTO {
+	out := make([]videoDTO, 0, len(ids))
+	for _, id := range ids {
+		out = append(out, videoDTO{ID: id, Src: videoURL(id)})
+	}
+	return out
+}
+
 func toTaskDTO(t domain.Task) taskDTO {
 	var by *string
 	if t.PublishBy != nil {
@@ -252,8 +265,8 @@ func toTaskDTO(t domain.Task) taskDTO {
 	out := taskDTO{
 		ID: t.ID, Status: string(t.Status), RejectReason: t.RejectReason, Title: t.Title, City: t.City, Nationwide: t.Nationwide,
 		Categories: nonNilStr(t.Categories), CategoryTitles: t.CategoryTitles, Formats: nonNilStr(t.Formats), Access: t.Access,
-		MinViews: t.MinViews, RewardKopecks: t.RewardKopecks, PublishBy: by, PublishTime: t.PublishTime, DeadlineAt: utcPtr(t.DeadlineAt), Blocks: toBlocksDTO(t.Blocks),
-		Cover: photo(t.Cover), Photos: photos(t.Photos), Brand: t.Brand, BrandSlug: t.BrandSlug,
+		Goal: t.Goal, MinViews: t.MinViews, RewardKopecks: t.RewardKopecks, PublishBy: by, PublishTime: t.PublishTime, DeadlineAt: utcPtr(t.DeadlineAt), Blocks: toBlocksDTO(t.Blocks),
+		Cover: photo(t.Cover), Photos: photos(t.Photos), Videos: videosOf(t.Videos), Brand: t.Brand, BrandSlug: t.BrandSlug,
 		CreatedAt: t.CreatedAt.UTC(), UpdatedAt: t.UpdatedAt.UTC(), SubmittedAt: utcPtr(t.SubmittedAt), PublishedAt: utcPtr(t.PublishedAt),
 	}
 	if len(t.ReviewNotes) > 0 {

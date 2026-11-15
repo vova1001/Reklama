@@ -12,6 +12,8 @@ const (
 	StatusPublished Status = "published"
 	StatusRejected  Status = "rejected"
 	StatusExpired   Status = "expired" // срок публикации прошёл (только задания; переводит система)
+	// StatusArchived — владелец сам убрал задание в архив (из архива — обратно в черновик).
+	StatusArchived Status = "archived"
 	// StatusChangesRequested — модератор вернул на доработку с замечаниями по полям.
 	StatusChangesRequested Status = "changes_requested"
 )
@@ -33,10 +35,11 @@ var transitions = map[Status]map[Status]Actor{
 	StatusDraft: {StatusPending: ActorOwner},
 	StatusPending: {StatusPublished: ActorModerator | ActorSystem, StatusRejected: ActorModerator,
 		StatusChangesRequested: ActorModerator, StatusDraft: ActorOwner},
-	StatusRejected:         {StatusPending: ActorOwner},
+	StatusRejected:         {StatusPending: ActorOwner, StatusArchived: ActorOwner},
 	StatusChangesRequested: {StatusPending: ActorOwner},
-	StatusPublished:        {StatusDraft: ActorOwner, StatusExpired: ActorSystem, StatusRejected: ActorModerator},
-	StatusExpired:          {StatusDraft: ActorOwner},
+	StatusPublished:        {StatusDraft: ActorOwner, StatusExpired: ActorSystem, StatusRejected: ActorModerator, StatusArchived: ActorOwner},
+	StatusExpired:          {StatusDraft: ActorOwner, StatusArchived: ActorOwner},
+	StatusArchived:         {StatusDraft: ActorOwner},
 }
 
 // RevisionTransition — переходы правки опубликованного: владелец отправляет, модератор решает.
@@ -111,6 +114,24 @@ const (
 	AccessApproval = "approval"
 )
 
+// Цель задания: в каких единицах условие выполнения (MinViews — целевое количество в единицах цели).
+// Проверка выполнения по целям, кроме просмотров, — при подключении контура выполнения и выплат.
+const (
+	GoalViews       = "views"       // просмотры ролика
+	GoalSubscribers = "subscribers" // новые подписчики
+	GoalClicks      = "clicks"      // переходы по ссылке
+	GoalGuests      = "guests"      // пришедшие гости (по промокоду)
+)
+
+// ValidGoal — цель из списка.
+func ValidGoal(g string) bool {
+	switch g {
+	case GoalViews, GoalSubscribers, GoalClicks, GoalGuests:
+		return true
+	}
+	return false
+}
+
 // Task — задание бизнеса.
 type Task struct {
 	ID             int64
@@ -121,9 +142,10 @@ type Task struct {
 	City           string
 	Nationwide     bool     // «Вся Россия» — город не важен
 	Categories     []string // slug сфер по порядку выбора, до 5; пусто — не выбраны (черновик)
-	Formats        []string // форматы: slug из списка (FormatReels…) или своё название, до 3
+	Formats        []string // форматы: slug из списка (FormatReels…) или своё название
 	Access         string
-	MinViews       int64      // условие выполнения — просмотры
+	Goal           string     // цель: GoalViews… ("" в старых записях — GoalViews)
+	MinViews       int64      // условие выполнения — целевое количество в единицах цели (Goal)
 	RewardKopecks  int64      // оплата за выполнение
 	PublishBy      *time.Time // срок публикации (дата, 00:00 UTC); nil — не задан
 	PublishTime    string     // время срока по Москве «ЧЧ:ММ»; "" — до конца дня
@@ -131,6 +153,7 @@ type Task struct {
 	Blocks         []Block
 	Cover          string   // media.id обложки (16:9); "" — нет
 	Photos         []string // media.id примеров «что показать», по порядку
+	Videos         []string // media.id видео-примеров, по порядку, до 2
 	CategoryTitles []string // названия сфер по порядку (только в ленте и на странице задания)
 	Brand          string   // название бизнеса (только в ленте)
 	BrandSlug      string   // адрес опубликованной страницы бизнеса (/b/<slug>); "" — нет

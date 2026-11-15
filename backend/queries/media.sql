@@ -18,7 +18,7 @@ SELECT m.id, m.owner_id,
        (CASE
             WHEN m.subject = 'user' THEN true
             WHEN m.subject = 'task' THEN EXISTS (SELECT 1 FROM tasks t WHERE t.id = m.subject_id AND t.status = 'published'
-                                                   AND (t.cover = m.id OR m.id = ANY(t.photos)))
+                                                   AND (t.cover = m.id OR m.id = ANY(t.photos) OR m.id = ANY(t.videos)))
             WHEN m.subject = 'creator_card' THEN EXISTS (SELECT 1 FROM creator_cards c WHERE c.user_id = m.subject_id AND c.status = 'published'
                                                    AND (c.avatar = m.id OR m.id = ANY(c.works)))
             WHEN m.subject = 'page' THEN EXISTS (SELECT 1 FROM profile_pages p WHERE p.id = m.subject_id AND p.status = 'published'

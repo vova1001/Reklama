@@ -8,11 +8,10 @@ export const MODES: { id: Mode; title: string; icon: string }[] = [
 
 export type Page = 'feed' | 'create' | 'my' | 'profile' | 'settings' | 'notifications';
 
-/** Навигация: mode — пункт только для режима (Создать и Мои — у бизнеса, Анкета — у автора); rail — только в левой колонке. */
+/** Навигация: mode — пункт только для режима (Мои задания — у бизнеса, Анкета — у автора); rail — только в левой колонке. */
 export const NAV: { id: Page; title: string; icon: string; href: string; mode?: Mode; rail?: boolean }[] = [
   { id: 'feed', title: 'Лента', icon: 'house', href: '/app' },
-  { id: 'create', title: 'Создать', icon: 'square-plus', href: '/app/tasks/new', mode: 'business' },
-  { id: 'my', title: 'Мои', icon: 'list', href: '/app/tasks', mode: 'business' },
+  { id: 'my', title: 'Мои задания', icon: 'list', href: '/app/tasks', mode: 'business' },
   { id: 'create', title: 'Анкета', icon: 'id-card', href: '/app/card', mode: 'creator' },
   { id: 'notifications', title: 'Уведомления', icon: 'bell-ring', href: '/app/notifications', rail: true },
   { id: 'profile', title: 'Профиль', icon: 'user-round', href: '/app/profile' },
@@ -30,8 +29,9 @@ export const STATUS: Record<string, string> = {
   pending_review: 'На проверке',
   published: 'Опубликовано',
   rejected: 'Отклонено',
-  expired: 'Завершено',
+  expired: 'Просрочено',
   changes_requested: 'На доработке',
+  archived: 'В архиве',
 };
 
 /** Поля, к которым модератор пишет замечания «на доработку» (как у сервера — service.FieldTitles). */
@@ -60,13 +60,36 @@ export const FORMATS: { id: string; title: string }[] = [
   { id: 'telegram', title: 'Telegram' },
 ];
 
+/** Крупные города — подсказки в поле «Город» (ввод свободный). */
+export const CITIES = [
+  'Москва', 'Санкт-Петербург', 'Новосибирск', 'Екатеринбург', 'Казань', 'Нижний Новгород', 'Самара', 'Омск',
+  'Челябинск', 'Магнитогорск', 'Ростов-на-Дону', 'Уфа', 'Красноярск', 'Воронеж', 'Пермь', 'Волгоград',
+  'Краснодар', 'Саратов', 'Тюмень', 'Тольятти', 'Ижевск', 'Барнаул', 'Ульяновск', 'Иркутск', 'Хабаровск',
+  'Ярославль', 'Владивосток', 'Махачкала', 'Томск', 'Оренбург', 'Кемерово', 'Рязань', 'Астрахань', 'Сочи',
+];
+
+/** Тип бизнеса — первый шаг мастера задания; ведёт выбор цели. */
+export const BIZ_TYPES: { id: string; title: string; tip: string }[] = [
+  { id: 'offline', title: 'Офлайн-бизнес', tip: 'Кафе, магазин, салон — есть точка, куда приходят люди' },
+  { id: 'online', title: 'Онлайн-бизнес', tip: 'Магазин или сервис в интернете — заказ без визита' },
+  { id: 'services', title: 'Услуги в интернете', tip: 'Вы продаёте свои услуги и ищете клиентов онлайн' },
+];
+
+/** Цель задания: под неё считается условие выполнения. kinds — для каких типов бизнеса доступна. */
+export const GOALS: { id: string; title: string; tip: string; label: string; short: string; kinds: string[] }[] = [
+  { id: 'views', title: 'Просмотры', tip: 'Ролик набрал нужное число просмотров', label: 'Просмотров от', short: 'просмотры', kinds: ['offline', 'online', 'services'] },
+  { id: 'subscribers', title: 'Подписчики', tip: 'Пришли новые подписчики на ваш аккаунт', label: 'Подписчиков от', short: 'подписчики', kinds: ['offline', 'online', 'services'] },
+  { id: 'clicks', title: 'Переходы', tip: 'Люди перешли по вашей ссылке или промокоду', label: 'Переходов от', short: 'переходы', kinds: ['offline', 'online', 'services'] },
+  { id: 'guests', title: 'Гости', tip: 'Реальные люди пришли на вашу точку', label: 'Гостей от', short: 'гости', kinds: ['offline'] },
+];
+
 /** Разделы форм: заголовок и подсказка в одну строку (до ~45 знаков — помещается на телефоне). */
 export const FORM_GROUPS = {
   task: {
     main: { title: 'Основное', hint: 'По сфере, городу и формату вас найдут авторы' },
-    terms: { title: 'Условия', hint: 'Кто берёт, сколько просмотров, оплата и срок' },
+    terms: { title: 'Условия', hint: 'Кто берёт, цель, оплата и срок' },
     desc: { title: 'Описание', hint: 'Что снять и что важно — читают первым' },
-    photo: { title: 'Фото', hint: 'Примеры, что показать, — до 6 фото' },
+    photo: { title: 'Фото и видео', hint: 'Примеры, что показать, — до 6 фото и 2 видео' },
   },
   card: {
     main: { title: 'Основное', hint: 'Как вас зовут, где вы и о чём снимаете' },
@@ -124,7 +147,7 @@ export const TASK_RULES: Record<string, { short: string; msg: string }> = {
   categories: { short: 'сфера', msg: 'Выберите сферу' },
   city: { short: 'город', msg: 'Укажите город или «Вся Россия»' },
   formats: { short: 'формат', msg: 'Выберите хотя бы один формат' },
-  minViews: { short: 'просмотры', msg: 'Укажите число просмотров' },
+  minViews: { short: 'цель', msg: 'Укажите целевое число' },
   reward: { short: 'оплата', msg: 'Оплата — от 100 ₽' },
   publishBy: { short: 'срок', msg: 'Укажите срок публикации' },
   blocks: { short: 'описание', msg: 'Опишите задание: добавьте описание или требования' },

@@ -1,19 +1,21 @@
 ---
-// Задание на весь экран: обложка и название крупно, затем разделы с заголовком и подсказкой в одну строку —
-// «Основное» (сферы, город, форматы), «Условия» (кто берёт, просмотры, оплата, срок), «Описание» (блоки, шаблоны
-// одним нажатием), «Фото». Сферы и форматы — несколько, с «+ Своя / + Свой»; срок — пилюлями или «+ Свой»
-// (календарь и время). Логика — scripts/editor.ts.
+// Задание на весь экран: мастер ведёт по шагам — сначала «Кто вы» (тип бизнеса), затем цель (просмотры, подписчики,
+// переходы; гости — только у офлайна). Дальше обложка и название крупно, разделы с заголовком и подсказкой в одну
+// строку — «Основное» (сферы, город, форматы), «Условия» (цель, кто берёт, оплата, срок), «Описание» (одно поле),
+// «Фото и видео». Сферы и форматы — несколько, с «+ Своя / + Свой»; срок — пилюлями или «+ Свой» (календарь и
+// время). Логика — scripts/editor.ts.
 import Icon from '../Icon.astro';
 import EditorBar from './EditorBar.astro';
 import ReviewNote from './ReviewNote.astro';
-import { FORM_GROUPS, TASK_BLOCKS, TASK_TEMPLATES } from '../../content/app';
+import { BIZ_TYPES, CITIES, FORM_GROUPS, GOALS } from '../../content/app';
 import type { CategoryItem, Task } from '../../lib/auth';
 // revision — правка опубликованного: в форме новая версия, опубликованная видна всем до одобрения.
 interface Props { task: Task | null; categories: { common: CategoryItem[]; own: CategoryItem[] }; brand: string; revision?: Task['revision'] | null }
 const { task: t, categories, brand, revision = null } = Astro.props;
 const init = {
-  kind: 'task', id: t?.id ?? null, status: t?.status ?? 'draft', blocks: t ? t.blocks : TASK_BLOCKS, templates: TASK_TEMPLATES,
+  kind: 'task', id: t?.id ?? null, status: t?.status ?? 'draft', blocks: [], templates: [],
   cover: t?.cover ? [t.cover] : [], photos: t?.photos ?? [], selected: t?.categories ?? [], formats: t?.formats ?? [],
+  goal: t?.goal ?? 'views', videos: (t?.videos ?? []).map((v) => ({ media: v.id, src: v.src })),
   categories, brand, uid: Astro.locals.me!.user.id, updatedAt: t?.updatedAt ?? null,
 };
 const json = JSON.stringify(init).replace(/</g, '\\u003c');
@@ -21,6 +23,9 @@ const due = t?.publishBy ? t.publishBy.split('-').reverse().join('.') : '';
 const rub = t && t.rewardKopecks ? String(Math.round(t.rewardKopecks / 100)) : '';
 const views = t && t.minViews ? String(t.minViews) : '';
 const access = t?.access ?? 'open';
+const goal = t?.goal ?? 'views';
+const desc = t ? t.blocks.map((b) => b.items.join('\n')).filter(Boolean).join('\n\n') : '';
+const goalLabel = (id: string) => GOALS.find((g) => g.id === id)?.label ?? 'Просмотров от';
 const G = FORM_GROUPS.task;
 ---
 <form class="ed" novalidate autocomplete="off" data-editor="task">
@@ -32,6 +37,16 @@ const G = FORM_GROUPS.task;
     {revision ? <ReviewNote status={revision.status} reason={revision.rejectReason} notes={t?.reviewNotes} revision /> : <ReviewNote status={t?.status} reason={t?.rejectReason} notes={t?.reviewNotes} />}
 
     <div data-pane="edit">
+      <section class="grp" aria-labelledby="g-biz" aria-describedby="g-biz-d">
+        <h2 class="grp-h" id="g-biz">Шаг 1 · Кто вы</h2>
+        <p class="grp-d" id="g-biz-d">Под тип бизнеса подберём подходящие цели</p>
+        <div class="chips" role="radiogroup" aria-label="Тип бизнеса" data-biz>
+          {BIZ_TYPES.map((b) => (
+            <button type="button" class="chip is-check" role="radio" aria-checked="false" data-v={b.id} data-tip={b.tip} data-tip-show>{b.title}</button>
+          ))}
+        </div>
+      </section>
+
       <div class="sec ed-cover">
         <div data-cover></div>
         <p class="ferr" data-err="cover"></p>
@@ -55,14 +70,17 @@ const G = FORM_GROUPS.task;
         <div class="sec field" data-sec="city">
           <label class="lbl" for="t-city">Город</label>
           <div class="city">
-            <input class="inp" id="t-city" name="city" maxlength="80" value={t?.city ?? ''} placeholder="Казань" data-ph="Казань" autocomplete="address-level2" data-input="city" />
+            <input class="inp" id="t-city" name="city" maxlength="80" value={t?.city ?? ''} placeholder="Казань" data-ph="Казань" autocomplete="address-level2" list="t-cities" data-input="city" />
+            <datalist id="t-cities">
+              {CITIES.map((c) => <option value={c} />)}
+            </datalist>
             <button class="sw" type="button" role="switch" aria-checked={t?.nationwide ? 'true' : 'false'} data-nationwide><span class="sw-k" aria-hidden="true"></span>Вся Россия</button>
           </div>
           <p class="ferr" data-err="city"></p>
         </div>
 
         <div class="sec" data-sec="formats">
-          <span class="lbl" id="fmt-l">Формат <span class="hint">· можно несколько, до 3</span></span>
+          <span class="lbl" id="fmt-l">Формат <span class="hint">· можно несколько</span></span>
           <div data-formats data-input="formats"></div>
           <p class="ferr" data-err="formats"></p>
         </div>
@@ -73,16 +91,25 @@ const G = FORM_GROUPS.task;
         <p class="grp-d" id="g-terms-d">{G.terms.hint}</p>
 
         <div class="sec">
+          <span class="lbl" id="goal-l">Шаг 2 · Цель задания</span>
+          <div class="chips" role="radiogroup" aria-labelledby="goal-l" data-goal>
+            {GOALS.map((g) => (
+              <button type="button" class="chip is-check" role="radio" aria-checked={goal === g.id ? 'true' : 'false'} data-v={g.id} data-kinds={g.kinds.join(' ')} data-tip={g.tip} data-tip-show>{g.title}</button>
+            ))}
+          </div>
+        </div>
+
+        <div class="sec">
           <span class="lbl" id="acc-l">Кто берёт</span>
           <div class="mseg" role="radiogroup" aria-labelledby="acc-l" data-access>
-            <button type="button" role="radio" aria-checked={access === 'open' ? 'true' : 'false'} tabindex={access === 'open' ? 0 : -1} data-v="open"><Icon name="zap" size={18} />Любой автор</button>
-            <button type="button" role="radio" aria-checked={access === 'approval' ? 'true' : 'false'} tabindex={access === 'approval' ? 0 : -1} data-v="approval"><Icon name="user-round-check" size={18} />С одобрением</button>
+            <button type="button" role="radio" aria-checked={access === 'open' ? 'true' : 'false'} tabindex={access === 'open' ? 0 : -1} data-v="open" data-tip="Задание сразу видят все авторы — берёт первый подходящий" data-tip-show><Icon name="zap" size={18} />Любой автор</button>
+            <button type="button" role="radio" aria-checked={access === 'approval' ? 'true' : 'false'} tabindex={access === 'approval' ? 0 : -1} data-v="approval" data-tip="Заявки авторов сначала приходят вам — выбираете сами" data-tip-show><Icon name="user-round-check" size={18} />С одобрением</button>
           </div>
         </div>
 
         <div class="sec row2">
           <div class="field" data-sec="minViews">
-            <label class="lbl" for="t-views">Просмотры от</label>
+            <label class="lbl" for="t-views" data-goal-label>{goalLabel(goal)}</label>
             <div class="ifx"><Icon name="eye" size={20} /><input class="inp" id="t-views" name="minViews" inputmode="numeric" maxlength="13" value={views} placeholder="5 000" data-num data-input="minViews" /></div>
             <p class="ferr" data-err="minViews"></p>
           </div>
@@ -118,8 +145,8 @@ const G = FORM_GROUPS.task;
       <section class="grp" aria-labelledby="g-desc" aria-describedby="g-desc-d">
         <h2 class="grp-h" id="g-desc">{G.desc.title}</h2>
         <p class="grp-d" id="g-desc-d">{G.desc.hint}</p>
-        <div class="sec" data-sec="blocks">
-          <div data-blocks data-input="blocks"></div>
+        <div class="sec field" data-sec="blocks">
+          <textarea class="inp ed-desc" id="t-desc" name="description" rows="7" maxlength="15000" placeholder="Что снять, что показать, что важно — каждая мысль с новой строки" aria-label="Описание задания" data-input="blocks">{desc}</textarea>
           <p class="ferr" data-err="blocks"></p>
         </div>
       </section>
@@ -130,6 +157,11 @@ const G = FORM_GROUPS.task;
         <div class="sec">
           <div data-photos></div>
           <p class="ferr" data-err="photos"></p>
+        </div>
+        <div class="sec">
+          <span class="lbl">Видео <span class="hint">· до 2, MP4 или WebM</span></span>
+          <div data-videos></div>
+          <p class="ferr" data-err="videos"></p>
         </div>
       </section>
 

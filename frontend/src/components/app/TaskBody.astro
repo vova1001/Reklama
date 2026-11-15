@@ -4,8 +4,9 @@
 import type { components } from '../../lib/api.gen';
 type Block = components['schemas']['Block'];
 type Photo = components['schemas']['Photo'];
-interface Props { blocks: Block[]; photos?: Photo[] }
-const { blocks, photos = [] } = Astro.props;
+type TaskVideo = components['schemas']['TaskVideo'];
+interface Props { blocks: Block[]; photos?: Photo[]; videos?: TaskVideo[] }
+const { blocks, photos = [], videos = [] } = Astro.props;
 ---
 <div class="body">
   {blocks.filter((b) => b.items.length).map((b) => (
@@ -17,6 +18,9 @@ const { blocks, photos = [] } = Astro.props;
         </ul>
       )}
     </section>
+  ))}
+  {videos.map((v) => (
+    <video class="body-vd" src={v.src} controls preload="metadata" playsinline />
   ))}
   {photos.length > 0 && (
     <div class="body-ph">

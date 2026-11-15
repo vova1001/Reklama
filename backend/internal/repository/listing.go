@@ -49,9 +49,9 @@ func (r *Listings) CreateTask(ctx context.Context, t domain.Task) (domain.Task, 
 		var err error
 		row, err = q.CreateTask(ctx, store.CreateTaskParams{
 			OwnerID: t.OwnerID, Title: t.Title, City: t.City, Nationwide: t.Nationwide, Categories: nonNil(t.Categories),
-			Formats: nonNil(t.Formats), Access: t.Access, MinViews: t.MinViews,
+			Formats: nonNil(t.Formats), Access: t.Access, Goal: t.Goal, MinViews: t.MinViews,
 			RewardKopecks: t.RewardKopecks, PublishBy: date(t.PublishBy), PublishTime: clockTime(t.PublishTime), DeadlineAt: tsOpt(t.DeadlineAt), Blocks: blocks,
-			Cover: text(t.Cover), Photos: nonNil(t.Photos),
+			Cover: text(t.Cover), Photos: nonNil(t.Photos), Videos: nonNil(t.Videos),
 		})
 		if err != nil {
 			return err
@@ -117,9 +117,9 @@ func (r *Listings) UpdateTask(ctx context.Context, t domain.Task) (domain.Task, 
 		var err error
 		row, err = q.UpdateOwnTask(ctx, store.UpdateOwnTaskParams{
 			ID: t.ID, OwnerID: t.OwnerID, Title: t.Title, City: t.City, Nationwide: t.Nationwide, Categories: nonNil(t.Categories),
-			Formats: nonNil(t.Formats), Access: t.Access, MinViews: t.MinViews,
+			Formats: nonNil(t.Formats), Access: t.Access, Goal: t.Goal, MinViews: t.MinViews,
 			RewardKopecks: t.RewardKopecks, PublishBy: date(t.PublishBy), PublishTime: clockTime(t.PublishTime), DeadlineAt: tsOpt(t.DeadlineAt), Blocks: blocks,
-			Cover: text(t.Cover), Photos: nonNil(t.Photos),
+			Cover: text(t.Cover), Photos: nonNil(t.Photos), Videos: nonNil(t.Videos),
 		})
 		if err != nil {
 			return err
@@ -218,8 +218,8 @@ func publishedTaskOf(row store.GetPublishedTaskRow) (domain.Task, error) {
 	t, err := taskOf(store.Task{
 		ID: row.ID, OwnerID: row.OwnerID, Status: row.Status, RejectReason: row.RejectReason, Title: row.Title,
 		City: row.City, Nationwide: row.Nationwide, Categories: row.Categories, Formats: row.Formats, Access: row.Access,
-		MinViews: row.MinViews, RewardKopecks: row.RewardKopecks, PublishBy: row.PublishBy, PublishTime: row.PublishTime, DeadlineAt: row.DeadlineAt,
-		Blocks: row.Blocks, Cover: row.Cover, Photos: row.Photos, CreatedAt: row.CreatedAt, UpdatedAt: row.UpdatedAt,
+		Goal: row.Goal, MinViews: row.MinViews, RewardKopecks: row.RewardKopecks, PublishBy: row.PublishBy, PublishTime: row.PublishTime, DeadlineAt: row.DeadlineAt,
+		Blocks: row.Blocks, Cover: row.Cover, Photos: row.Photos, Videos: row.Videos, CreatedAt: row.CreatedAt, UpdatedAt: row.UpdatedAt,
 		SubmittedAt: row.SubmittedAt, PublishedAt: row.PublishedAt,
 	})
 	if err != nil {
@@ -408,8 +408,8 @@ func taskOf(t store.Task) (domain.Task, error) {
 	out := domain.Task{
 		ID: t.ID, OwnerID: t.OwnerID, Status: domain.Status(t.Status), RejectReason: t.RejectReason, Title: t.Title,
 		City: t.City, Nationwide: t.Nationwide, Categories: nonNil(t.Categories), Formats: nonNil(t.Formats), Access: t.Access,
-		MinViews: t.MinViews, RewardKopecks: t.RewardKopecks, Blocks: blocks,
-		Cover: t.Cover.String, Photos: nonNil(t.Photos), CreatedAt: t.CreatedAt.Time, UpdatedAt: t.UpdatedAt.Time,
+		Goal: t.Goal, MinViews: t.MinViews, RewardKopecks: t.RewardKopecks, Blocks: blocks,
+		Cover: t.Cover.String, Photos: nonNil(t.Photos), Videos: nonNil(t.Videos), CreatedAt: t.CreatedAt.Time, UpdatedAt: t.UpdatedAt.Time,
 		SubmittedAt: tsPtr(t.SubmittedAt), PublishedAt: tsPtr(t.PublishedAt), DeadlineAt: tsPtr(t.DeadlineAt),
 	}
 	if t.PublishTime.Valid {
@@ -476,6 +476,7 @@ func attach(ctx context.Context, q *store.Queries, ownerID int64, s domain.Subje
 
 func taskMedia(t domain.Task) []string {
 	ids := append([]string(nil), t.Photos...)
+	ids = append(ids, t.Videos...)
 	if t.Cover != "" {
 		ids = append(ids, t.Cover)
 	}

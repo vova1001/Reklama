@@ -112,6 +112,34 @@ func (s *Server) withdrawTask(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, toTaskDTO(t))
 }
 
+// POST /api/me/tasks/{id}/archive — в архив (из опубликованного, просроченного или отклонённого).
+func (s *Server) archiveTask(w http.ResponseWriter, r *http.Request) {
+	id, ok := pathID(w, r)
+	if !ok {
+		return
+	}
+	t, err := s.tasks.Archive(r.Context(), currentUser(r), id)
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, toTaskDTO(t))
+}
+
+// POST /api/me/tasks/{id}/unarchive — из архива обратно в черновик.
+func (s *Server) unarchiveTask(w http.ResponseWriter, r *http.Request) {
+	id, ok := pathID(w, r)
+	if !ok {
+		return
+	}
+	t, err := s.tasks.Unarchive(r.Context(), currentUser(r), id)
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, toTaskDTO(t))
+}
+
 // DELETE /api/me/tasks/{id}/revision — удалить правку опубликованного.
 func (s *Server) discardTaskRevision(w http.ResponseWriter, r *http.Request) {
 	id, ok := pathID(w, r)

@@ -9,7 +9,7 @@ interface Props { task: Task }
 const { task: t } = Astro.props;
 const where = t.nationwide ? 'Вся Россия' : t.city;
 const meta = [where, (t.categoryTitles ?? []).join(', ')].filter(Boolean).join(' · ');
-const g = goal(t.minViews);
+const g = goal(t.minViews, t.goal);
 ---
 <article class="page" data-task-page={t.id} data-lb-group>
   {t.cover && (
@@ -31,6 +31,6 @@ const g = goal(t.minViews);
     {t.publishBy && <div><dt><Icon name="calendar" size={18} />Срок</dt><dd>{until(t.publishBy, t.publishTime)}</dd></div>}
     <div><dt><Icon name={t.access === 'approval' ? 'user-round-check' : 'zap'} size={18} />Кто берёт</dt><dd>{t.access === 'approval' ? 'С одобрением бизнеса' : 'Любой автор'}</dd></div>
   </dl>
-  <TaskBody blocks={t.blocks} photos={t.photos} />
+  <TaskBody blocks={t.blocks} photos={t.photos} videos={t.videos} />
   <slot />
 </article>

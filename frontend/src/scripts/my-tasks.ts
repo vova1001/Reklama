@@ -1,46 +1,92 @@
-// Мои задания: фильтр по статусу (без перезагрузки, адрес запоминает), удалить черновик (спрашиваем — удаление
-// сразу на сервере), вернуть с проверки в черновик.
-import { $, $$, api, busy } from '../lib/client';
+// Мои задания: действия без перезагрузки, где можно — удалить черновик/архивное (спрашиваем), вернуть с проверки,
+// убрать в архив и вернуть из него, опубликовать просроченное снова (в черновик и сразу на проверку).
+import { $, api, busy } from '../lib/client';
 import { confirmDialog, guard, toast } from '../lib/ui';
 
-const list = $('[data-my]');
-const filt = $('[data-filter]');
+const root = $('[data-my]');
 
-function applyFilter(f: string) {
-  $$<HTMLButtonElement>('button', filt!).forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.f === f)));
-  $$('.it', list!).forEach((it) => (it.hidden = !!f && it.dataset.status !== f));
-  history.replaceState(null, '', f ? `?status=${f}` : location.pathname);
-}
+if (root) {
+  root.addEventListener('click', async (e) => {
+    const b = (e.target as HTMLElement).closest<HTMLButtonElement>('button');
+    if (!b) return;
+    const id = b.dataset.delete ?? b.dataset.withdraw ?? b.dataset.archive ?? b.dataset.unarchive ?? b.dataset.republish;
+    if (!id) return;
 
-if (list && filt) {
-  applyFilter(new URLSearchParams(location.search).get('status') ?? '');
-  filt.addEventListener('click', (e) => {
-    const b = (e.target as HTMLElement).closest<HTMLButtonElement>('button[data-f]');
-    if (b) applyFilter(b.dataset.f!);
-  });
-  list.addEventListener('click', async (e) => {
-    const del = (e.target as HTMLElement).closest<HTMLButtonElement>('[data-delete]');
-    const wd = (e.target as HTMLElement).closest<HTMLButtonElement>('[data-withdraw]');
-    if (del) {
-      if (!(await confirmDialog('Удалить задание?', 'Черновик и его фото удалятся.', 'Удалить'))) return del.focus();
-      busy(del, true);
-      const r = await api<void>('DELETE', `/api/me/tasks/${del.dataset.delete}`);
+    if (b.dataset.delete) {
+      if (!(await confirmDialog('Удалить задание?', 'Черновик и его фото удалятся.', 'Удалить'))) return b.focus();
+      busy(b, true);
+      const r = await api<void>('DELETE', `/api/me/tasks/${id}`);
       if (!r.ok) {
-        busy(del, false);
+        busy(b, false);
         if (!guard(r.status)) toast(r.error.message);
         return;
       }
-      del.closest('.it')?.remove();
+      const sec = b.closest<HTMLElement>('.mysec');
+      b.closest('.it')?.remove();
+      const left = sec?.querySelectorAll('.it').length ?? 0;
+      const sup = sec?.querySelector('sup');
+      if (sup) sup.textContent = String(left);
+      if (sec && !left) sec.hidden = true;
       toast('Удалено');
-    } else if (wd) {
-      busy(wd, true);
-      const r = await api<void>('POST', `/api/me/tasks/${wd.dataset.withdraw}/withdraw`);
+      return;
+    }
+
+    if (b.dataset.withdraw) {
+      busy(b, true);
+      const r = await api<void>('POST', `/api/me/tasks/${id}/withdraw`);
       if (!r.ok) {
-        busy(wd, false);
+        busy(b, false);
         if (!guard(r.status)) toast(r.error.message);
         return;
       }
-      location.assign(`/app/tasks/${wd.dataset.withdraw}`);
+      location.assign(`/app/tasks/${id}`);
+      return;
+    }
+
+    if (b.dataset.archive) {
+      if (!(await confirmDialog('Убрать в архив?', 'Задание исчезнет из ленты. Вернуть можно из секции «Архивные».', 'В архив'))) return b.focus();
+      busy(b, true);
+      const r = await api<void>('POST', `/api/me/tasks/${id}/archive`);
+      if (!r.ok) {
+        busy(b, false);
+        if (!guard(r.status)) toast(r.error.message);
+        return;
+      }
+      toast('В архиве');
+      location.reload();
+      return;
+    }
+
+    if (b.dataset.unarchive) {
+      busy(b, true);
+      const r = await api<void>('POST', `/api/me/tasks/${id}/unarchive`);
+      if (!r.ok) {
+        busy(b, false);
+        if (!guard(r.status)) toast(r.error.message);
+        return;
+      }
+      toast('Вернулось в черновики');
+      location.reload();
+      return;
+    }
+
+    if (b.dataset.republish) {
+      busy(b, true);
+      const w = await api<void>('POST', `/api/me/tasks/${id}/withdraw`);
+      if (!w.ok) {
+        busy(b, false);
+        if (!guard(w.status)) toast(w.error.message);
+        return;
+      }
+      const s = await api<void>('POST', `/api/me/tasks/${id}/submit`);
+      if (!s.ok) {
+        busy(b, false);
+        if (!guard(s.status)) toast(s.error.message);
+        if (s.status === 400) location.assign(`/app/tasks/${id}`);
+        return;
+      }
+      toast('Отправлено на проверку');
+      location.reload();
     }
   });
 }

@@ -447,7 +447,7 @@ func TestUploadVideo(t *testing.T) {
 	ctx := context.Background()
 	mp4 := append([]byte{0, 0, 0, 0x20}, []byte("ftypmp42 video data")...)
 
-	m, err := svc.UploadVideo(ctx, biz, bytes.NewReader(mp4))
+	m, err := svc.UploadVideo(ctx, biz, bytes.NewReader(mp4), "")
 	if err != nil || m.Purpose != domain.PurposePageVideo || m.Bytes != int64(len(mp4)) {
 		t.Fatalf("upload: %+v %v", m, err)
 	}
@@ -461,27 +461,27 @@ func TestUploadVideo(t *testing.T) {
 	if _, _, err := svc.Open(ctx, 0, m.ID, 0); !errors.Is(err, domain.ErrNotFound) {
 		t.Fatalf("guest open: %v", err)
 	}
-	if _, err := svc.UploadVideo(ctx, biz, bytes.NewReader(bytes.Repeat([]byte{1}, 65))); !errors.Is(err, ErrVideoTooLarge) {
+	if _, err := svc.UploadVideo(ctx, biz, bytes.NewReader(bytes.Repeat([]byte{1}, 65)), ""); !errors.Is(err, ErrVideoTooLarge) {
 		t.Fatalf("large: %v", err)
 	}
-	if _, err := svc.UploadVideo(ctx, biz, strings.NewReader("not a video")); !errors.Is(err, ErrVideoType) {
+	if _, err := svc.UploadVideo(ctx, biz, strings.NewReader("not a video"), ""); !errors.Is(err, ErrVideoType) {
 		t.Fatalf("type: %v", err)
 	}
-	if _, err := svc.UploadVideo(ctx, biz, strings.NewReader("")); fields(t, err)["file"] == "" {
+	if _, err := svc.UploadVideo(ctx, biz, strings.NewReader(""), ""); fields(t, err)["file"] == "" {
 		t.Fatalf("empty: %v", err)
 	}
 	// квота: 100 байт — два видео по 23 байта и ещё 63 уже не помещаются
-	svc.UploadVideo(ctx, biz, bytes.NewReader(mp4))
-	if _, err := svc.UploadVideo(ctx, biz, bytes.NewReader(append(mp4, make([]byte, 40)...))); !errors.Is(err, ErrMediaQuota) {
+	svc.UploadVideo(ctx, biz, bytes.NewReader(mp4), "")
+	if _, err := svc.UploadVideo(ctx, biz, bytes.NewReader(append(mp4, make([]byte, 40)...)), ""); !errors.Is(err, ErrMediaQuota) {
 		t.Fatalf("quota: %v", err)
 	}
 	// обрыв связи
-	if _, err := svc.UploadVideo(ctx, biz, errReader{}); !errors.Is(err, ErrUploadInterrupted) {
+	if _, err := svc.UploadVideo(ctx, biz, errReader{}, ""); !errors.Is(err, ErrUploadInterrupted) {
 		t.Fatalf("interrupted: %v", err)
 	}
 	// все слоты заняты — busy
 	svc.video <- struct{}{}
-	if _, err := svc.UploadVideo(ctx, biz, bytes.NewReader(mp4)); !errors.Is(err, ErrBusy) {
+	if _, err := svc.UploadVideo(ctx, biz, bytes.NewReader(mp4), ""); !errors.Is(err, ErrBusy) {
 		t.Fatalf("busy: %v", err)
 	}
 	<-svc.video

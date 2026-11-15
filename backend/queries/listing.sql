@@ -3,10 +3,10 @@
 -- ===== задания =====
 
 -- name: CreateTask :one
-INSERT INTO tasks (owner_id, title, city, nationwide, categories, formats, access, min_views,
-                   reward_kopecks, publish_by, publish_time, deadline_at, blocks, cover, photos)
-VALUES (@owner_id, @title, @city, @nationwide, @categories, @formats, @access, @min_views,
-        @reward_kopecks, sqlc.narg(publish_by), sqlc.narg(publish_time), sqlc.narg(deadline_at), @blocks, sqlc.narg(cover), @photos)
+INSERT INTO tasks (owner_id, title, city, nationwide, categories, formats, access, goal, min_views,
+                   reward_kopecks, publish_by, publish_time, deadline_at, blocks, cover, photos, videos)
+VALUES (@owner_id, @title, @city, @nationwide, @categories, @formats, @access, @goal, @min_views,
+        @reward_kopecks, sqlc.narg(publish_by), sqlc.narg(publish_time), sqlc.narg(deadline_at), @blocks, sqlc.narg(cover), @photos, @videos)
 RETURNING *;
 
 -- name: GetOwnTask :one
@@ -23,13 +23,13 @@ SELECT count(*)::int FROM tasks WHERE owner_id = @owner_id;
 -- name: UpdateOwnTask :one
 UPDATE tasks
 SET title = @title, city = @city, nationwide = @nationwide, categories = @categories, formats = @formats,
-    access = @access, min_views = @min_views, reward_kopecks = @reward_kopecks,
-    publish_by = sqlc.narg(publish_by), publish_time = sqlc.narg(publish_time), deadline_at = sqlc.narg(deadline_at), blocks = @blocks, cover = sqlc.narg(cover), photos = @photos, updated_at = now()
+    access = @access, goal = @goal, min_views = @min_views, reward_kopecks = @reward_kopecks,
+    publish_by = sqlc.narg(publish_by), publish_time = sqlc.narg(publish_time), deadline_at = sqlc.narg(deadline_at), blocks = @blocks, cover = sqlc.narg(cover), photos = @photos, videos = @videos, updated_at = now()
 WHERE id = @id AND owner_id = @owner_id AND status IN ('draft', 'rejected', 'changes_requested')
 RETURNING *;
 
 -- name: DeleteOwnTask :execrows
-DELETE FROM tasks WHERE id = @id AND owner_id = @owner_id AND status IN ('draft', 'rejected', 'expired', 'changes_requested');
+DELETE FROM tasks WHERE id = @id AND owner_id = @owner_id AND status IN ('draft', 'rejected', 'expired', 'changes_requested', 'archived');
 
 -- Смена статуса — только из ожидаемого (from): параллельная смена даёт 0 строк. Замечания — только при
 -- «на доработку»; правка опубликованного уходит вместе с публикацией (её содержимое переносит сервис).
@@ -197,9 +197,9 @@ RETURNING *;
 -- name: ReplaceTaskContent :one
 UPDATE tasks
 SET title = @title, city = @city, nationwide = @nationwide, categories = @categories, formats = @formats,
-    access = @access, min_views = @min_views, reward_kopecks = @reward_kopecks,
+    access = @access, goal = @goal, min_views = @min_views, reward_kopecks = @reward_kopecks,
     publish_by = sqlc.narg(publish_by), publish_time = sqlc.narg(publish_time), deadline_at = sqlc.narg(deadline_at),
-    blocks = @blocks, cover = sqlc.narg(cover), photos = @photos,
+    blocks = @blocks, cover = sqlc.narg(cover), photos = @photos, videos = @videos,
     revision = NULL, revision_status = NULL, revision_reason = '', revision_submitted_at = NULL, review_notes = '{}',
     updated_at = now()
 WHERE id = @id AND status = @status::text AND revision_status = @revision_status::text

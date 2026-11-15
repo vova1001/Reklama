@@ -6,7 +6,7 @@
 import type { components } from '../lib/api.gen';
 import { $, $$, api, busy, clearErrs, setErr } from '../lib/client';
 import { confirmDialog, fmtNum, guard, parseNum, toast } from '../lib/ui';
-import { CARD_RULES, DUE_RANGE, PLATFORM_TITLE, TASK_RULES, type BlockKind } from '../content/app';
+import { CARD_RULES, DUE_RANGE, GOALS, PLATFORM_TITLE, TASK_RULES, type BlockKind } from '../content/app';
 import { formatsTitle, goal, rub, until } from '../lib/format';
 import { BlocksEditor, type Block } from './editor/blocks';
 import { CategoryPicker } from './editor/category';
@@ -16,6 +16,7 @@ import { h, ic } from './editor/dom';
 import { Uploader, type Photo } from './editor/uploader';
 import { DraftSync } from './editor/drafts';
 import { SocialList, followers, kindTitle } from './editor/social';
+import { VideoList, type EdVideo } from './editor/video';
 
 type Task = components['schemas']['Task'];
 type Card = components['schemas']['Card'];
@@ -32,6 +33,8 @@ interface Init {
   photos: Photo[];
   selected: string[];
   formats?: string[];
+  goal?: string;
+  videos?: EdVideo[];
   categories: { common: Item[]; own: Item[] };
   brand: string;
   uid: number;
@@ -45,6 +48,7 @@ interface Snap {
   nationwide: boolean;
   formats: string[];
   access: string;
+  goal?: string;
   selected: string[];
   blocks: Block[];
   cover: Photo[];
@@ -63,17 +67,20 @@ const isPhoto = (p: unknown): p is Photo =>
 function restore(form: HTMLFormElement, init: Init, d: Partial<Snap>) {
   const known = new Set([...init.categories.common, ...init.categories.own].map((c) => c.slug));
   for (const [k, v] of Object.entries(d.fields ?? {})) {
-    const el = $<HTMLInputElement>(`[data-pane="edit"] input[name="${CSS.escape(k)}"]`, form);
+    const el = $<HTMLInputElement>(`[data-pane="edit"] input[name="${CSS.escape(k)}"], [data-pane="edit"] textarea[name="${CSS.escape(k)}"]`, form);
     if (el && typeof v === 'string') el.value = v.slice(0, el.maxLength > 0 ? el.maxLength : 1000);
   }
   const nation = $('[data-nationwide]', form);
   if (nation && typeof d.nationwide === 'boolean') nation.setAttribute('aria-checked', String(d.nationwide));
-  if (d.formats) init.formats = strs(d.formats).map((f) => f.slice(0, 30)).slice(0, 3);
+  if (d.formats) init.formats = strs(d.formats).map((f) => f.slice(0, 30)).slice(0, 10);
   if (typeof d.access === 'string' && d.access) {
     $$<HTMLButtonElement>('[data-access] [role="radio"]', form).forEach((b) => {
       b.setAttribute('aria-checked', String(b.dataset.v === d.access));
       b.tabIndex = b.dataset.v === d.access ? 0 : -1;
     });
+  }
+  if (typeof d.goal === 'string' && d.goal) {
+    $$<HTMLButtonElement>('[data-goal] [role="radio"]', form).forEach((b) => b.setAttribute('aria-checked', String(b.dataset.v === d.goal)));
   }
   if (d.selected) init.selected = strs(d.selected).filter((x) => known.has(x));
   if (Array.isArray(d.blocks)) {
@@ -122,11 +129,28 @@ async function start(form: HTMLFormElement) {
   };
 
   // ===== части формы =====
-  const blocks = new BlocksEditor($('[data-blocks]', form)!, init.blocks, init.templates, changed);
+  // задание — одно поле описания (в payload — один текстовый блок); анкета — блочный редактор
+  const blocksEl = $('[data-blocks]', form);
+  const descEl = $<HTMLTextAreaElement>('[name="description"]', form);
+  const blocks = blocksEl
+    ? new BlocksEditor(blocksEl, init.blocks, init.templates, changed)
+    : {
+        value: (): Block[] => {
+          const items = (descEl?.value ?? '')
+            .split(/\n+/)
+            .map((s) => s.trim())
+            .filter(Boolean)
+            .slice(0, 15)
+            .map((s) => s.slice(0, 1000));
+          return items.length ? [{ kind: 'text' as const, title: 'Описание', items }] : [];
+        },
+        showErrors: (_f: Record<string, string>) => {},
+        first: (): HTMLElement | null => descEl,
+      };
   const picker = new CategoryPicker($('[data-cats]', form)!, init.categories.common, init.categories.own, init.selected, {
     multi: true, max: 5, maxCustom: 3, label: isTask ? 'Сфера' : 'Темы', addLabel: 'Своя', onChange: changed,
   });
-  const fmts = isTask ? new FormatPicker($('[data-formats]', form)!, init.formats ?? [], { max: 3, onChange: changed }) : null;
+  const fmts = isTask ? new FormatPicker($('[data-formats]', form)!, init.formats ?? [], { max: 10, onChange: changed }) : null;
   const dueBox = $('[data-due]', form);
   const duePick = dueBox ? new DuePicker(dueBox, changed) : null;
   const onBusy = (b: boolean) => {
@@ -139,6 +163,8 @@ async function start(form: HTMLFormElement) {
   const photos = new Uploader($('[data-photos]', form)!, init.photos, {
     purpose: isTask ? 'task_photo' : 'card_work', max: isTask ? 6 : 9, label: 'Добавить', onChange: changed, onBusy,
   });
+  const videosEl = $('[data-videos]', form);
+  const videos = videosEl ? new VideoList(videosEl, init.videos ?? [], 2, changed, onBusy, { purpose: 'task_video', links: false }) : null;
   const val = (n: string) => $<HTMLInputElement>(`[name="${n}"]`, form)?.value.trim() ?? '';
 
   // числа — с пробелами по разрядам (курсор остаётся на месте)
@@ -173,11 +199,42 @@ async function start(form: HTMLFormElement) {
       pick(n);
     });
   });
+  // мастер: шаг 1 (тип бизнеса) ведёт шаг 2 (цель) — недоступные цели скрываем; подпись числа — по цели
+  const goalVal = () => $<HTMLButtonElement>('[data-goal] [aria-checked="true"]', form)?.dataset.v ?? 'views';
+  const bizBtns = $$<HTMLButtonElement>('[data-biz] [role="radio"]', form);
+  const goalBtns = $$<HTMLButtonElement>('[data-goal] [role="radio"]', form);
+  if (bizBtns.length && goalBtns.length) {
+    const bizKey = `ohvat-biz-${init.uid}`;
+    const goalLabelEl = $('[data-goal-label]', form);
+    let biz = localStorage.getItem(bizKey) ?? 'offline';
+    const pickOne = (all: HTMLButtonElement[], x: HTMLButtonElement) => all.forEach((y) => y.setAttribute('aria-checked', String(y === x)));
+    const applyBiz = () => {
+      pickOne(bizBtns, bizBtns.find((b) => b.dataset.v === biz) ?? bizBtns[0]);
+      goalBtns.forEach((g) => (g.hidden = !(g.dataset.kinds ?? '').split(' ').includes(biz)));
+      const cur = goalBtns.find((g) => g.getAttribute('aria-checked') === 'true');
+      if (!cur || cur.hidden) pickOne(goalBtns, goalBtns.find((g) => !g.hidden)!);
+      const g0 = GOALS.find((g) => g.id === goalVal());
+      if (goalLabelEl && g0) goalLabelEl.textContent = g0.label;
+    };
+    bizBtns.forEach((b) => b.addEventListener('click', () => {
+      biz = b.dataset.v ?? 'offline';
+      localStorage.setItem(bizKey, biz);
+      applyBiz();
+      changed();
+    }));
+    goalBtns.forEach((g) => g.addEventListener('click', () => {
+      pickOne(goalBtns, g);
+      applyBiz();
+      changed();
+    }));
+    applyBiz();
+  }
   const nation = $<HTMLButtonElement>('[data-nationwide]', form);
   const city = $<HTMLInputElement>('[name="city"]', form)!;
   const syncNation = () => {
     const on = nation?.getAttribute('aria-checked') === 'true';
     city.disabled = on;
+    city.hidden = on;
     city.placeholder = on ? 'Вся Россия' : city.dataset.ph ?? '';
   };
   nation?.addEventListener('click', () => {
@@ -237,9 +294,11 @@ async function start(form: HTMLFormElement) {
           nationwide: nation?.getAttribute('aria-checked') === 'true', categories: picker.value(),
           formats: fmts?.value() ?? [],
           access: $<HTMLButtonElement>('[data-access] [aria-checked="true"]', form)?.dataset.v ?? 'open',
+          goal: goalVal(),
           minViews: parseNum(val('minViews')),
           rewardKopecks: parseNum(val('reward')) * 100, publishBy: isoDue(), publishTime: timeOk() ? val('publishTime') : '', blocks: blocks.value(),
           cover: cover.value()[0] ?? '', photos: photos.value(),
+          videos: (videos?.value() ?? []).flatMap((v) => (v.media ? [v.media] : [])),
         }
       : {
           name: val('name'), city: val('city'), topics: picker.value(),
@@ -249,11 +308,12 @@ async function start(form: HTMLFormElement) {
   /** Состояние формы целиком — для черновика. */
   function snapshot(): Snap {
     const fields: Record<string, string> = {};
-    $$<HTMLInputElement>('[data-pane="edit"] input[name]', form).forEach((i) => (fields[i.name] = i.value));
+    $$<HTMLInputElement>('[data-pane="edit"] input[name], [data-pane="edit"] textarea[name]', form).forEach((i) => (fields[i.name] = i.value));
     return {
       v: 1, fields, nationwide: nation?.getAttribute('aria-checked') === 'true',
       formats: fmts?.value() ?? [],
       access: $<HTMLButtonElement>('[data-access] [aria-checked="true"]', form)?.dataset.v ?? '',
+      goal: goalVal(),
       selected: picker.value(), blocks: blocks.value(), cover: cover.photos(), photos: photos.photos(),
     };
   }
@@ -403,7 +463,7 @@ async function start(form: HTMLFormElement) {
     if (dirty) void save();
   });
   window.addEventListener('beforeunload', (e) => {
-    if (cover.busy() || photos.busy()) e.preventDefault();
+    if (cover.busy() || photos.busy() || videos?.busy()) e.preventDefault();
   });
 
   // ===== опубликовать =====
@@ -412,7 +472,7 @@ async function start(form: HTMLFormElement) {
     check();
     const first = [...problems().keys()][0];
     if (first) return goTo(first);
-    if (cover.busy() || photos.busy()) return toast('Дождитесь загрузки фото');
+    if (cover.busy() || photos.busy() || videos?.busy()) return toast('Дождитесь загрузки фото и видео');
     busy(submit, true);
     const saved = await save();
     if (!saved) return busy(submit, false);
@@ -506,7 +566,7 @@ async function start(form: HTMLFormElement) {
   };
 
   function taskPreview() {
-    const t = payload() as unknown as { title: string; city: string; nationwide: boolean; formats: string[]; minViews: number; rewardKopecks: number; publishBy: string; publishTime: string; blocks: Block[] };
+    const t = payload() as unknown as { title: string; city: string; nationwide: boolean; formats: string[]; goal: string; minViews: number; rewardKopecks: number; publishBy: string; publishTime: string; blocks: Block[] };
     const where = t.nationwide ? 'Вся Россия' : t.city;
     const meta = [where, picker.titles().join(', ')].filter(Boolean).join(' · ');
     const it = h('article', { class: 'it pv-it' }, h('div', { class: 'it-meta' }, h('span', {}, init.brand ? h('b', {}, init.brand) : null, init.brand && meta ? ' · ' : '', meta)), h('h2', { class: 'it-t' }, t.title || 'Название задания'));
@@ -515,7 +575,7 @@ async function start(form: HTMLFormElement) {
     const facts = h('div', { class: 'facts' });
     const fact = (icon: Parameters<typeof ic>[0], strong: string | null, text: string) => facts.append(h('span', { html: ic(icon, 18) }, strong ? h('b', {}, strong) : null, text));
     if (t.rewardKopecks) fact('wallet', rub(t.rewardKopecks), '');
-    const g = goal(t.minViews);
+    const g = goal(t.minViews, t.goal);
     if (g) fact('eye', null, g);
     if (t.formats.length) fact('video', null, formatsTitle(t.formats));
     if (t.publishBy) fact('calendar', null, until(t.publishBy, t.publishTime));

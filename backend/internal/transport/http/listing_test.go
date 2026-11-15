@@ -68,6 +68,12 @@ func (f *fakeListings) Submit(_ context.Context, _ domain.User, id int64) (domai
 func (f *fakeListings) Withdraw(_ context.Context, _ domain.User, id int64) (domain.Task, error) {
 	return sampleTask(id, domain.StatusDraft), f.err
 }
+func (f *fakeListings) Archive(_ context.Context, _ domain.User, id int64) (domain.Task, error) {
+	return sampleTask(id, domain.StatusArchived), f.err
+}
+func (f *fakeListings) Unarchive(_ context.Context, _ domain.User, id int64) (domain.Task, error) {
+	return sampleTask(id, domain.StatusDraft), f.err
+}
 func (f *fakeListings) DiscardRevision(_ context.Context, _ domain.User, id int64) (domain.Task, error) {
 	f.put("discard", id)
 	return sampleTask(id, domain.StatusPublished), f.err

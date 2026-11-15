@@ -21,17 +21,20 @@ const LINK = /^(https?:\/\/)?((www|m)\.)?(youtube\.com\/(watch\?.*v=|shorts\/|em
 export const isVideoLink = (s: string) => LINK.test(s.trim());
 const isVideoFile = (f: File) => /^video\/(mp4|webm)$/.test(f.type) || /\.(mp4|m4v|webm)$/i.test(f.name);
 
-/** Список видео блока (до max): каждое — файл или ссылка. */
+/** Список видео блока (до max): каждое — файл или ссылка. o.purpose — назначение загрузки ('' — page_video); o.links — можно ли ссылкой. */
 export class VideoList {
   private list: HTMLElement;
   private add: HTMLElement;
   private pending = 0;
+  private purpose: string;
 
-  constructor(root: HTMLElement, initial: EdVideo[], private max: number, private onChange: () => void, private onBusy: (b: boolean) => void) {
+  constructor(root: HTMLElement, initial: EdVideo[], private max: number, private onChange: () => void, private onBusy: (b: boolean) => void, o?: { purpose?: string; links?: boolean }) {
+    this.purpose = o?.purpose ?? '';
+    const links = o?.links ?? true;
     this.list = h('div', { class: 'vd-list' });
     const file = h('button', { class: 'chip sm', type: 'button', html: ic('video', 16) }, 'Загрузить видео');
     const link = h('button', { class: 'chip sm', type: 'button', html: ic('link', 16) }, 'Ссылка YouTube / VK');
-    this.add = h('div', { class: 'vd-add', role: 'group', 'aria-label': 'Добавить видео' }, file, link);
+    this.add = h('div', { class: 'vd-add', role: 'group', 'aria-label': 'Добавить видео' }, file, ...(links ? [link] : []));
     const input = h('input', { type: 'file', accept: 'video/mp4,video/webm,.mp4,.m4v,.webm', class: 'sr-only', tabindex: '-1', 'aria-hidden': 'true' });
     root.append(this.list, this.add, input);
     initial.forEach((v) => this.list.append(v.url ? this.linkRow(v.url) : this.fileRow(v)));
@@ -164,7 +167,7 @@ export class VideoList {
     void csrfToken().then((tok) => {
       const form = new FormData();
       form.append('file', f);
-      xhr.open('POST', '/api/me/media/video');
+      xhr.open('POST', `/api/me/media/video${this.purpose ? `?purpose=${this.purpose}` : ''}`);
       xhr.timeout = 600_000;
       xhr.setRequestHeader('X-CSRF-Token', tok);
       xhr.send(form);

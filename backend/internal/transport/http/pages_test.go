@@ -89,7 +89,7 @@ func (f *fakePages) Public(_ context.Context, kind domain.PageKind, slug string)
 	return service.PublicPage{}, domain.ErrNotFound
 }
 func (f *fakePages) MaxVideoBytes() int64 { return 1 << 10 }
-func (f *fakePages) UploadVideo(_ context.Context, _ domain.User, body io.Reader) (domain.Media, error) {
+func (f *fakePages) UploadVideo(_ context.Context, _ domain.User, body io.Reader, _ string) (domain.Media, error) {
 	b, err := io.ReadAll(body)
 	if err != nil {
 		return domain.Media{}, errors.Join(service.ErrUploadInterrupted, err)

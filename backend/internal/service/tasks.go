@@ -92,15 +92,17 @@ type TaskInput struct {
 	City          string
 	Nationwide    bool
 	Categories    []string // slug сфер, до 5
-	Formats       []string // slug из списка или свои названия, до 3
+	Formats       []string // slug из списка или свои названия
 	Access        string
+	Goal          string // цель: views (по умолчанию), subscribers, clicks, guests
 	MinViews      int64
 	RewardKopecks int64
 	PublishBy     string // ГГГГ-ММ-ДД или ""
 	PublishTime   string // ЧЧ:ММ по Москве или "" (до конца дня)
 	Blocks        []domain.Block
 	Cover         string   // media.id обложки
-	Photos        []string // media.id примеров, по порядку
+	Photos        []string // media.id примеров-фото, по порядку
+	Videos        []string // media.id примеров-видео, по порядку, до 2
 }
 
 // ListingDeps — от чего зависят задания и анкеты.
@@ -185,9 +187,10 @@ func (d *ListingDeps) defaults() {
 	d.Limits.defaults()
 }
 
-// Сколько фото: в задании — обложка и до 6 примеров, в анкете — аватар и до 9 работ.
+// Сколько фото: в задании — обложка и до 6 примеров, в анкете — аватар и до 9 работ. Видео-примеров в задании — до 2.
 const (
 	maxTaskPhotos = 6
+	maxTaskVideos = 2
 	maxCardWorks  = 9
 )
 
@@ -266,16 +269,51 @@ func (s *Tasks) DiscardRevision(ctx context.Context, u domain.User, id int64) (d
 	return out, conflictToStatus(err)
 }
 
-// Delete — удалить черновик, отклонённое или завершённое задание.
+// goalUnit — единица цели в сообщениях («Укажите целевое число: просмотров»).
+func goalUnit(g string) string {
+	switch g {
+	case domain.GoalSubscribers:
+		return "подписчиков"
+	case domain.GoalClicks:
+		return "переходов"
+	case domain.GoalGuests:
+		return "гостей"
+	}
+	return "просмотров"
+}
+
+// Delete — удалить черновик, отклонённое, завершённое или архивное задание.
 func (s *Tasks) Delete(ctx context.Context, u domain.User, id int64) error {
 	cur, err := s.repo.OwnTask(ctx, u.ID, id)
 	if err != nil {
 		return err
 	}
-	if !cur.Status.Editable() && cur.Status != domain.StatusExpired {
+	if !cur.Status.Editable() && cur.Status != domain.StatusExpired && cur.Status != domain.StatusArchived {
 		return ErrWrongStatus
 	}
 	return conflictToStatus(s.repo.DeleteTask(ctx, u.ID, id))
+}
+
+// Archive — убрать задание в архив (владелец, из опубликованного/просроченного/отклонённого). Из архива — Unarchive.
+func (s *Tasks) Archive(ctx context.Context, u domain.User, id int64) (domain.Task, error) {
+	return s.setStatus(ctx, u, id, domain.StatusArchived)
+}
+
+// Unarchive — вернуть задание из архива в черновик.
+func (s *Tasks) Unarchive(ctx context.Context, u domain.User, id int64) (domain.Task, error) {
+	return s.setStatus(ctx, u, id, domain.StatusDraft)
+}
+
+func (s *Tasks) setStatus(ctx context.Context, u domain.User, id int64, to domain.Status) (domain.Task, error) {
+	cur, err := s.repo.OwnTask(ctx, u.ID, id)
+	if err != nil {
+		return domain.Task{}, err
+	}
+	if !domain.CanTransition(cur.Status, to, domain.ActorOwner) {
+		return domain.Task{}, ErrWrongStatus
+	}
+	out, err := s.repo.SetTaskStatus(ctx, domain.StatusChange{Subject: domain.SubjectTask, SubjectID: id, From: cur.Status, To: to, ActorID: u.ID})
+	return out, conflictToStatus(err)
 }
 
 // Submit — отправить на проверку: задание заполнено полностью, лимит отправок за сутки не исчерпан.
@@ -439,7 +477,7 @@ func (s *Tasks) shape(ctx context.Context, userID, id int64, in TaskInput) (doma
 	ve := &ValidationError{}
 	t := domain.Task{
 		Title: squash(in.Title), City: squash(in.City), Nationwide: in.Nationwide,
-		Access: in.Access, MinViews: in.MinViews, RewardKopecks: in.RewardKopecks,
+		Access: in.Access, Goal: squash(in.Goal), MinViews: in.MinViews, RewardKopecks: in.RewardKopecks,
 	}
 	maxLen(ve, "title", t.Title, 100, "Название — до 100 символов")
 	if t.Nationwide {
@@ -467,6 +505,13 @@ func (s *Tasks) shape(ctx context.Context, userID, id int64, in TaskInput) (doma
 	default:
 		ve.add("access", "Тип — открытое или с одобрением")
 	}
+	switch t.Goal {
+	case "":
+		t.Goal = domain.GoalViews
+	case domain.GoalViews, domain.GoalSubscribers, domain.GoalClicks, domain.GoalGuests:
+	default:
+		ve.add("goal", "Цель — просмотры, подписчики, переходы или гости")
+	}
 	checkCount(ve, "minViews", t.MinViews)
 	if t.RewardKopecks < 0 || t.RewardKopecks > maxRewardKop {
 		ve.add("reward", "Оплата — до 1 000 000 ₽")
@@ -483,6 +528,9 @@ func (s *Tasks) shape(ctx context.Context, userID, id int64, in TaskInput) (doma
 		t.Cover = cover[0]
 	}
 	if t.Photos, err = checkMedia(ctx, s.Media, ve, userID, in.Photos, mediaSpec{"photos", domain.PurposeTaskPhoto, maxTaskPhotos, domain.SubjectTask, id}); err != nil {
+		return domain.Task{}, err
+	}
+	if t.Videos, err = checkMedia(ctx, s.Media, ve, userID, in.Videos, mediaSpec{"videos", domain.PurposeTaskVideo, maxTaskVideos, domain.SubjectTask, id}); err != nil {
 		return domain.Task{}, err
 	}
 	if err := ve.orNil(); err != nil {
@@ -510,7 +558,11 @@ func (s *Tasks) complete(t domain.Task) error {
 		ve.add("formats", "Выберите хотя бы один формат")
 	}
 	if t.MinViews <= 0 {
-		ve.add("minViews", "Укажите число просмотров")
+		if t.Goal == "" || t.Goal == domain.GoalViews {
+			ve.add("minViews", "Укажите число просмотров")
+		} else {
+			ve.add("minViews", "Укажите целевое число: "+goalUnit(t.Goal))
+		}
 	}
 	if t.RewardKopecks < minRewardKop {
 		ve.add("reward", "Оплата — от 100 ₽")

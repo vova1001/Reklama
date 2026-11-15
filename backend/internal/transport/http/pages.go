@@ -27,10 +27,10 @@ type PageService interface {
 	Public(ctx context.Context, kind domain.PageKind, slug string) (service.PublicPage, error)
 }
 
-// VideoService — загрузка видео для страниц (файл как есть).
+// VideoService — загрузка видео для страниц и заданий (файл как есть; purpose: page_video | task_video).
 type VideoService interface {
 	MaxVideoBytes() int64
-	UploadVideo(ctx context.Context, u domain.User, body io.Reader) (domain.Media, error)
+	UploadVideo(ctx context.Context, u domain.User, body io.Reader, purpose string) (domain.Media, error)
 }
 
 // maxPageBody — тело сохранения страницы (20 блоков с текстом и ссылками).
@@ -148,7 +148,7 @@ func (s *Server) uploadVideo(w http.ResponseWriter, r *http.Request) {
 			_ = part.Close()
 			continue
 		}
-		m, err := s.videos.UploadVideo(r.Context(), currentUser(r), part)
+		m, err := s.videos.UploadVideo(r.Context(), currentUser(r), part, r.URL.Query().Get("purpose"))
 		if err != nil {
 			var mb *http.MaxBytesError
 			if errors.As(err, &mb) {

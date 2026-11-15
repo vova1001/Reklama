@@ -247,9 +247,25 @@ html:has(body.app-body) { background: var(--color-card); scroll-padding: 72px 0 
 .st[data-s='pending_review']::before { background: var(--color-ink); }
 .st[data-s='published'] { color: var(--color-emerald-ink); }
 .st[data-s='published']::before { background: var(--color-emerald); }
+.st[data-s='expired'] { color: var(--color-amber-ink); }
+.st[data-s='expired']::before { background: var(--color-amber); }
+.st[data-s='archived'] { color: var(--color-gray); }
+.st[data-s='archived']::before { background: var(--color-gray-dark); }
 .st[data-s='rejected'] { color: var(--color-error); }
 .st[data-s='rejected']::before { background: var(--color-error); }
 .it-meta .st { margin-left: auto; }
+
+/* «Мои задания» — секции по статусам */
+.mysec { margin-top: 26px; }
+.mysec-h { display: flex; align-items: center; gap: 8px; margin: 0; font-size: 15px; font-weight: 650; color: var(--color-gray); }
+.mysec-h::before { content: ''; width: 8px; height: 8px; border-radius: 50%; background: var(--color-gray-dark); }
+.mysec-h sup { font-size: 13px; font-weight: 600; opacity: 0.75; }
+.mysec.is-active .mysec-h { color: var(--color-emerald-ink); }
+.mysec.is-active .mysec-h::before { background: var(--color-emerald); }
+.mysec.is-expired .mysec-h { color: var(--color-amber-ink); }
+.mysec.is-expired .mysec-h::before { background: var(--color-amber); }
+.mysec.is-blocked .mysec-h { color: var(--color-error); }
+.mysec.is-blocked .mysec-h::before { background: var(--color-error); }
 
 /* пусто: значок, заголовок, одна строка, кнопка */
 .empty { display: grid; justify-items: center; gap: 6px; padding: 56px 16px 40px; text-align: center; }
@@ -323,6 +339,7 @@ html:has(body.app-body) { background: var(--color-card); scroll-padding: 72px 0 
 .body-b .k-links li::before { content: '↗'; position: absolute; left: 0; color: var(--color-gray); }
 .body-b a { color: var(--color-emerald-ink); text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 3px; }
 .body-ph { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+.body-vd { display: block; width: 100%; border-radius: 14px; background: var(--color-dark); }
 .body-ph img { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 10px; background: var(--color-panel); }
 [data-expand] .ic { transition: transform 0.2s var(--ease-out-soft); }
 [data-expand][aria-expanded='true'] .ic { transform: rotate(180deg); }
@@ -335,6 +352,7 @@ html:has(body.app-body) { background: var(--color-card); scroll-padding: 72px 0 
 .ed .sec { padding: 20px 0; }
 .ed .lbl { font-size: 15px; margin-bottom: 10px; }
 .ed .inp { height: 48px; font-size: 16px; border-radius: 12px; padding: 0 14px; }
+.ed textarea.inp { height: auto; min-height: 140px; padding: 12px 14px; line-height: 1.5; resize: vertical; }
 .ed .ferr { margin-top: 6px; font-size: 14px; }
 .banner { display: flex; align-items: flex-start; gap: 10px; margin-top: 16px; padding: 12px 14px; border-radius: 12px; background: var(--color-panel); font-size: 15px; line-height: 1.45; }
 .banner .ic { flex: none; margin-top: 1px; }

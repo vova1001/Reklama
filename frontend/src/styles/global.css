@@ -26,6 +26,8 @@
   --color-emerald-soft: #e7f1ec;
   --color-tint: rgba(15, 117, 83, 0.1);
   --color-error: #b3261e; /* ошибки, «отклонено», «Выйти» */
+  --color-amber: #b58b00; /* «просрочено» — точка */
+  --color-amber-ink: #7a5c00; /* «просрочено» — текст */
   --font-sans: 'Inter', system-ui, sans-serif;
   --radius-card: 28px;
   --radius-photo: 28px;

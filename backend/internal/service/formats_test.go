@@ -31,8 +31,8 @@ func TestCheckFormats(t *testing.T) {
 		t.Errorf("без повторов, в порядке выбора: %v %v", got, ve.Fields)
 	}
 	ve = &ValidationError{}
-	checkFormats(ve, []string{"reels", "shorts", "tiktok", "Обзор"})
-	if ve.Fields["formats"] != "Не больше 3 форматов" {
+	checkFormats(ve, []string{"reels", "shorts", "tiktok", "youtube", "vk_clips", "telegram", "a1", "a2", "a3", "a4", "a5"})
+	if ve.Fields["formats"] != "Не больше 10 форматов" {
 		t.Errorf("предел: %v", ve.Fields)
 	}
 }

@@ -395,10 +395,17 @@ func (s *Media) OpenForReview(ctx context.Context, viewer domain.User, id string
 // MaxVideoBytes — предел размера видео (транспорт режет тело запроса по нему).
 func (s *Media) MaxVideoBytes() int64 { return s.cfg.VideoMaxBytes }
 
-// UploadVideo — видео для страницы: файл как есть (без перекодирования), тип — по содержимому (MP4 или WebM),
+// UploadVideo — видео для страницы или задания (purpose: page_video или task_video; пусто — page_video):
+// файл как есть (без перекодирования), тип — по содержимому (MP4 или WebM),
 // размер — до VideoMaxBytes, в квоте пользователя. Одновременно — не больше VideoSlots загрузок (файл целиком
 // в памяти); заняты дольше 3 с — ErrBusy.
-func (s *Media) UploadVideo(ctx context.Context, u domain.User, body io.Reader) (domain.Media, error) {
+func (s *Media) UploadVideo(ctx context.Context, u domain.User, body io.Reader, purpose string) (domain.Media, error) {
+	if purpose == "" {
+		purpose = domain.PurposePageVideo
+	}
+	if purpose != domain.PurposePageVideo && purpose != domain.PurposeTaskVideo {
+		return domain.Media{}, &ValidationError{Fields: map[string]string{"purpose": "Неизвестное назначение видео"}}
+	}
 	wait := time.NewTimer(3 * time.Second)
 	defer wait.Stop()
 	select {
@@ -438,7 +445,7 @@ func (s *Media) UploadVideo(ctx context.Context, u domain.User, body io.Reader) 
 	if err := s.blobs.Put(ctx, key, ct, data); err != nil {
 		return domain.Media{}, fmt.Errorf("видео в хранилище: %w", err)
 	}
-	m, err := s.repo.CreateMedia(ctx, domain.Media{ID: id, OwnerID: u.ID, Purpose: domain.PurposePageVideo, Bytes: int64(len(data))})
+	m, err := s.repo.CreateMedia(ctx, domain.Media{ID: id, OwnerID: u.ID, Purpose: purpose, Bytes: int64(len(data))})
 	if err != nil {
 		s.dropBlobs([]string{key})
 		return domain.Media{}, err

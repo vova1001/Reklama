@@ -60,6 +60,8 @@ type TaskService interface {
 	Delete(ctx context.Context, u domain.User, id int64) error
 	Submit(ctx context.Context, u domain.User, id int64) (domain.Task, error)
 	Withdraw(ctx context.Context, u domain.User, id int64) (domain.Task, error)
+	Archive(ctx context.Context, u domain.User, id int64) (domain.Task, error)
+	Unarchive(ctx context.Context, u domain.User, id int64) (domain.Task, error)
 	DiscardRevision(ctx context.Context, u domain.User, id int64) (domain.Task, error)
 	Feed(ctx context.Context, q service.FeedQuery) (service.FeedPage, error)
 	Public(ctx context.Context, id int64) (domain.Task, error)
@@ -262,6 +264,8 @@ func (s *Server) Routes() http.Handler {
 			r.Delete("/tasks/{id}", s.deleteTask)
 			r.Post("/tasks/{id}/submit", s.submitTask)
 			r.Post("/tasks/{id}/withdraw", s.withdrawTask)
+			r.Post("/tasks/{id}/archive", s.archiveTask)
+			r.Post("/tasks/{id}/unarchive", s.unarchiveTask)
 			r.Delete("/tasks/{id}/revision", s.discardTaskRevision)
 
 			r.Get("/card", s.getCard)

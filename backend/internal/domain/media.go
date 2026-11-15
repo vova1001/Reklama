@@ -18,6 +18,7 @@ const (
 	PurposePagePhoto   = "page_photo"   // фото в блоках страницы
 	PurposeVideoPoster = "video_poster" // кадр-заставка загруженного видео
 	PurposePageVideo   = "page_video"   // видео (файл MP4 / WebM как есть; загружается отдельно от фото)
+	PurposeTaskVideo   = "task_video"   // видео-пример в задании (как page_video)
 )
 
 // MediaSizes — ширины (по длинной стороне), в которых хранится каждое фото (WebP); меньше исходного не растягиваем.
