@@ -36,14 +36,13 @@ const sections = [
     <div data-my class="tasks-board">
       <div class="tasks-board-head"><h2>Статусы</h2><a class="btn pill-emerald" href="/app/tasks/new"><Icon name="plus" size={18} />Создать задание</a></div>
       <div class="filt my-filt" role="group" aria-label="Статус заданий" data-filter>
-        <button type="button" aria-pressed="true" data-f="">Все</button>
         {sections.map((s) => (
           <button type="button" class={`is-${s.id}`} aria-pressed="false" data-f={s.id}>{s.title}</button>
         ))}
       </div>
       {sections.map((s) => (
-        <section class={`mysec is-${s.id}`} data-sec-list={s.id}>
-          <h2 class="mysec-h">{s.title}</h2>
+        <section class={`mysec is-${s.id}`} data-sec-list={s.id} hidden>
+          <div class="mysec-top"><h2 class="mysec-h">{s.title}</h2><button class="btn pill-text" type="button" data-back-status>← Назад ко статусам</button></div>
           {s.items.length === 0 ? (
             <p class="mysec-none">Пока пусто</p>
           ) : (

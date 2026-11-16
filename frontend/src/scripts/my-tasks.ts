@@ -8,12 +8,20 @@ const root = $('[data-my]');
 const filt = $('[data-filter]');
 
 if (filt && root) {
+  let selected = '';
   filt.addEventListener('click', (e) => {
     const b = (e.target as HTMLElement).closest<HTMLButtonElement>('button[data-f]');
     if (!b) return;
     const f = b.dataset.f!;
-    $$<HTMLButtonElement>('button', filt).forEach((x) => x.setAttribute('aria-pressed', String(x === b)));
-    $$<HTMLElement>('[data-sec-list]', root).forEach((s) => (s.hidden = !!f && s.dataset.secList !== f));
+    selected = selected === f ? '' : f;
+    $$<HTMLButtonElement>('button', filt).forEach((x) => x.setAttribute('aria-pressed', String(x.dataset.f === selected)));
+    $$<HTMLElement>('[data-sec-list]', root).forEach((s) => (s.hidden = !selected || s.dataset.secList !== selected));
+  });
+  root.addEventListener('click', (e) => {
+    if (!(e.target as HTMLElement).closest('[data-back-status]')) return;
+    selected = '';
+    $$<HTMLButtonElement>('button', filt).forEach((x) => x.setAttribute('aria-pressed', 'false'));
+    $$<HTMLElement>('[data-sec-list]', root).forEach((s) => (s.hidden = true));
   });
 }
 

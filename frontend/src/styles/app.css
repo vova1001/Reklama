@@ -257,6 +257,7 @@ html:has(body.app-body) { background: var(--color-card); scroll-padding: 72px 0 
 
 /* «Мои задания» — секции по статусам */
 .tasks-board { margin-top: 20px; padding: 20px; border: 1px solid var(--color-line); border-radius: 16px; background: var(--color-card); }
+.tasks-board .my-filt { flex-wrap: wrap; overflow: visible; }
 .tasks-board-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
 .tasks-board-head h2 { font-size: 18px; }
 .tasks-board-head .btn { min-height: 38px; padding: 0 14px; font-size: 14px; }
@@ -267,6 +268,8 @@ html:has(body.app-body) { background: var(--color-card); scroll-padding: 72px 0 
 .st[data-s='draft']::before { background: var(--color-gray-dark); }
 @media (max-width: 639px) { .tasks-board { padding: 14px; } .tasks-board-head { align-items: flex-start; flex-direction: column; } }
 .mysec { margin-top: 26px; }
+.mysec-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.mysec-top .btn { flex: none; font-size: 13px; }
 .mysec-h { display: flex; align-items: center; gap: 8px; margin: 0; font-size: 15px; font-weight: 650; color: var(--color-gray); }
 .mysec-h::before { content: ''; width: 8px; height: 8px; border-radius: 50%; background: var(--color-gray-dark); }
 .mysec-h sup { font-size: 13px; font-weight: 600; opacity: 0.75; }
