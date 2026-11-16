@@ -12,6 +12,7 @@ interface FormatItem { id: string; title: string; builtin: boolean; own: boolean
 export interface FormatOptions {
   max: number;
   onChange: () => void;
+  custom?: boolean;
 }
 
 const norm = (s: string) => s.toLowerCase().replace(/ё/g, 'е').replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
@@ -38,25 +39,31 @@ export class FormatPicker {
     const sel = new Set(selected);
     for (const f of FORMATS) this.chips.append(this.chip(f.id, f.title, sel.has(f.id), false));
     for (const s of selected) if (!builtin(s)) this.chips.append(this.chip(s, s, true, true));
-    const add = h('button', { class: 'chip chip-add', type: 'button', 'aria-expanded': 'false', 'data-add-format': '', html: ic('plus', 18) }, 'Свой');
-    this.chips.append(add);
-    new Combo(root, add, {
-      placeholder: 'Свой — например, «Stories» или «Обзор»', label: 'Свой формат', maxlength: 30,
-      search: async (q) => {
-        const r = await api<{ items: FormatItem[] }>('GET', `/api/me/formats/similar?q=${encodeURIComponent(q)}`);
-        if (!r.ok) return guard(r.status) ? [] : r.error.message;
-        return r.data.items.map((f) => ({ key: f.id, title: f.title, note: f.own ? 'ваш' : undefined }));
-      },
-      pick: (it) => this.pick(it.key),
-      create: (q, err) => {
-        const n = normFormat(q);
-        if (n.err) {
-          err.textContent = n.err;
-          return false;
-        }
-        return n.v ? this.pick(n.v) : false;
-      },
-    });
+    if (o.custom !== false) {
+      const add = h('button', { class: 'chip chip-add', type: 'button', 'aria-expanded': 'false', 'data-add-format': '', html: ic('plus', 18) }, 'Свой');
+      this.chips.append(add);
+      new Combo(root, add, {
+        placeholder: 'Свой — например, «Stories» или «Обзор»', label: 'Свой формат', maxlength: 30,
+        search: async (q) => {
+          const r = await api<{ items: FormatItem[] }>('GET', `/api/me/formats/similar?q=${encodeURIComponent(q)}`);
+          if (!r.ok) return guard(r.status) ? [] : r.error.message;
+          return r.data.items.map((f) => ({ key: f.id, title: f.title, note: f.own ? 'ваш' : undefined }));
+        },
+        pick: (it) => this.pick(it.key),
+        create: (q, err) => {
+          const n = normFormat(q);
+          if (n.err) {
+            err.textContent = n.err;
+            return false;
+          }
+          return n.v ? this.pick(n.v) : false;
+        },
+      });
+    }
+  }
+
+  select(id: string): void {
+    this.pick(id);
   }
 
   value(): string[] {

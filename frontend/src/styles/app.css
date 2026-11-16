@@ -423,13 +423,10 @@ html:has(body.app-body) { background: var(--color-card); scroll-padding: 72px 0 
 .wopt[aria-checked='true'] { background: var(--color-emerald-soft); box-shadow: inset 0 0 0 1.5px var(--color-emerald); }
 @media (hover: hover) { .wopt:hover { box-shadow: inset 0 0 0 1px var(--color-line-strong); transform: translateY(-1px); } .wopt[aria-checked='true']:hover { box-shadow: inset 0 0 0 1.5px var(--color-emerald); } }
 .goal-list { display: grid; gap: 10px; margin-top: 26px; }
-.goal-item { padding: 18px 20px; border: 1px solid transparent; border-radius: 14px; transition: border-color .15s ease, background-color .15s ease; }
-.goal-item:has([data-goal-check]:checked) { border-color: var(--color-line); background: #fbfcfb; }
-@media (hover: hover) { .goal-item:hover { border-color: var(--color-line); } }
-.goal-check { display: flex; align-items: flex-start; gap: 12px; cursor: pointer; }
-.goal-check input { appearance: none; flex: none; width: 20px; height: 20px; margin: 2px 0 0; border: 1px solid var(--color-line-strong); border-radius: 6px; background: var(--color-card); cursor: pointer; }
-.goal-check input:checked { border-color: var(--color-emerald); background: var(--color-emerald); }
-.goal-check input:checked::after { content: ''; display: block; width: 9px; height: 5px; margin: 5px 4px; border-left: 2px solid #fff; border-bottom: 2px solid #fff; transform: rotate(-45deg); }
+.goal-item { padding: 18px 20px; border: 1px solid var(--color-line); border-radius: 14px; background: var(--color-card); transition: border-color .15s ease, background-color .15s ease; }
+.goal-item:has([data-goal-check][aria-pressed='true']) { border-color: var(--color-emerald); background: var(--color-emerald-soft); }
+@media (hover: hover) { .goal-item:hover { border-color: var(--color-line-strong); } .goal-item:has([data-goal-check][aria-pressed='true']):hover { border-color: var(--color-emerald); } }
+.goal-check { display: block; width: 100%; padding: 0; background: transparent; color: var(--color-ink); text-align: left; cursor: pointer; }
 .goal-check strong, .goal-check small { display: block; }
 .goal-check strong { font-size: 16px; }
 .goal-check small { margin-top: 4px; color: var(--color-gray); font-size: 14px; line-height: 1.45; }
@@ -442,6 +439,12 @@ html:has(body.app-body) { background: var(--color-card); scroll-padding: 72px 0 
 .payment-mode button[aria-checked='true'] { background: var(--color-card); box-shadow: 0 1px 3px rgba(var(--k), .08); color: var(--color-ink); font-weight: 600; }
 .reward-calc { margin: -4px 0 0; color: var(--color-gray); font-size: 13px; line-height: 1.55; }
 .total-budget { margin: 20px 0 0; padding: 14px 16px; border-radius: 10px; background: var(--color-emerald-soft); color: var(--color-emerald-ink); font-size: 15px; font-weight: 650; text-align: right; }
+.biz-rec { display: flex; align-items: center; gap: 18px; margin-top: 20px; padding-top: 20px; border-top: 1px solid var(--color-line); }
+.biz-rec p { flex: 1; color: var(--color-gray); font-size: 14px; line-height: 1.5; }
+.biz-rec .btn { flex: none; }
+.city-list button { display: flex; align-items: center; width: 100%; min-height: 42px; padding: 0 12px; border-radius: 8px; background: transparent; color: var(--color-ink); text-align: left; cursor: pointer; }
+.city-list button.is-hi, .city-list button[aria-selected='true'] { background: var(--color-panel); }
+@media (max-width: 639px) { .biz-rec { align-items: stretch; flex-direction: column; gap: 12px; } .biz-rec .btn { align-self: flex-start; } }
 .task-wizard .sfx { position: relative; }
 .task-wizard .sfx .inp { padding-right: 38px; }
 .form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px 12px; margin-top: 26px; }

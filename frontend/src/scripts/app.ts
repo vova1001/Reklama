@@ -3,6 +3,7 @@
 import type { components } from '../lib/api.gen';
 import { $, $$, api, busy, clearErrs, showFields, setErr } from '../lib/client';
 import { confirmDialog, guard, toast } from '../lib/ui';
+import { CityCombobox } from './editor/city';
 
 type Me = components['schemas']['Me'];
 type Mode = components['schemas']['Mode'];
@@ -248,6 +249,8 @@ const ENDPOINT: Record<FormKind, string> = { basics: '/api/me/profile', business
 function initForms() {
   $$<HTMLFormElement>('[data-form]').forEach((form) => {
     const kind = form.dataset.form as FormKind;
+    const cityList = $('[data-city-list]', form);
+    if (kind === 'business' && cityList) new CityCombobox($<HTMLInputElement>('[name="city"]', form)!, cityList, () => { if (saved) saved.textContent = ''; });
     const spheres = kind === 'basics' ? () => [] : initChips(form);
     const channels = kind === 'creator' ? initChannels(form) : () => [];
     const btn = $<HTMLButtonElement>('[data-submit]', form);

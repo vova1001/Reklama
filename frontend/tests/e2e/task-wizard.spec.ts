@@ -18,9 +18,9 @@ test('мастер: несколько целей, динамика, шаги, �
   const views = page.locator('[data-goal-item="views"]');
   const clicks = page.locator('[data-goal-item="clicks"]');
   const barter = page.locator('[data-goal-item="barter"]');
-  await views.getByRole('checkbox').check();
-  await clicks.getByRole('checkbox').check();
-  await barter.getByRole('checkbox').check();
+  await views.getByRole('button', { name: /Просмотры/ }).click();
+  await clicks.getByRole('button', { name: /Переходы/ }).click();
+  await barter.getByRole('button', { name: /Бартер/ }).click();
   await expect(views.locator('[data-goal-terms]')).toBeVisible();
   await expect(clicks.locator('[data-goal-terms]')).toBeVisible();
   await expect(page.getByLabel('Что получит автор по бартеру')).toBeVisible();
@@ -68,9 +68,9 @@ test('мастер: несколько целей, динамика, шаги, �
   await ready(page);
   await expect(page.getByRole('radio', { name: /Офлайн-бизнес/ })).toHaveAttribute('aria-checked', 'true');
   await next(page);
-  await expect(views.getByRole('checkbox')).toBeChecked();
-  await expect(clicks.getByRole('checkbox')).toBeChecked();
-  await expect(barter.getByRole('checkbox')).toBeChecked();
+  await expect(views.locator('[data-goal-check]')).toHaveAttribute('aria-pressed', 'true');
+  await expect(clicks.locator('[data-goal-check]')).toHaveAttribute('aria-pressed', 'true');
+  await expect(barter.locator('[data-goal-check]')).toHaveAttribute('aria-pressed', 'true');
   await expect(page.getByLabel('Просмотров от')).toHaveValue('100 000');
   await expect(views.getByRole('radio', { name: 'По ставке' })).toHaveAttribute('aria-checked', 'true');
   await expect(views.getByLabel('Лимит бюджета')).toHaveValue('10 000');
@@ -115,7 +115,7 @@ test('мастер: тип бизнеса скрывает неподходящ�
   await page.getByRole('radio', { name: /Онлайн-бизнес/ }).click();
   await next(page);
   await expect(page.locator('[data-goal-item="guests"]')).toBeHidden();
-  await page.locator('[data-goal-item="views"]').getByRole('checkbox').check();
+  await page.locator('[data-goal-item="views"] [data-goal-check]').click();
   await page.getByLabel('Просмотров от').fill('900');
   await page.locator('[data-prev]').click();
   await page.getByRole('radio', { name: /Офлайн-бизнес/ }).click();
@@ -132,6 +132,6 @@ test('мастер: нет горизонтального overflow на 320 px',
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(320);
   await page.getByRole('radio', { name: /Офлайн-бизнес/ }).click();
   await next(page);
-  await page.locator('[data-goal-item="views"]').getByRole('checkbox').check();
+  await page.locator('[data-goal-item="views"] [data-goal-check]').click();
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(320);
 });

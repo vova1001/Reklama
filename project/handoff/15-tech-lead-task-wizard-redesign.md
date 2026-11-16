@@ -71,4 +71,10 @@
 - Commit: `f36a88cb56306370473bd1c6a5b62cc274e8ca6a`. Push в `origin/claude/dazzling-newton-li353f` — успешен (`50114ce..f36a88c`). Render auto-deploy для этой ветки настроен в `deploy/render.md`.
 - Production: `https://ohvat-jif6.onrender.com`. После push `/healthz` дважды проверен (обычный curl и HTTP/1.1): `Recv failure: Connection was reset`. Поэтому фактическое завершение Render deploy и доступность production не подтверждены; внешнего подтверждения или новых credentials для этого запроса не требуется.
 
+## Доработка geography / goals / recommendations
+- TaskForm, профиль компании и публичная страница бизнеса получили общий `CityCombobox`: поиск по `CITIES`, свободный ввод другого города, клавиатура, мышь, тач, Escape; «Вся Россия» — в мастере отдельно. Анкета автора и её общие компоненты не менялись.
+- «Свой» больше не создаётся через FormatPicker мастера (`custom: false`), существующие реальные форматы сохраняются. Цели — selectable-карточки с `aria-pressed`, без видимых checkbox.
+- Контекстные рекомендации: offline → гости + Reels/VK Клипы; online → переходы + Shorts/YouTube; services → подписчики + Telegram/YouTube. Применение только добавляет рекомендованное, ручной выбор и значения не стирает, отправки не производит.
+- Дополнительно упрощены вложенные рамки и мобильные подписи навигации. Standalone Playwright-кадры 1440/320 осмотрены: карточки, оплата, рекомендации, combobox. Production build изолированного HEAD+task — успешен. Auth/2fa и pre-existing `navigation.ts` не включались.
+
 ## Приёмка (менеджер)

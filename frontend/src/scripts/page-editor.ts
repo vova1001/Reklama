@@ -7,6 +7,7 @@ import { $, $$, api, busy, clearErrs, setErr } from '../lib/client';
 import { guard, toast } from '../lib/ui';
 import { PAGE_ABOUT_CREATOR, PAGE_BLOCKS, PAGE_PATH, PAGE_RULES, type PageKind } from '../content/app';
 import { CategoryPicker } from './editor/category';
+import { CityCombobox } from './editor/city';
 import { DraftSync } from './editor/drafts';
 import { h, ic } from './editor/dom';
 import { Uploader, type Photo } from './editor/uploader';
@@ -130,6 +131,8 @@ async function start(form: HTMLFormElement) {
   const slugIn = $<HTMLInputElement>('[name="slug"]', form)!;
   titleIn.value = init.title;
   cityIn.value = init.city;
+  const cityList = $('[data-city-list]', form);
+  if (kind === 'business' && cityList) new CityCombobox(cityIn, cityList, changed);
   slugIn.value = init.slug;
   const cover = new Uploader($('[data-cover]', form)!, init.cover, { purpose: 'page_cover', max: 1, aspect: 3, label: 'Обложка', onChange: changed, onBusy });
   const logo = new Uploader($('[data-logo]', form)!, init.logo, { purpose: 'page_logo', max: 1, aspect: 1, round: kind === 'creator', label: kind === 'creator' ? 'Фото' : 'Логотип', onChange: changed, onBusy });

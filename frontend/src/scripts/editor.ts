@@ -6,7 +6,7 @@
 import type { components } from '../lib/api.gen';
 import { $, $$, api, busy, clearErrs, setErr } from '../lib/client';
 import { confirmDialog, fmtNum, guard, parseNum, toast } from '../lib/ui';
-import { CARD_RULES, DUE_RANGE, GOALS, PLATFORM_TITLE, TASK_RULES, type BlockKind } from '../content/app';
+import { CARD_RULES, CITIES, DUE_RANGE, GOALS, PLATFORM_TITLE, TASK_RULES, type BlockKind } from '../content/app';
 import { formatsTitle, goal, until } from '../lib/format';
 import { moneyKopecks, rewardExample, rewardTerms } from '../lib/reward';
 import { BlocksEditor, type Block } from './editor/blocks';
@@ -86,7 +86,7 @@ function restore(form: HTMLFormElement, init: Init, d: Partial<Snap>) {
   }
   if (d.goals) {
     const chosen = new Set(strs(d.goals));
-    $$<HTMLInputElement>('[data-goal-check]', form).forEach((b) => (b.checked = chosen.has(b.value)));
+    $$<HTMLButtonElement>('[data-goal-check]', form).forEach((b) => b.setAttribute('aria-pressed', String(chosen.has(b.value))));
   }
   if (d.paymentModes) {
     for (const [id, mode] of Object.entries(d.paymentModes)) {
@@ -164,7 +164,7 @@ async function start(form: HTMLFormElement) {
   const picker = new CategoryPicker($('[data-cats]', form)!, init.categories.common, init.categories.own, init.selected, {
     multi: true, max: 5, maxCustom: 3, label: isTask ? 'Сфера' : 'Темы', addLabel: 'Своя', onChange: changed,
   });
-  const fmts = isTask ? new FormatPicker($('[data-formats]', form)!, init.formats ?? [], { max: 10, onChange: changed }) : null;
+  const fmts = isTask ? new FormatPicker($('[data-formats]', form)!, init.formats ?? [], { max: 10, custom: false, onChange: changed }) : null;
   const dueBox = $('[data-due]', form);
   const duePick = dueBox ? new DuePicker(dueBox, changed) : null;
   const onBusy = (b: boolean) => {
@@ -215,8 +215,8 @@ async function start(form: HTMLFormElement) {
   });
   const bizVal = () => $<HTMLButtonElement>('[data-biz] [aria-checked="true"]', form)?.dataset.v ?? '';
   const bizBtns = $$<HTMLButtonElement>('[data-biz] [role="radio"]', form);
-  const goalChecks = $$<HTMLInputElement>('[data-goal-check]', form);
-  const selectedGoals = () => goalChecks.filter((b) => b.checked && !b.closest<HTMLElement>('[data-goal-item]')!.hidden).map((b) => b.value);
+  const goalChecks = $$<HTMLButtonElement>('[data-goal-check]', form);
+  const selectedGoals = () => goalChecks.filter((b) => b.getAttribute('aria-pressed') === 'true' && !b.closest<HTMLElement>('[data-goal-item]')!.hidden).map((b) => b.value);
   const modeVal = (id: string) => $<HTMLButtonElement>(`[data-payment-mode="${id}"] [aria-checked="true"]`, form)?.dataset.v === 'proportional' ? 'proportional' as const : 'fixed' as const;
   const goalValues = (): GoalState[] => selectedGoals().map((id) => ({
     goal: id, target: parseNum(val(`target.${id}`)), rewardKopecks: parseNum(val(`reward.${id}`)) * 100, paymentMode: modeVal(id), link: val(`link.${id}`),
@@ -243,20 +243,29 @@ async function start(form: HTMLFormElement) {
     goalChecks.forEach((b) => {
       const item = b.closest<HTMLElement>('[data-goal-item]')!;
       const terms = $('[data-goal-terms]', item);
-      if (terms) terms.hidden = !b.checked;
+      if (terms) terms.hidden = b.getAttribute('aria-pressed') !== 'true';
     });
     const barter = $('[data-barter-box]', form);
     if (barter) barter.hidden = !selectedGoals().includes('barter');
     applyPayment();
   };
   if (bizBtns.length && goalChecks.length) {
+    const recs: Record<string, { text: string; goals: string[]; formats: string[] }> = {
+      offline: { text: 'Для офлайн-точки: гости и короткие вертикальные видео — так проще привести людей к вам.', goals: ['guests'], formats: ['reels', 'vk_clips'] },
+      online: { text: 'Для онлайн-продаж: переходы по ссылке и видео с понятным следующим шагом.', goals: ['clicks'], formats: ['shorts', 'youtube'] },
+      services: { text: 'Для услуг: подписчики и экспертный формат, который помогает познакомиться с вами.', goals: ['subscribers'], formats: ['telegram', 'youtube'] },
+    };
     const applyBiz = () => {
       const biz = bizVal();
       goalChecks.forEach((b) => {
         const item = b.closest<HTMLElement>('[data-goal-item]')!;
         item.hidden = !biz || !(item.dataset.kinds ?? '').split(' ').includes(biz);
-        if (item.hidden) b.checked = false;
+        if (item.hidden) b.setAttribute('aria-pressed', 'false');
       });
+      const box = $('[data-recommendations]', form);
+      if (box) box.hidden = !biz;
+      const text = $('[data-rec-text]', form);
+      if (text && biz) text.textContent = recs[biz].text;
       applyGoals();
     };
     bizBtns.forEach((b) => b.addEventListener('click', () => {
@@ -264,7 +273,19 @@ async function start(form: HTMLFormElement) {
       applyBiz();
       changed();
     }));
-    goalChecks.forEach((b) => b.addEventListener('change', () => { applyGoals(); changed(); }));
+    goalChecks.forEach((b) => b.addEventListener('click', () => {
+      b.setAttribute('aria-pressed', String(b.getAttribute('aria-pressed') !== 'true'));
+      applyGoals();
+      changed();
+    }));
+    $('[data-apply-rec]', form)?.addEventListener('click', () => {
+      const rec = recs[bizVal()];
+      if (!rec) return;
+      goalChecks.filter((b) => rec.goals.includes(b.value)).forEach((b) => b.setAttribute('aria-pressed', 'true'));
+      rec.formats.forEach((id) => fmts?.select(id));
+      applyGoals();
+      changed();
+    });
     $$<HTMLButtonElement>('[data-payment-mode] [role="radio"]', form).forEach((b) => b.addEventListener('click', () => {
       const group = b.closest('[data-payment-mode]')!;
       $$<HTMLButtonElement>('[role="radio"]', group).forEach((x) => x.setAttribute('aria-checked', String(x === b)));
@@ -287,6 +308,62 @@ async function start(form: HTMLFormElement) {
     changed();
   });
   syncNation();
+
+  const cityList = $('[data-city-list]', form);
+  if (city && cityList) {
+    let active = -1;
+    let matches: string[] = [];
+    const closeCities = () => {
+      cityList.hidden = true;
+      city.setAttribute('aria-expanded', 'false');
+      active = -1;
+      city.removeAttribute('aria-activedescendant');
+    };
+    const choose = (name: string) => {
+      city.value = name;
+      closeCities();
+      changed();
+    };
+    const highlight = () => {
+      $$<HTMLButtonElement>('[role="option"]', cityList).forEach((b, i) => {
+        b.classList.toggle('is-hi', i === active);
+        b.setAttribute('aria-selected', String(i === active));
+      });
+      const current = $$<HTMLButtonElement>('[role="option"]', cityList)[active];
+      if (current) city.setAttribute('aria-activedescendant', current.id);
+    };
+    const renderCities = () => {
+      const q = city.value.trim().toLocaleLowerCase('ru');
+      matches = CITIES.filter((name) => name.toLocaleLowerCase('ru').includes(q)).slice(0, 8);
+      active = matches.length ? 0 : -1;
+      cityList.replaceChildren(...matches.map((name, i) => {
+        const option = h('button', { type: 'button', id: `city-option-${i}`, role: 'option', 'aria-selected': 'false' }, name);
+        option.addEventListener('click', () => choose(name));
+        return option;
+      }));
+      cityList.hidden = !matches.length || city.disabled;
+      city.setAttribute('aria-expanded', String(!cityList.hidden));
+      highlight();
+    };
+    city.addEventListener('focus', renderCities);
+    city.addEventListener('input', renderCities);
+    city.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') return closeCities();
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        e.preventDefault();
+        if (cityList.hidden) renderCities();
+        if (!matches.length) return;
+        active = (active + (e.key === 'ArrowDown' ? 1 : -1) + matches.length) % matches.length;
+        highlight();
+      } else if (e.key === 'Enter' && !cityList.hidden && active >= 0) {
+        e.preventDefault();
+        choose(matches[active]);
+      }
+    });
+    document.addEventListener('click', (e) => {
+      if (!cityList.contains(e.target as Node) && e.target !== city) closeCities();
+    });
+  }
 
   // срок — пилюли и «+ Свой» с календарём и временем ЧЧ:ММ (scripts/editor/due.ts)
   const dueTime = $<HTMLInputElement>('[name="publishTime"]', form);

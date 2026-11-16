@@ -105,7 +105,10 @@ const G = FORM_GROUPS.profile;
           </div>
           <div class="field">
             <label class="lbl" for="bz-city">Город</label>
-            <input class="inp" id="bz-city" name="city" autocomplete="address-level2" maxlength="80" value={business?.city ?? u.city} placeholder="Например, Казань" aria-describedby="bz-city-err" data-input="city" />
+            <div class="city-box">
+              <input class="inp" id="bz-city" name="city" autocomplete="address-level2" maxlength="80" value={business?.city ?? u.city} placeholder="Например, Казань" aria-describedby="bz-city-err" role="combobox" aria-expanded="false" aria-controls="bz-cities" data-input="city" />
+              <ul class="cb-list city-list" id="bz-cities" role="listbox" hidden data-city-list></ul>
+            </div>
             <p class="ferr" id="bz-city-err" data-err="city" aria-live="polite"></p>
           </div>
         </div>

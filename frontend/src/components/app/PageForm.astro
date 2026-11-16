@@ -75,7 +75,10 @@ const published = p?.status === 'published';
             </div>
             <div class="field" data-sec="city">
               <label class="lbl" for="p-city">Город</label>
-              <input class="inp" id="p-city" name="city" maxlength="80" placeholder="Казань" autocomplete="address-level2" data-input="city" />
+              <div class="city-box">
+                <input class="inp" id="p-city" name="city" maxlength="80" placeholder="Казань" autocomplete="address-level2" role="combobox" aria-expanded="false" aria-controls="p-cities" data-input="city" />
+                {!creator && <ul class="cb-list city-list" id="p-cities" role="listbox" hidden data-city-list></ul>}
+              </div>
               <p class="ferr" data-err="city"></p>
             </div>
           </div>

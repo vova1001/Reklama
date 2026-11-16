@@ -11,7 +11,7 @@ const items = NAV.filter((n) => variant === 'rail' || !n.rail);
 const business = Astro.locals.me!.user.mode === 'business';
 ---
 {items.map((n) => {
-  const title = business ? n.businessTitle ?? n.title : n.title;
+  const title = business && variant === 'bottom' && n.id === 'create' ? 'Создать' : business && variant === 'bottom' && n.id === 'profile' ? 'Компания' : business ? n.businessTitle ?? n.title : n.title;
   return (
   <a class={cls} href={n.href} data-for-mode={n.mode} aria-current={page === n.id ? 'page' : undefined} data-tip={variant === 'rail' ? title : undefined} data-nav={n.id}>
     <Icon name={n.icon} size={24} /><span>{title}</span>

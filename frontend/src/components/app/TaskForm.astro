@@ -59,6 +59,10 @@ const saveState = t?.status === 'published' ? 'Редактирование' : t
             </button>
           ))}
         </div>
+        <div class="biz-rec" data-recommendations hidden>
+          <p data-rec-text></p>
+          <button class="btn pill-ghost" type="button" data-apply-rec>Применить рекомендации</button>
+        </div>
         <p class="ferr" data-err="biz"></p>
       </section>
 
@@ -70,10 +74,9 @@ const saveState = t?.status === 'published' ? 'Редактирование' : t
             const savedGoal = legacyGoals.find((x) => x.goal === g.id);
             return (
               <div class="goal-item" data-goal-item={g.id} data-kinds={g.kinds.join(' ')}>
-                <label class="goal-check">
-                  <input type="checkbox" value={g.id} checked={selected(g.id)} data-goal-check />
+                <button type="button" class="goal-check" value={g.id} aria-pressed={selected(g.id) ? 'true' : 'false'} data-goal-check>
                   <span><strong>{g.title}</strong><small>{g.tip}</small></span>
-                </label>
+                </button>
                 <div class="goal-terms" data-goal-terms hidden={!selected(g.id)}>
                   {g.nums ? <>
                     <div class="payment-mode" role="radiogroup" aria-label={`Способ оплаты: ${g.title}`} data-payment-mode={g.id}>
