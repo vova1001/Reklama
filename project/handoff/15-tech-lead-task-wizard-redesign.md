@@ -64,4 +64,11 @@
 - По прямому условию владельца выкладка остановлена: **commit/push/deploy не выполнялись**, нового commit hash нет. Текущий HEAD: `50114ce3d4740e15da8fc052690da5898100e829`. Чужие auth/2fa не откатывались и не исправлялись.
 - Настроенный боевой адрес остаётся `https://ohvat-jif6.onrender.com`, но новая версия туда не выкладывалась; проверка `/healthz` из текущего окружения завершилась network error, поэтому доступность старой версии не подтверждена.
 
+## Публикация бизнес-задачи
+- Бизнес-навигация отделена от автора: «Обзор», «Задания», «Создать задание», «Профиль компании», «Уведомления», «Настройки». Несуществующие страницы не добавлялись; подписи автора сохранены (`Nav.astro`, `content/app.ts`).
+- Production build изолированного `HEAD + task`: `docker build -f deploy/render/Dockerfile -t ohvat-production-task .wizard-check` — успешно, без auth/2fa.
+- В commit включены только 29 файлов бизнес-задачи; pre-existing auth/2fa, `navigation.ts` и `.wizard-check` не включались и не откатывались.
+- Commit: `f36a88cb56306370473bd1c6a5b62cc274e8ca6a`. Push в `origin/claude/dazzling-newton-li353f` — успешен (`50114ce..f36a88c`). Render auto-deploy для этой ветки настроен в `deploy/render.md`.
+- Production: `https://ohvat-jif6.onrender.com`. После push `/healthz` дважды проверен (обычный curl и HTTP/1.1): `Recv failure: Connection was reset`. Поэтому фактическое завершение Render deploy и доступность production не подтверждены; внешнего подтверждения или новых credentials для этого запроса не требуется.
+
 ## Приёмка (менеджер)
