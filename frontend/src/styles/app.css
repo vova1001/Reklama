@@ -435,26 +435,28 @@ html:has(body.app-body) { background: var(--color-card); scroll-padding: 72px 0 
 .wopt-d { font-size: 14px; line-height: 1.5; color: var(--color-gray); }
 .wopt[aria-checked='true'] { background: var(--color-emerald-soft); box-shadow: inset 0 0 0 1.5px var(--color-emerald); }
 @media (hover: hover) { .wopt:hover { box-shadow: inset 0 0 0 1px var(--color-line-strong); transform: translateY(-1px); } .wopt[aria-checked='true']:hover { box-shadow: inset 0 0 0 1.5px var(--color-emerald); } }
-.goal-list { display: grid; gap: 10px; margin-top: 26px; }
-.goal-item { padding: 18px 20px; border: 1px solid var(--color-line); border-radius: 14px; background: var(--color-card); transition: border-color .15s ease, background-color .15s ease; }
-.goal-item:has([data-goal-check][aria-pressed='true']) { border-color: var(--color-emerald); background: var(--color-emerald-soft); }
+.goal-list { display: grid; gap: 12px; margin-top: 26px; }
+.goal-item { padding: 20px; border: 1px solid var(--color-line); border-radius: 14px; background: var(--color-card); transition: border-color .15s ease; }
+.goal-item:has([data-goal-check][aria-pressed='true']) { border-color: var(--color-emerald); }
 @media (hover: hover) { .goal-item:hover { border-color: var(--color-line-strong); } .goal-item:has([data-goal-check][aria-pressed='true']):hover { border-color: var(--color-emerald); } }
 .goal-check { display: block; width: 100%; padding: 0; background: transparent; color: var(--color-ink); text-align: left; cursor: pointer; }
 .goal-check strong, .goal-check small { display: block; }
 .goal-check strong { font-size: 16px; }
 .goal-check small { margin-top: 4px; color: var(--color-gray); font-size: 14px; line-height: 1.45; }
-.goal-terms { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px 12px; margin: 20px 0 0 32px; padding: 18px; border-radius: 12px; background: var(--color-panel); }
+.goal-terms { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px 12px; margin: 20px 0 0 32px; padding: 20px 0 0; border-top: 1px solid var(--color-line); background: transparent; }
 .goal-terms > .field, .form-grid > .field { display: grid; grid-template-rows: auto auto auto; align-content: start; align-items: start; }
 .goal-terms .lbl, .form-grid .lbl { display: flex; align-items: flex-end; min-height: 36px; margin: 0; line-height: 18px; }
 .goal-terms .inp, .goal-terms .sfx, .form-grid .inp, .form-grid .select-button { align-self: start; box-sizing: border-box; height: 48px; }
 .goal-terms .ferr, .form-grid .ferr { box-sizing: border-box; min-height: 18px; margin: 4px 0 0; line-height: 14px; }
 .goal-terms .lbl { font-size: 14px; }
-.goal-link, .goal-note, .payment-mode, .reward-calc { grid-column: 1 / -1; }
+.goal-link, .goal-note, .payment-mode, .reward-calc, .reward-summary { grid-column: 1 / -1; }
 .goal-note { margin: 0; color: var(--color-gray); font-size: 14px; line-height: 1.5; }
 .payment-mode { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px; padding: 4px; border-radius: 10px; background: var(--color-sunken); }
 .payment-mode button { min-height: 38px; padding: 6px 10px; border-radius: 7px; background: transparent; color: var(--color-gray); font-size: 13px; line-height: 1.3; cursor: pointer; }
 .payment-mode button[aria-checked='true'] { background: var(--color-card); box-shadow: 0 1px 3px rgba(var(--k), .08); color: var(--color-ink); font-weight: 600; }
 .reward-calc { margin: -4px 0 0; color: var(--color-gray); font-size: 13px; line-height: 1.55; }
+.reward-summary { margin: -4px 0 0; color: var(--color-ink); font-size: 14px; font-weight: 600; line-height: 1.5; text-align: right; }
+.reward-summary:empty { display: none; }
 .total-budget { margin: 20px 0 0; padding: 14px 16px; border-radius: 10px; background: var(--color-emerald-soft); color: var(--color-emerald-ink); font-size: 15px; font-weight: 650; text-align: right; }
 .biz-rec { display: flex; align-items: center; gap: 18px; margin-top: 20px; padding-top: 20px; border-top: 1px solid var(--color-line); }
 .biz-rec p { flex: 1; color: var(--color-gray); font-size: 14px; line-height: 1.5; }
@@ -519,8 +521,9 @@ select.inp { appearance: none; background: var(--color-card) linear-gradient(45d
   .wopts { grid-template-columns: 1fr; gap: 8px; margin-top: 20px; }
   .wopt { min-height: 0; padding: 16px; }
   .goal-item { padding: 16px 12px; }
-  .goal-terms { grid-template-columns: 1fr; margin-left: 0; padding: 14px; }
+  .goal-terms { grid-template-columns: 1fr; margin-left: 0; padding: 16px 0 0; }
   .goal-link { grid-column: auto; }
+  .reward-summary { text-align: left; }
   .form-grid, .publication-grid, .usage-grid { grid-template-columns: 1fr; }
   .review-row { grid-template-columns: 1fr; gap: 5px; }
   .review-goal-top { align-items: flex-start; flex-direction: column; gap: 4px; }

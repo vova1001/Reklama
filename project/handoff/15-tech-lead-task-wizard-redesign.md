@@ -105,4 +105,10 @@
 - Все парные поля goal terms и form-grid используют общие строки `label → input → error` с `align-start`, одинаковой min-height/line-height label и высотой input. Ошибки занимают зарезервированную строку и не сдвигают соседнее поле.
 - Standalone screenshots selected guests с двумя ошибками на 1440/768/320 подтвердили ровную сетку и мобильную колонку. Production build HEAD+task — успешен.
 
+## Редизайн goal cards и условий оплаты
+- Карточки целей оставлены белыми на нейтральном фоне; выбор обозначен только акцентной границей. Вложенная серая плашка условий заменена divider. Порядок на desktop/mobile: цель → бюджет → способ оплаты → примеры → итог автору → ссылка/промокод.
+- Fixed показывает фактические условия и итог при достижении цели. Proportional показывает ставку за 1 000, два живых примера на 10% и 50% цели, cap бюджета и правила округления. Подписи ссылки/промокода уточнены.
+- Standalone Playwright без test runner: invalid/fixed/proportional проверены в отдельных browser contexts на 1440 и 320 px. Проверены обе ошибки после «Далее», их исчезновение после исправления, пример `100 ₽ / 1 000`, выплаты `1 000 ₽` и `5 000 ₽`, отсутствие JS-ошибок и overflow. Шесть screenshots сохранены в `.wizard-check/goal-{invalid,fixed,proportional}-{1440,320}.png` и осмотрены.
+- Production build изолированного HEAD+task: `docker build -f deploy/render/Dockerfile -t ohvat-production-task .wizard-check` — успешен. Тестовые наборы по условию не запускались. Auth/2fa и pre-existing `navigation.ts` не изменялись.
+
 ## Приёмка (менеджер)

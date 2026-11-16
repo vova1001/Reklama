@@ -25,9 +25,10 @@ export function rewardForResult(g: RewardGoal, actual: number): number {
 }
 
 export function rewardExample(g: RewardGoal): string {
-  if (!g.target || !g.rewardKopecks) return 'Укажите цель и бюджет — покажем расчёт.';
-  const example = Math.max(1, Math.floor(g.target / 10));
-  return `${moneyKopecks(ratePer1000(g))} / 1 000 · ${goal(example, g.goal).replace('от ', '')} = ${moneyKopecks(rewardForResult(g, example))}. Вниз до 100 ₽.`;
+  if (!g.target || !g.rewardKopecks) return 'Укажите цель и бюджет — покажем ставку и примеры.';
+  const examples = [Math.max(1, Math.floor(g.target / 10)), Math.max(1, Math.floor(g.target / 2))]
+    .map((actual) => `${goal(actual, g.goal).replace('от ', '')} = ${moneyKopecks(rewardForResult(g, actual))}`);
+  return `${moneyKopecks(ratePer1000(g))} / 1 000 · ${examples.join(' · ')} · не более ${moneyKopecks(g.rewardKopecks)}. Вниз до 100 ₽, минимум 100 ₽.`;
 }
 
 export function rewardTerms(g: RewardGoal): string {

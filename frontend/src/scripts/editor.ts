@@ -255,12 +255,13 @@ async function start(form: HTMLFormElement) {
     for (const id of selectedGoals().filter((x) => x !== 'barter')) {
       const proportional = modeVal(id) === 'proportional';
       const label = $(`[data-goal-item="${id}"] [data-reward-label]`, form);
-      if (label) label.textContent = proportional ? 'Лимит бюджета' : 'Оплата за результат';
+      if (label) label.textContent = 'Бюджет';
+      const g = goalValues().find((x) => x.goal === id)!;
+      const complete = g.target > 0 && g.rewardKopecks > 0;
       const calc = $(`[data-reward-calc="${id}"]`, form);
-      if (calc) {
-        const g = goalValues().find((x) => x.goal === id)!;
-        calc.textContent = proportional ? rewardExample(g) : 'Только при достижении цели.';
-      }
+      if (calc) calc.textContent = proportional ? rewardExample(g) : complete ? `${moneyKopecks(g.rewardKopecks)} при достижении ${goal(g.target, g.goal).replace('от ', '')}` : 'Укажите цель и бюджет — покажем условия оплаты.';
+      const summary = $(`[data-reward-summary="${id}"]`, form);
+      if (summary) summary.textContent = complete ? proportional ? `Автор получит до ${moneyKopecks(g.rewardKopecks)} по фактическому результату` : `Автор получит ${moneyKopecks(g.rewardKopecks)} при достижении цели` : '';
     }
     const total = goalValues().reduce((sum, g) => sum + g.rewardKopecks, 0);
     const out = $('[data-total-budget]', form);

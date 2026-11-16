@@ -80,25 +80,26 @@ const saveState = t?.status === 'published' ? 'Редактирование' : t
                 </button>
                 <div class="goal-terms" data-goal-terms hidden={!selected(g.id)}>
                   {g.nums ? <>
-                    <div class="payment-mode" role="radiogroup" aria-label={`Способ оплаты: ${g.title}`} data-payment-mode={g.id}>
-                      <button type="button" role="radio" aria-checked={(savedGoal?.paymentMode ?? 'fixed') === 'fixed' ? 'true' : 'false'} data-v="fixed">За цель</button>
-                      <button type="button" role="radio" aria-checked={savedGoal?.paymentMode === 'proportional' ? 'true' : 'false'} data-v="proportional">По ставке</button>
-                    </div>
                     <div class="field" data-sec={`goal.${g.id}`}>
                       <label class="lbl" for={`t-target-${g.id}`}>{g.label}</label>
                       <input class="inp" id={`t-target-${g.id}`} name={`target.${g.id}`} inputmode="numeric" maxlength="13" value={savedGoal?.target || ''} placeholder="5 000" data-num />
                       <p class="ferr" data-err={`goal.${g.id}`}></p>
                     </div>
                     <div class="field" data-sec={`reward.${g.id}`}>
-                      <label class="lbl" for={`t-reward-${g.id}`} data-reward-label>Оплата за результат</label>
+                      <label class="lbl" for={`t-reward-${g.id}`} data-reward-label>Бюджет</label>
                       <div class="sfx"><input class="inp" id={`t-reward-${g.id}`} name={`reward.${g.id}`} inputmode="numeric" maxlength="9" value={savedGoal?.rewardKopecks ? Math.round(savedGoal.rewardKopecks / 100) : ''} placeholder="3 000" data-num /><span class="sfx-t">₽</span></div>
                       <p class="ferr" data-err={`reward.${g.id}`}></p>
                     </div>
+                    <div class="payment-mode" role="radiogroup" aria-label={`Способ оплаты: ${g.title}`} data-payment-mode={g.id}>
+                      <button type="button" role="radio" aria-checked={(savedGoal?.paymentMode ?? 'fixed') === 'fixed' ? 'true' : 'false'} data-v="fixed">За цель</button>
+                      <button type="button" role="radio" aria-checked={savedGoal?.paymentMode === 'proportional' ? 'true' : 'false'} data-v="proportional">По ставке</button>
+                    </div>
                     <p class="reward-calc" data-reward-calc={g.id} aria-live="polite"></p>
+                    <p class="reward-summary" data-reward-summary={g.id} aria-live="polite"></p>
                   </> : <p class="goal-note">Бартер можно сочетать с денежными целями. Если выбран только бартер, денежная оплата не указывается.</p>}
                   {g.link && <div class="field goal-link" data-sec={`link.${g.id}`}>
-                    <label class="lbl" for={`t-link-${g.id}`}>{g.id === 'clicks' ? 'Ссылка или промокод' : 'Ссылка на аккаунт или промокод'}</label>
-                    <input class="inp" id={`t-link-${g.id}`} name={`link.${g.id}`} maxlength="200" value={savedGoal?.link ?? ''} placeholder="https://… или ПРОМО2026" />
+                    <label class="lbl" for={`t-link-${g.id}`}>{g.id === 'guests' ? 'Промокод для подтверждения визита' : g.id === 'clicks' ? 'Ссылка или промокод' : 'Ссылка на аккаунт'}</label>
+                    <input class="inp" id={`t-link-${g.id}`} name={`link.${g.id}`} maxlength="200" value={savedGoal?.link ?? ''} placeholder={g.id === 'guests' ? 'Например: КОФЕ2026' : g.id === 'clicks' ? 'https://… или ПРОМО2026' : 'https://…'} />
                     <p class="ferr" data-err={`link.${g.id}`}></p>
                   </div>}
                 </div>
