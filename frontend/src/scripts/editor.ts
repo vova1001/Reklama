@@ -180,6 +180,7 @@ async function start(form: HTMLFormElement) {
   const picker = new CategoryPicker($('[data-cats]', form)!, init.categories.common, init.categories.own, init.selected, {
     multi: true, max: 5, maxCustom: 3, label: isTask ? 'Сфера' : 'Темы', addLabel: 'Своя', onChange: changed,
   });
+  let syncRecommendation = (_applied = false) => {};
   const renderPublications = () => {
     const box = $('[data-publications]', form);
     if (!box || !fmts) return;
@@ -192,7 +193,7 @@ async function start(form: HTMLFormElement) {
       return row;
     }));
   };
-  const fmts = isTask ? new FormatPicker($('[data-formats]', form)!, init.formats ?? [], { max: 10, custom: false, onChange: () => { renderPublications(); changed(); } }) : null;
+  const fmts = isTask ? new FormatPicker($('[data-formats]', form)!, init.formats ?? [], { max: 10, custom: false, onChange: () => { renderPublications(); syncRecommendation(); changed(); } }) : null;
   renderPublications();
   const dueBox = $('[data-due]', form);
   const duePick = dueBox ? new DuePicker(dueBox, changed) : null;
@@ -284,6 +285,16 @@ async function start(form: HTMLFormElement) {
       online: { text: 'Для онлайн-продаж: переходы по ссылке и видео с понятным следующим шагом.', goals: ['clicks'], formats: ['shorts', 'youtube'] },
       services: { text: 'Для услуг: подписчики и экспертный формат, который помогает познакомиться с вами.', goals: ['subscribers'], formats: ['telegram', 'youtube'] },
     };
+    syncRecommendation = (applied = false) => {
+      const rec = recs[bizVal()];
+      const button = $<HTMLButtonElement>('[data-apply-rec]', form);
+      const status = $('[data-rec-status]', form);
+      if (!rec || !button) return;
+      const missing = rec.goals.some((id) => !selectedGoals().includes(id)) || rec.formats.some((id) => !(fmts?.value() ?? []).includes(id));
+      button.disabled = !missing;
+      button.textContent = missing ? 'Применить рекомендации' : 'Применено';
+      if (status) status.textContent = applied ? 'Рекомендации применены' : missing ? '' : 'Уже выбрано';
+    };
     const applyBiz = () => {
       const biz = bizVal();
       goalChecks.forEach((b) => {
@@ -300,6 +311,7 @@ async function start(form: HTMLFormElement) {
       const text = $('[data-rec-text]', form);
       if (text && biz) text.textContent = recs[biz].text;
       applyGoals();
+      syncRecommendation();
     };
     bizBtns.forEach((b) => b.addEventListener('click', () => {
       bizBtns.forEach((x) => x.setAttribute('aria-checked', String(x === b)));
@@ -309,6 +321,7 @@ async function start(form: HTMLFormElement) {
     goalChecks.forEach((b) => b.addEventListener('click', () => {
       b.setAttribute('aria-pressed', String(b.getAttribute('aria-pressed') !== 'true'));
       applyGoals();
+      syncRecommendation();
       changed();
     }));
     $('[data-apply-rec]', form)?.addEventListener('click', () => {
@@ -317,6 +330,7 @@ async function start(form: HTMLFormElement) {
       goalChecks.filter((b) => rec.goals.includes(b.value)).forEach((b) => b.setAttribute('aria-pressed', 'true'));
       rec.formats.forEach((id) => fmts?.select(id));
       applyGoals();
+      syncRecommendation(true);
       changed();
     });
     $$<HTMLButtonElement>('[data-payment-mode] [role="radio"]', form).forEach((b) => b.addEventListener('click', () => {

@@ -62,6 +62,7 @@ const saveState = t?.status === 'published' ? 'Редактирование' : t
         <div class="biz-rec" data-recommendations hidden>
           <p data-rec-text></p>
           <button class="btn pill-ghost" type="button" data-apply-rec>Применить рекомендации</button>
+          <span class="rec-status" data-rec-status aria-live="polite"></span>
         </div>
         <p class="ferr" data-err="biz"></p>
       </section>
