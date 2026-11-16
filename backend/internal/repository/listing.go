@@ -40,7 +40,17 @@ func (r *Listings) inTx(ctx context.Context, fn func(q *store.Queries) error) er
 
 // CreateTask — новый черновик; фото (обложка и примеры) прикрепляются в той же транзакции.
 func (r *Listings) CreateTask(ctx context.Context, t domain.Task) (domain.Task, error) {
+	if t.Goal == "" {
+		t.Goal = domain.GoalViews
+	}
+	if t.Access == "" {
+		t.Access = domain.AccessOpen
+	}
 	blocks, err := blocksJSON(t.Blocks)
+	if err != nil {
+		return domain.Task{}, err
+	}
+	details, err := json.Marshal(t.Details)
 	if err != nil {
 		return domain.Task{}, err
 	}
@@ -51,7 +61,7 @@ func (r *Listings) CreateTask(ctx context.Context, t domain.Task) (domain.Task, 
 			OwnerID: t.OwnerID, Title: t.Title, City: t.City, Nationwide: t.Nationwide, Categories: nonNil(t.Categories),
 			Formats: nonNil(t.Formats), Access: t.Access, Goal: t.Goal, Link: t.Link, MinViews: t.MinViews,
 			RewardKopecks: t.RewardKopecks, PublishBy: date(t.PublishBy), PublishTime: clockTime(t.PublishTime), DeadlineAt: tsOpt(t.DeadlineAt), Blocks: blocks,
-			Cover: text(t.Cover), Photos: nonNil(t.Photos), Videos: nonNil(t.Videos),
+			Cover: text(t.Cover), Photos: nonNil(t.Photos), Videos: nonNil(t.Videos), Details: details,
 		})
 		if err != nil {
 			return err
@@ -108,7 +118,17 @@ func (r *Listings) CountTasks(ctx context.Context, ownerID int64) (int, error) {
 // UpdateTask — правка черновика или отклонённого (с фото — в одной транзакции); нет такого или уже не
 // редактируется — ErrConflict.
 func (r *Listings) UpdateTask(ctx context.Context, t domain.Task) (domain.Task, error) {
+	if t.Goal == "" {
+		t.Goal = domain.GoalViews
+	}
+	if t.Access == "" {
+		t.Access = domain.AccessOpen
+	}
 	blocks, err := blocksJSON(t.Blocks)
+	if err != nil {
+		return domain.Task{}, err
+	}
+	details, err := json.Marshal(t.Details)
 	if err != nil {
 		return domain.Task{}, err
 	}
@@ -119,7 +139,7 @@ func (r *Listings) UpdateTask(ctx context.Context, t domain.Task) (domain.Task, 
 			ID: t.ID, OwnerID: t.OwnerID, Title: t.Title, City: t.City, Nationwide: t.Nationwide, Categories: nonNil(t.Categories),
 			Formats: nonNil(t.Formats), Access: t.Access, Goal: t.Goal, Link: t.Link, MinViews: t.MinViews,
 			RewardKopecks: t.RewardKopecks, PublishBy: date(t.PublishBy), PublishTime: clockTime(t.PublishTime), DeadlineAt: tsOpt(t.DeadlineAt), Blocks: blocks,
-			Cover: text(t.Cover), Photos: nonNil(t.Photos), Videos: nonNil(t.Videos),
+			Cover: text(t.Cover), Photos: nonNil(t.Photos), Videos: nonNil(t.Videos), Details: details,
 		})
 		if err != nil {
 			return err
@@ -219,7 +239,7 @@ func publishedTaskOf(row store.GetPublishedTaskRow) (domain.Task, error) {
 		ID: row.ID, OwnerID: row.OwnerID, Status: row.Status, RejectReason: row.RejectReason, Title: row.Title,
 		City: row.City, Nationwide: row.Nationwide, Categories: row.Categories, Formats: row.Formats, Access: row.Access,
 		Goal: row.Goal, Link: row.Link, MinViews: row.MinViews, RewardKopecks: row.RewardKopecks, PublishBy: row.PublishBy, PublishTime: row.PublishTime, DeadlineAt: row.DeadlineAt,
-		Blocks: row.Blocks, Cover: row.Cover, Photos: row.Photos, Videos: row.Videos, CreatedAt: row.CreatedAt, UpdatedAt: row.UpdatedAt,
+		Blocks: row.Blocks, Cover: row.Cover, Photos: row.Photos, Videos: row.Videos, Details: row.Details, CreatedAt: row.CreatedAt, UpdatedAt: row.UpdatedAt,
 		SubmittedAt: row.SubmittedAt, PublishedAt: row.PublishedAt,
 	})
 	if err != nil {
@@ -405,10 +425,19 @@ func taskOf(t store.Task) (domain.Task, error) {
 	if err != nil {
 		return domain.Task{}, err
 	}
+	var details domain.TaskDetails
+	if len(t.Details) > 0 {
+		if err := json.Unmarshal(t.Details, &details); err != nil {
+			return domain.Task{}, fmt.Errorf("параметры задания из JSON: %w", err)
+		}
+	}
+	if details.Goals == nil {
+		details.Goals = []domain.TaskGoal{}
+	}
 	out := domain.Task{
 		ID: t.ID, OwnerID: t.OwnerID, Status: domain.Status(t.Status), RejectReason: t.RejectReason, Title: t.Title,
 		City: t.City, Nationwide: t.Nationwide, Categories: nonNil(t.Categories), Formats: nonNil(t.Formats), Access: t.Access,
-		Goal: t.Goal, Link: t.Link, MinViews: t.MinViews, RewardKopecks: t.RewardKopecks, Blocks: blocks,
+		Goal: t.Goal, Link: t.Link, MinViews: t.MinViews, RewardKopecks: t.RewardKopecks, Blocks: blocks, Details: details,
 		Cover: t.Cover.String, Photos: nonNil(t.Photos), Videos: nonNil(t.Videos), CreatedAt: t.CreatedAt.Time, UpdatedAt: t.UpdatedAt.Time,
 		SubmittedAt: tsPtr(t.SubmittedAt), PublishedAt: tsPtr(t.PublishedAt), DeadlineAt: tsPtr(t.DeadlineAt),
 	}

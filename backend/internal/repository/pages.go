@@ -346,9 +346,9 @@ func (r *Pages) OpenTasks(ctx context.Context, ownerID int64, limit int) ([]doma
 	for _, row := range rows {
 		t, err := taskOf(store.Task{
 			ID: row.ID, OwnerID: row.OwnerID, Status: row.Status, Title: row.Title, City: row.City, Nationwide: row.Nationwide,
-			Categories: row.Categories, Formats: row.Formats, Access: row.Access, MinViews: row.MinViews,
+			Categories: row.Categories, Formats: row.Formats, Access: row.Access, Goal: row.Goal, Link: row.Link, MinViews: row.MinViews,
 			RewardKopecks: row.RewardKopecks, PublishBy: row.PublishBy, PublishTime: row.PublishTime, DeadlineAt: row.DeadlineAt,
-			Blocks: row.Blocks, Cover: row.Cover, Photos: row.Photos, CreatedAt: row.CreatedAt, UpdatedAt: row.UpdatedAt,
+			Blocks: row.Blocks, Cover: row.Cover, Photos: row.Photos, Videos: row.Videos, Details: row.Details, CreatedAt: row.CreatedAt, UpdatedAt: row.UpdatedAt,
 			SubmittedAt: row.SubmittedAt, PublishedAt: row.PublishedAt,
 		})
 		if err != nil {

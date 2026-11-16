@@ -505,9 +505,9 @@ export interface paths {
         /**
          * Отправить на проверку
          * @description Из `draft` или `rejected` в `pending_review` (при `MODERATION_MODE=auto` — сразу `published`). Обязательно:
-         *     название 5–100, город (или «Вся Россия»), сфера, формат, число по цели (`goal`: просмотры, подписчики,
-         *     переходы или гости), оплата от 100 ₽, срок — от завтра до 90 дней (по Москве), хотя бы один блок с пунктами
-         *     (заголовок блока — по желанию).
+         *     название 5–100, город (или «Вся Россия»), сфера, формат, срок — от завтра до 90 дней (по Москве), описание.
+         *     Для новой формы: тип бизнеса и хотя бы одна цель в `goals`; у каждой небартерной цели — своё число и оплата
+         *     от 100 ₽, у переходов — ссылка/промокод, у бартера — описание вознаграждения. Прежние одиночные поля поддерживаются.
          */
         post: operations["submitTask"];
         delete?: never;
@@ -1953,6 +1953,31 @@ export interface components {
             /** @description Уже использован бизнесом */
             own: boolean;
         };
+        TaskGoal: {
+            /** @enum {string} */
+            goal: "views" | "subscribers" | "clicks" | "guests" | "barter";
+            /** Format: int64 */
+            target: number;
+            /**
+             * Format: int64
+             * @description Фиксированная оплата или лимит бюджета при пропорциональной
+             */
+            rewardKopecks: number;
+            /**
+             * @description fixed — при достижении target; proportional — за фактический результат, округление вниз до 100 ₽, от 100 ₽ и не выше бюджета
+             * @default fixed
+             * @enum {string}
+             */
+            paymentMode: "fixed" | "proportional";
+            link: string;
+        };
+        TaskAudience: {
+            ageFrom: number;
+            ageTo: number;
+            /** @enum {string} */
+            gender: "any" | "female" | "male";
+            language: string;
+        };
         /** @description Черновик может быть неполным; ограничения формы проверяются всегда, обязательность — при отправке. */
         TaskInput: {
             title: string;
@@ -1994,6 +2019,18 @@ export interface components {
             photos: string[];
             /** @description id видео task_video по порядку */
             videos: string[];
+            /** @enum {string} */
+            bizType?: "offline" | "online" | "services" | "";
+            /** @description Несколько целей; у каждой своё число, оплата и ссылка */
+            goals?: components["schemas"]["TaskGoal"][];
+            audience?: components["schemas"]["TaskAudience"];
+            /** Format: int64 */
+            minFollowers?: number;
+            requirements?: string;
+            script?: string;
+            /** @description Что получит автор; обязательно при выбранном бартере */
+            barter?: string;
+            responseDays?: number;
         };
         Task: {
             /** Format: int64 */
@@ -2037,6 +2074,16 @@ export interface components {
             cover: components["schemas"]["Photo"] | null;
             photos: components["schemas"]["Photo"][];
             videos: components["schemas"]["TaskVideo"][];
+            /** @enum {string} */
+            bizType: "offline" | "online" | "services" | "";
+            goals: components["schemas"]["TaskGoal"][];
+            audience: components["schemas"]["TaskAudience"];
+            /** Format: int64 */
+            minFollowers: number;
+            requirements: string;
+            script: string;
+            barter: string;
+            responseDays: number;
             /** @description Название бизнеса (только в ленте) */
             brand?: string;
             /** @description Адрес опубликованной страницы бизнеса (/b/<slug>); нет — не приходит */

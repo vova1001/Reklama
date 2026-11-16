@@ -1,11 +1,12 @@
 // Общее для e2e приложения: вход по почте с кодом из журнала бэкенда (режим разработки, MAIL_PROVIDER=log).
 import { expect, type Page } from '@playwright/test';
-import { execSync } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 
-const repo = new URL('../../../', import.meta.url).pathname;
+const repo = fileURLToPath(new URL('../../../', import.meta.url));
 
 function codeFor(email: string): string {
-  const logs = execSync('docker compose logs backend --no-log-prefix --since 10m', { cwd: repo, encoding: 'utf8', maxBuffer: 32 << 20 });
+  const logs = execFileSync(process.env.DOCKER_EXE ?? 'docker', ['compose', 'logs', 'backend', '--no-log-prefix', '--since', '10m'], { cwd: repo, encoding: 'utf8', maxBuffer: 32 << 20 });
   const line = logs.split('\n').filter((l) => l.includes(`"to":"${email}"`) && l.includes('Код для входа')).at(-1);
   const m = line?.match(/Код для входа в Охват: (\d{6})/);
   if (!m) throw new Error(`нет кода в журнале для ${email}`);

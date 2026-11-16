@@ -6,8 +6,9 @@
 import type { components } from '../lib/api.gen';
 import { $, $$, api, busy, clearErrs, setErr } from '../lib/client';
 import { confirmDialog, fmtNum, guard, parseNum, toast } from '../lib/ui';
-import { CARD_RULES, CITIES, DUE_RANGE, GOALS, PLATFORM_TITLE, TASK_RULES, type BlockKind } from '../content/app';
-import { formatsTitle, goal, rub, until } from '../lib/format';
+import { CARD_RULES, DUE_RANGE, GOALS, PLATFORM_TITLE, TASK_RULES, type BlockKind } from '../content/app';
+import { formatsTitle, goal, until } from '../lib/format';
+import { moneyKopecks, rewardExample, rewardTerms } from '../lib/reward';
 import { BlocksEditor, type Block } from './editor/blocks';
 import { CategoryPicker } from './editor/category';
 import { FormatPicker } from './editor/formats';
@@ -23,6 +24,7 @@ type Card = components['schemas']['Card'];
 type Item = components['schemas']['CategoryItem'];
 type ApiError = components['schemas']['Error']['error'];
 
+interface GoalState { goal: string; target: number; rewardKopecks: number; paymentMode: 'fixed' | 'proportional'; link: string }
 interface Init {
   kind: 'task' | 'card';
   id: number | null;
@@ -33,7 +35,8 @@ interface Init {
   photos: Photo[];
   selected: string[];
   formats?: string[];
-  goal?: string;
+  goals?: GoalState[];
+  bizType?: string;
   videos?: EdVideo[];
   categories: { common: Item[]; own: Item[] };
   brand: string;
@@ -43,12 +46,14 @@ interface Init {
 
 /** Состояние формы для черновика: как есть, включая то, что ещё не проходит проверку. */
 interface Snap {
-  v: 1;
+  v: 2;
   fields: Record<string, string>;
   nationwide: boolean;
   formats: string[];
   access: string;
-  goal?: string;
+  goals?: string[];
+  paymentModes?: Record<string, 'fixed' | 'proportional'>;
+  bizType?: string;
   selected: string[];
   blocks: Block[];
   cover: Photo[];
@@ -79,8 +84,17 @@ function restore(form: HTMLFormElement, init: Init, d: Partial<Snap>) {
       b.tabIndex = b.dataset.v === d.access ? 0 : -1;
     });
   }
-  if (typeof d.goal === 'string' && d.goal) {
-    $$<HTMLButtonElement>('[data-goal] [role="radio"]', form).forEach((b) => b.setAttribute('aria-checked', String(b.dataset.v === d.goal)));
+  if (d.goals) {
+    const chosen = new Set(strs(d.goals));
+    $$<HTMLInputElement>('[data-goal-check]', form).forEach((b) => (b.checked = chosen.has(b.value)));
+  }
+  if (d.paymentModes) {
+    for (const [id, mode] of Object.entries(d.paymentModes)) {
+      $$(`[data-payment-mode="${CSS.escape(id)}"] [role="radio"]`, form).forEach((b) => b.setAttribute('aria-checked', String(b.getAttribute('data-v') === mode)));
+    }
+  }
+  if (typeof d.bizType === 'string') {
+    $$<HTMLButtonElement>('[data-biz] [role="radio"]', form).forEach((b) => b.setAttribute('aria-checked', String(b.dataset.v === d.bizType)));
   }
   if (d.selected) init.selected = strs(d.selected).filter((x) => known.has(x));
   if (Array.isArray(d.blocks)) {
@@ -199,47 +213,62 @@ async function start(form: HTMLFormElement) {
       pick(n);
     });
   });
-  // мастер: шаг 1 (тип бизнеса) ведёт шаг 2 (цель) — недоступные цели скрываем; у цели — плашка-пояснение,
-  // поле ссылки/промокода и поля «число + оплата» по флагам (у бартера их нет). Тип запоминаем на устройстве.
-  const goalVal = () => $<HTMLButtonElement>('[data-goal] [aria-checked="true"]', form)?.dataset.v ?? 'views';
   const bizVal = () => $<HTMLButtonElement>('[data-biz] [aria-checked="true"]', form)?.dataset.v ?? '';
   const bizBtns = $$<HTMLButtonElement>('[data-biz] [role="radio"]', form);
-  const goalBtns = $$<HTMLButtonElement>('[data-goal] [role="radio"]', form);
-  const applyGoal = () => {
-    const g0 = GOALS.find((g) => g.id === goalVal()) ?? GOALS[0];
-    const label = $('[data-goal-label]', form);
-    if (label) label.textContent = g0.label || 'Целевое число';
-    const about = $('[data-goal-about] span', form);
-    if (about) about.textContent = g0.about;
-    const linkSec = $('[data-goal-link]', form);
-    if (linkSec) linkSec.hidden = !g0.link;
-    const nums = $('[data-goal-nums]', form);
-    if (nums) nums.hidden = !g0.nums;
+  const goalChecks = $$<HTMLInputElement>('[data-goal-check]', form);
+  const selectedGoals = () => goalChecks.filter((b) => b.checked && !b.closest<HTMLElement>('[data-goal-item]')!.hidden).map((b) => b.value);
+  const modeVal = (id: string) => $<HTMLButtonElement>(`[data-payment-mode="${id}"] [aria-checked="true"]`, form)?.dataset.v === 'proportional' ? 'proportional' as const : 'fixed' as const;
+  const goalValues = (): GoalState[] => selectedGoals().map((id) => ({
+    goal: id, target: parseNum(val(`target.${id}`)), rewardKopecks: parseNum(val(`reward.${id}`)) * 100, paymentMode: modeVal(id), link: val(`link.${id}`),
+  }));
+  const applyPayment = () => {
+    for (const id of selectedGoals().filter((x) => x !== 'barter')) {
+      const proportional = modeVal(id) === 'proportional';
+      const label = $(`[data-goal-item="${id}"] [data-reward-label]`, form);
+      if (label) label.textContent = proportional ? 'Лимит бюджета' : 'Оплата за результат';
+      const calc = $(`[data-reward-calc="${id}"]`, form);
+      if (calc) {
+        const g = goalValues().find((x) => x.goal === id)!;
+        calc.textContent = proportional ? rewardExample(g) : 'Только при достижении цели.';
+      }
+    }
+    const total = goalValues().reduce((sum, g) => sum + g.rewardKopecks, 0);
+    const out = $('[data-total-budget]', form);
+    if (out) {
+      out.hidden = !total;
+      out.textContent = total ? `Бюджет: ${moneyKopecks(total)}` : '';
+    }
   };
-  if (bizBtns.length && goalBtns.length) {
-    const bizKey = `ohvat-biz-${init.uid}`;
-    const pickOne = (all: HTMLButtonElement[], x: HTMLButtonElement) => all.forEach((y) => y.setAttribute('aria-checked', String(y === x)));
-    const saved = localStorage.getItem(bizKey);
-    if (saved) pickOne(bizBtns, bizBtns.find((b) => b.dataset.v === saved) ?? bizBtns[0]);
+  const applyGoals = () => {
+    goalChecks.forEach((b) => {
+      const item = b.closest<HTMLElement>('[data-goal-item]')!;
+      const terms = $('[data-goal-terms]', item);
+      if (terms) terms.hidden = !b.checked;
+    });
+    const barter = $('[data-barter-box]', form);
+    if (barter) barter.hidden = !selectedGoals().includes('barter');
+    applyPayment();
+  };
+  if (bizBtns.length && goalChecks.length) {
     const applyBiz = () => {
       const biz = bizVal();
-      goalBtns.forEach((g) => (g.hidden = !biz || !(g.dataset.kinds ?? '').split(' ').includes(biz)));
-      const cur = goalBtns.find((g) => g.getAttribute('aria-checked') === 'true');
-      if (!cur || cur.hidden) {
-        const first = goalBtns.find((g) => !g.hidden);
-        if (first) pickOne(goalBtns, first);
-      }
-      applyGoal();
+      goalChecks.forEach((b) => {
+        const item = b.closest<HTMLElement>('[data-goal-item]')!;
+        item.hidden = !biz || !(item.dataset.kinds ?? '').split(' ').includes(biz);
+        if (item.hidden) b.checked = false;
+      });
+      applyGoals();
     };
     bizBtns.forEach((b) => b.addEventListener('click', () => {
-      pickOne(bizBtns, b);
-      localStorage.setItem(bizKey, b.dataset.v ?? '');
+      bizBtns.forEach((x) => x.setAttribute('aria-checked', String(x === b)));
       applyBiz();
       changed();
     }));
-    goalBtns.forEach((g) => g.addEventListener('click', () => {
-      pickOne(goalBtns, g);
-      applyGoal();
+    goalChecks.forEach((b) => b.addEventListener('change', () => { applyGoals(); changed(); }));
+    $$<HTMLButtonElement>('[data-payment-mode] [role="radio"]', form).forEach((b) => b.addEventListener('click', () => {
+      const group = b.closest('[data-payment-mode]')!;
+      $$<HTMLButtonElement>('[role="radio"]', group).forEach((x) => x.setAttribute('aria-checked', String(x === b)));
+      applyPayment();
       changed();
     }));
     applyBiz();
@@ -279,7 +308,10 @@ async function start(form: HTMLFormElement) {
 
   form.addEventListener('input', (e) => {
     const t = e.target as HTMLElement;
-    if (t.matches('.inp, [name]') && !t.closest('[data-blocks], .cb')) changed();
+    if (t.matches('.inp, [name]') && !t.closest('[data-blocks], .cb')) {
+      if (t.closest('[data-goal-item]')) applyPayment();
+      changed();
+    }
   });
   // ушли с поля — показать его ошибку (поле — ближайший [data-sec])
   // Ушли нажатием мыши или пальца — ошибку показываем после отпускания: иначе текст ошибки сдвигает страницу
@@ -309,10 +341,11 @@ async function start(form: HTMLFormElement) {
           nationwide: nation?.getAttribute('aria-checked') === 'true', categories: picker.value(),
           formats: fmts?.value() ?? [],
           access: $<HTMLButtonElement>('[data-access] [aria-checked="true"]', form)?.dataset.v ?? 'open',
-          goal: goalVal(),
-          link: val('link'),
-          minViews: parseNum(val('minViews')),
-          rewardKopecks: parseNum(val('reward')) * 100, publishBy: isoDue(), publishTime: timeOk() ? val('publishTime') : '', blocks: blocks.value(),
+          goal: goalValues()[0]?.goal ?? '', link: goalValues()[0]?.link ?? '', minViews: goalValues()[0]?.target ?? 0, rewardKopecks: goalValues()[0]?.rewardKopecks ?? 0,
+          goals: goalValues(), bizType: bizVal(),
+          audience: { ageFrom: Number(val('ageFrom')) || 0, ageTo: Number(val('ageTo')) || 0, gender: val('gender') || 'any', language: val('language') },
+          minFollowers: parseNum(val('minFollowers')), requirements: val('requirements'), script: val('script'), barter: val('barter'), responseDays: Number(val('responseDays')) || 0,
+          publishBy: isoDue(), publishTime: timeOk() ? val('publishTime') : '', blocks: blocks.value(),
           cover: cover.value()[0] ?? '', photos: photos.value(),
           videos: (videos?.value() ?? []).flatMap((v) => (v.media ? [v.media] : [])),
         }
@@ -326,10 +359,10 @@ async function start(form: HTMLFormElement) {
     const fields: Record<string, string> = {};
     $$<HTMLInputElement>('[data-pane="edit"] input[name], [data-pane="edit"] textarea[name]', form).forEach((i) => (fields[i.name] = i.value));
     return {
-      v: 1, fields, nationwide: nation?.getAttribute('aria-checked') === 'true',
+      v: 2, fields, nationwide: nation?.getAttribute('aria-checked') === 'true',
       formats: fmts?.value() ?? [],
       access: $<HTMLButtonElement>('[data-access] [aria-checked="true"]', form)?.dataset.v ?? '',
-      goal: goalVal(),
+      goals: selectedGoals(), paymentModes: Object.fromEntries(selectedGoals().map((id) => [id, modeVal(id)])), bizType: bizVal(),
       selected: picker.value(), blocks: blocks.value(), cover: cover.photos(), photos: photos.photos(),
     };
   }
@@ -342,17 +375,25 @@ async function start(form: HTMLFormElement) {
     const hasBlocks = (p.blocks as Block[]).some((b) => b.items.length);
     if (isTask) {
       const title = p.title as string;
-      const g0 = goalVal();
       if (bizBtns.length && !bizVal()) out.set('biz', r('biz'));
       if (title.length < 5) out.set('title', r('title'));
       if (!(p.categories as string[]).length) out.set('categories', r('categories'));
       if (!p.nationwide && (p.city as string).length < 2) out.set('city', r('city'));
       if (!(p.formats as string[]).length) out.set('formats', r('formats'));
-      if (g0 !== 'barter') {
-        if (!p.minViews) out.set('minViews', r('minViews'));
-        if ((p.rewardKopecks as number) < 10000) out.set('reward', r('reward'));
+      const gs = p.goals as GoalState[];
+      if (!gs.length) out.set('goals', 'Выберите хотя бы одну цель');
+      for (const g of gs) {
+        if (g.goal === 'barter') {
+          if (!(p.barter as string)) out.set('barter', 'Опишите, что получит автор по бартеру');
+          continue;
+        }
+        if (!g.target) out.set(`goal.${g.goal}`, r('minViews'));
+        if (g.rewardKopecks < 10000) out.set(`reward.${g.goal}`, r('reward'));
+        if (g.goal === 'clicks' && !g.link) out.set('link.clicks', 'Укажите ссылку или промокод');
       }
-      if (g0 === 'clicks' && !(p.link as string)) out.set('link', r('link'));
+      const ageFrom = p.audience as { ageFrom: number; ageTo: number };
+      if (ageFrom.ageTo > 0 && ageFrom.ageFrom > ageFrom.ageTo) out.set('audience', 'Возраст «от» не может быть больше возраста «до»');
+      if ((p.responseDays as number) > 30) out.set('requirements', 'На ответ автора — не больше 30 дней');
       const d = p.publishBy as string;
       if (!d) out.set('publishBy', r('publishBy'));
       else if (d <= isoDay(0) || d > isoDay(90)) out.set('publishBy', DUE_RANGE);
@@ -370,7 +411,7 @@ async function start(form: HTMLFormElement) {
   /** Ошибки у полей: у тронутых (и у всех — после «Опубликовать»); исправили — ошибка уходит сразу. */
   function check() {
     const m = problems();
-    for (const k of Object.keys(RULES)) {
+    for (const k of new Set([...Object.keys(RULES), ...m.keys()])) {
       const show = tried || touched.has(k);
       const msg = show ? m.get(k) ?? '' : '';
       setErr(form, k, msg);
@@ -388,7 +429,8 @@ async function start(form: HTMLFormElement) {
       leftEl.append('Осталось: ');
       keys.slice(0, 3).forEach((k, i) => {
         if (i) leftEl.append(', ');
-        const b = h('button', { type: 'button', 'data-go': k }, RULES[k].short);
+        const short = RULES[k]?.short ?? (k === 'goals' ? 'цели' : k === 'barter' ? 'бартер' : k === 'audience' ? 'аудитория' : 'условия цели');
+        const b = h('button', { type: 'button', 'data-go': k }, short);
         b.addEventListener('click', () => goTo(k));
         leftEl.append(b);
       });
@@ -399,7 +441,14 @@ async function start(form: HTMLFormElement) {
   // ===== шаги мастера (только задание: у формы есть [data-step]) =====
   const steps = $$<HTMLElement>('[data-step]', form);
   const wzItems = $$<HTMLElement>('[data-wz]', form);
-  const STEP_FIELDS: Record<string, number> = { biz: 0, goal: 1, link: 1, minViews: 1, reward: 1, categories: 2, city: 2, formats: 2, publishBy: 2, title: 3, blocks: 3, cover: 3, photos: 3 };
+  const stepFor = (k: string) => {
+    if (k === 'biz') return 0;
+    if (k === 'goals' || k === 'barter' || /^(goal|reward|link)\./.test(k)) return 1;
+    if (['categories', 'city', 'formats'].includes(k)) return 2;
+    if (['audience', 'requirements', 'publishBy'].includes(k)) return 3;
+    if (['title', 'blocks', 'cover', 'photos', 'script'].includes(k)) return 4;
+    return 5;
+  };
   let step = 0;
   const showStep = (i: number) => {
     if (!steps.length) return;
@@ -410,10 +459,14 @@ async function start(form: HTMLFormElement) {
       if (j === step) w.setAttribute('aria-current', 'step');
       else w.removeAttribute('aria-current');
     });
+    $$<HTMLButtonElement>('[data-step-nav]', form).forEach((b) => (b.disabled = Number(b.dataset.stepNav) > step));
+    const count = $('[data-step-count]', form);
+    if (count) count.textContent = `Шаг ${step + 1} из ${steps.length}`;
     const prev = $<HTMLButtonElement>('[data-prev]', form);
     if (prev) prev.hidden = step === 0;
     const nextT = $('[data-next-t]', form);
-    if (nextT) nextT.textContent = step === steps.length - 1 ? 'Как увидят' : 'Далее';
+    if (nextT) nextT.textContent = step === steps.length - 1 ? 'Отправить на проверку' : 'Далее';
+    if (steps[step]?.dataset.step === 'review') renderReview();
   };
   $<HTMLButtonElement>('[data-prev]', form)?.addEventListener('click', () => {
     showStep(step - 1);
@@ -421,7 +474,7 @@ async function start(form: HTMLFormElement) {
   });
   $<HTMLButtonElement>('[data-next]', form)?.addEventListener('click', () => {
     const p = problems();
-    const first = [...p.keys()].find((k) => (STEP_FIELDS[k] ?? 0) === step);
+    const first = [...p.keys()].find((k) => stepFor(k) === step);
     if (first) {
       tried = true;
       check();
@@ -432,8 +485,14 @@ async function start(form: HTMLFormElement) {
       showStep(step + 1);
       steps[step]?.scrollIntoView({ block: 'start' });
     } else {
-      $<HTMLButtonElement>('[data-view="preview"]', form)?.click();
+      submit.click();
     }
+  });
+  $$<HTMLButtonElement>('[data-step-nav]', form).forEach((b) => b.addEventListener('click', () => showStep(Number(b.dataset.stepNav))));
+  $<HTMLButtonElement>('[data-save]', form)?.addEventListener('click', async () => {
+    dirty = true;
+    await sync.flush();
+    if (await save()) toast('Черновик сохранён');
   });
   showStep(0);
 
@@ -442,7 +501,7 @@ async function start(form: HTMLFormElement) {
     const sec = $(`[data-sec="${k}"]`, form) ?? (k === 'biz' ? $('[data-step="biz"]', form) : null);
     if (!sec) return;
     if ($('[data-pane="edit"]', form)!.hidden) $<HTMLButtonElement>('[data-view="edit"]', form)!.click();
-    if (steps.length && STEP_FIELDS[k] !== undefined) showStep(STEP_FIELDS[k]);
+    if (steps.length) showStep(stepFor(k));
     touched.add(k);
     check();
     const target =
@@ -628,8 +687,27 @@ async function start(form: HTMLFormElement) {
     return body;
   };
 
+  function renderReview() {
+    const box = $('[data-review-summary]', form);
+    if (!box) return;
+    const t = payload() as unknown as { title: string; city: string; nationwide: boolean; formats: string[]; goals: GoalState[]; publishBy: string; blocks: Block[]; barter: string };
+    const row = (label: string, value: string) => h('div', { class: 'review-row' }, h('span', {}, label), h('strong', {}, value || '—'));
+    box.replaceChildren(
+      row('Задание', t.title),
+      row('География', t.nationwide ? 'Вся Россия' : t.city),
+      row('Сферы', picker.titles().join(', ')),
+      row('Форматы', formatsTitle(t.formats)),
+      row('Цели', t.goals.map((g) => {
+        const meta = GOALS.find((x) => x.id === g.goal);
+        return g.goal === 'barter' ? 'Бартер' : `${meta?.title ?? g.goal}: ${rewardTerms(g)}`;
+      }).join(' · ')),
+      row('Лимит бюджета', moneyKopecks(t.goals.reduce((sum, g) => sum + g.rewardKopecks, 0))),
+      row('Срок', t.publishBy ? until(t.publishBy, val('publishTime')) : ''),
+    );
+  }
+
   function taskPreview() {
-    const t = payload() as unknown as { title: string; city: string; nationwide: boolean; formats: string[]; goal: string; link: string; minViews: number; rewardKopecks: number; publishBy: string; publishTime: string; blocks: Block[] };
+    const t = payload() as unknown as { title: string; city: string; nationwide: boolean; formats: string[]; goals: GoalState[]; barter: string; publishBy: string; publishTime: string; blocks: Block[]; requirements: string; script: string };
     const where = t.nationwide ? 'Вся Россия' : t.city;
     const meta = [where, picker.titles().join(', ')].filter(Boolean).join(' · ');
     const it = h('article', { class: 'it pv-it' }, h('div', { class: 'it-meta' }, h('span', {}, init.brand ? h('b', {}, init.brand) : null, init.brand && meta ? ' · ' : '', meta)), h('h2', { class: 'it-t' }, t.title || 'Название задания'));
@@ -637,16 +715,17 @@ async function start(form: HTMLFormElement) {
     if (c) it.append(h('img', { class: 'it-cover', src: c.src, alt: '' }));
     const facts = h('div', { class: 'facts' });
     const fact = (icon: Parameters<typeof ic>[0], strong: string | null, text: string) => facts.append(h('span', { html: ic(icon, 18) }, strong ? h('b', {}, strong) : null, text));
-    if (t.goal === 'barter') fact('gift', null, 'Бартер — условия в описании');
-    else {
-      if (t.rewardKopecks) fact('wallet', rub(t.rewardKopecks), '');
-      const g = goal(t.minViews, t.goal);
-      if (g) fact('eye', null, g);
+    for (const item of t.goals) {
+      if (item.goal === 'barter') fact('gift', null, `Бартер: ${t.barter}`);
+      else if (item.rewardKopecks) fact('wallet', null, `${GOALS.find((g) => g.id === item.goal)?.title ?? item.goal}: ${rewardTerms(item)}`);
+      if (item.link) fact('link', null, item.link);
     }
-    if (t.link) fact('link', null, t.link);
     if (t.formats.length) fact('video', null, formatsTitle(t.formats));
     if (t.publishBy) fact('calendar', null, until(t.publishBy, t.publishTime));
-    it.append(facts, bodyOf(t.blocks, photos.photos()));
+    const detailBlocks = [...t.blocks];
+    if (t.script) detailBlocks.push({ kind: 'text', title: 'Сценарий', items: [t.script] });
+    if (t.requirements) detailBlocks.push({ kind: 'text', title: 'Требования к автору', items: [t.requirements] });
+    it.append(facts, bodyOf(detailBlocks, photos.photos()));
     return it;
   }
 
@@ -668,5 +747,5 @@ async function start(form: HTMLFormElement) {
   ready = true;
   form.dataset.ready = '1';
   if (restored) changed(); // восстановленное — сохранить и в задание/анкету (если проходит проверку)
-  if (init.id === null && isTask && !restored) $<HTMLInputElement>('[name="title"]', form)?.focus({ preventScroll: true });
+  if (init.id === null && isTask && !restored) bizBtns[0]?.focus({ preventScroll: true });
 }

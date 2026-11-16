@@ -89,6 +89,7 @@ func (l *ListingLimits) defaults() {
 // TaskInput — задание из формы. Черновик может быть неполным; полноту проверяет Submit.
 type TaskInput struct {
 	Title         string
+	Details       domain.TaskDetails
 	City          string
 	Nationwide    bool
 	Categories    []string // slug сфер, до 5
@@ -479,6 +480,22 @@ func (s *Tasks) shape(ctx context.Context, userID, id int64, in TaskInput) (doma
 	t := domain.Task{
 		Title: squash(in.Title), City: squash(in.City), Nationwide: in.Nationwide,
 		Access: in.Access, Goal: squash(in.Goal), Link: squash(in.Link), MinViews: in.MinViews, RewardKopecks: in.RewardKopecks,
+		Details: in.Details,
+	}
+	t.Details.BizType = squash(t.Details.BizType)
+	t.Details.Requirements = squash(t.Details.Requirements)
+	t.Details.Script = squash(t.Details.Script)
+	t.Details.Barter = squash(t.Details.Barter)
+	t.Details.Audience.Gender = squash(t.Details.Audience.Gender)
+	t.Details.Audience.Language = squash(t.Details.Audience.Language)
+	for i := range t.Details.Goals {
+		t.Details.Goals[i].Goal = squash(t.Details.Goals[i].Goal)
+		t.Details.Goals[i].Link = squash(t.Details.Goals[i].Link)
+		t.Details.Goals[i].PaymentMode = domain.PaymentModeOrDefault(t.Details.Goals[i].PaymentMode)
+	}
+	if len(t.Details.Goals) > 0 {
+		first := t.Details.Goals[0]
+		t.Goal, t.Link, t.MinViews, t.RewardKopecks = first.Goal, first.Link, first.Target, first.RewardKopecks
 	}
 	maxLen(ve, "title", t.Title, 100, "Название — до 100 символов")
 	if t.Nationwide {
@@ -517,6 +534,39 @@ func (s *Tasks) shape(ctx context.Context, userID, id int64, in TaskInput) (doma
 	checkCount(ve, "minViews", t.MinViews)
 	if t.RewardKopecks < 0 || t.RewardKopecks > maxRewardKop {
 		ve.add("reward", "Оплата — до 1 000 000 ₽")
+	}
+	if len(t.Details.Goals) > 5 {
+		ve.add("goals", "Целей — не больше пяти")
+	}
+	seenGoals := map[string]bool{}
+	for _, g := range t.Details.Goals {
+		if !domain.ValidGoal(g.Goal) || seenGoals[g.Goal] {
+			ve.add("goals", "Выберите разные цели из списка")
+		}
+		seenGoals[g.Goal] = true
+		if g.Target < 0 || g.Target > 1e9 || g.RewardKopecks < 0 || g.RewardKopecks > maxRewardKop {
+			ve.add("goals", "Проверьте числа в условиях целей")
+		}
+		if !domain.ValidPaymentMode(g.PaymentMode) {
+			ve.add("goals", "Оплата — фиксированная или пропорциональная")
+		}
+		maxLen(ve, "goals", g.Link, 200, "Ссылка или промокод — до 200 символов")
+	}
+	if t.Details.BizType != "" && t.Details.BizType != "offline" && t.Details.BizType != "online" && t.Details.BizType != "services" {
+		ve.add("biz", "Выберите тип бизнеса")
+	}
+	maxLen(ve, "requirements", t.Details.Requirements, 5000, "Требования — до 5000 символов")
+	maxLen(ve, "script", t.Details.Script, 10000, "Сценарий — до 10000 символов")
+	maxLen(ve, "barter", t.Details.Barter, 2000, "Условия бартера — до 2000 символов")
+	maxLen(ve, "language", t.Details.Audience.Language, 60, "Язык — до 60 символов")
+	if t.Details.Audience.Gender != "" && t.Details.Audience.Gender != "any" && t.Details.Audience.Gender != "female" && t.Details.Audience.Gender != "male" {
+		ve.add("audience", "Выберите аудиторию из списка")
+	}
+	if t.Details.Audience.AgeFrom < 0 || t.Details.Audience.AgeFrom > 100 || t.Details.Audience.AgeTo < 0 || t.Details.Audience.AgeTo > 100 || (t.Details.Audience.AgeTo > 0 && t.Details.Audience.AgeFrom > t.Details.Audience.AgeTo) {
+		ve.add("audience", "Проверьте возраст аудитории")
+	}
+	if t.Details.MinFollowers < 0 || t.Details.MinFollowers > 1e9 || t.Details.ResponseDays < 0 || t.Details.ResponseDays > 30 {
+		ve.add("requirements", "Проверьте требования к автору и срок ответа")
 	}
 	t.PublishBy = parseDate(ve, "publishBy", in.PublishBy)
 	t.PublishTime = parseClock(ve, "publishTime", in.PublishTime)
@@ -559,20 +609,43 @@ func (s *Tasks) complete(t domain.Task) error {
 	if len(t.Formats) == 0 {
 		ve.add("formats", "Выберите хотя бы один формат")
 	}
-	if t.Goal != domain.GoalBarter {
-		if t.MinViews <= 0 {
-			if t.Goal == "" || t.Goal == domain.GoalViews {
-				ve.add("minViews", "Укажите число просмотров")
-			} else {
-				ve.add("minViews", "Укажите целевое число: "+goalUnit(t.Goal))
+	if len(t.Details.Goals) > 0 {
+		if t.Details.BizType == "" {
+			ve.add("biz", "Выберите тип бизнеса")
+		}
+		for _, g := range t.Details.Goals {
+			if g.Goal == domain.GoalBarter {
+				if t.Details.Barter == "" {
+					ve.add("barter", "Опишите, что получит автор по бартеру")
+				}
+				continue
+			}
+			if g.Target <= 0 {
+				ve.add("goal."+g.Goal, "Укажите целевое число: "+goalUnit(g.Goal))
+			}
+			if g.RewardKopecks < minRewardKop {
+				ve.add("reward."+g.Goal, "Оплата — от 100 ₽")
+			}
+			if g.Goal == domain.GoalClicks && g.Link == "" {
+				ve.add("link."+g.Goal, "Укажите ссылку или промокод")
 			}
 		}
-		if t.RewardKopecks < minRewardKop {
-			ve.add("reward", "Оплата — от 100 ₽")
+	} else {
+		if t.Goal != domain.GoalBarter {
+			if t.MinViews <= 0 {
+				if t.Goal == "" || t.Goal == domain.GoalViews {
+					ve.add("minViews", "Укажите число просмотров")
+				} else {
+					ve.add("minViews", "Укажите целевое число: "+goalUnit(t.Goal))
+				}
+			}
+			if t.RewardKopecks < minRewardKop {
+				ve.add("reward", "Оплата — от 100 ₽")
+			}
 		}
-	}
-	if t.Goal == domain.GoalClicks && t.Link == "" {
-		ve.add("link", "Укажите ссылку или промокод — по ним считаются переходы")
+		if t.Goal == domain.GoalClicks && t.Link == "" {
+			ve.add("link", "Укажите ссылку или промокод — по ним считаются переходы")
+		}
 	}
 	day := today(s.Clock.Now())
 	switch {

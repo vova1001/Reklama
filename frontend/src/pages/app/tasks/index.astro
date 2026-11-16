@@ -36,14 +36,14 @@ const sections = [
   ) : (
     <div data-my>
       <div class="filt my-filt" role="group" aria-label="Статус заданий" data-filter>
-        <button type="button" aria-pressed="true" data-f="">Все<sup>{tasks.length}</sup></button>
+        <button type="button" aria-pressed="true" data-f="">Все</button>
         {sections.map((s) => (
-          <button type="button" class={`is-${s.id}`} aria-pressed="false" data-f={s.id}>{s.title}<sup>{s.items.length}</sup></button>
+          <button type="button" class={`is-${s.id}`} aria-pressed="false" data-f={s.id}>{s.title}</button>
         ))}
       </div>
       {sections.map((s) => (
         <section class={`mysec is-${s.id}`} data-sec-list={s.id}>
-          <h2 class="mysec-h">{s.title}<sup>{s.items.length}</sup></h2>
+          <h2 class="mysec-h">{s.title}</h2>
           {s.items.length === 0 ? (
             <p class="mysec-none">Пока пусто</p>
           ) : (

@@ -55,10 +55,10 @@ const createTask = `-- name: CreateTask :one
 
 
 INSERT INTO tasks (owner_id, title, city, nationwide, categories, formats, access, goal, link, min_views,
-                   reward_kopecks, publish_by, publish_time, deadline_at, blocks, cover, photos, videos)
+                   reward_kopecks, publish_by, publish_time, deadline_at, blocks, cover, photos, videos, details)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
-        $11, $12, $13, $14, $15, $16, $17, $18)
-RETURNING id, owner_id, status, reject_reason, title, city, nationwide, formats, access, min_views, reward_kopecks, publish_by, blocks, cover, photos, created_at, updated_at, submitted_at, published_at, publish_time, deadline_at, categories, review_notes, revision, revision_status, revision_reason, revision_submitted_at, goal, videos, link
+        $11, $12, $13, $14, $15, $16, $17, $18, $19)
+RETURNING id, owner_id, status, reject_reason, title, city, nationwide, formats, access, min_views, reward_kopecks, publish_by, blocks, cover, photos, created_at, updated_at, submitted_at, published_at, publish_time, deadline_at, categories, review_notes, revision, revision_status, revision_reason, revision_submitted_at, goal, videos, link, details
 `
 
 type CreateTaskParams struct {
@@ -80,6 +80,7 @@ type CreateTaskParams struct {
 	Cover         pgtype.Text
 	Photos        []string
 	Videos        []string
+	Details       []byte
 }
 
 // Задания бизнеса, анкеты авторов и журнал модерации.
@@ -104,6 +105,7 @@ func (q *Queries) CreateTask(ctx context.Context, arg CreateTaskParams) (Task, e
 		arg.Cover,
 		arg.Photos,
 		arg.Videos,
+		arg.Details,
 	)
 	var i Task
 	err := row.Scan(
@@ -137,6 +139,7 @@ func (q *Queries) CreateTask(ctx context.Context, arg CreateTaskParams) (Task, e
 		&i.Goal,
 		&i.Videos,
 		&i.Link,
+		&i.Details,
 	)
 	return i, err
 }
@@ -213,7 +216,7 @@ const dropTaskRevision = `-- name: DropTaskRevision :one
 UPDATE tasks SET revision = NULL, revision_status = NULL, revision_reason = '', revision_submitted_at = NULL,
                  review_notes = '{}', updated_at = now()
 WHERE id = $1 AND owner_id = $2 AND status = 'published' AND revision IS NOT NULL
-RETURNING id, owner_id, status, reject_reason, title, city, nationwide, formats, access, min_views, reward_kopecks, publish_by, blocks, cover, photos, created_at, updated_at, submitted_at, published_at, publish_time, deadline_at, categories, review_notes, revision, revision_status, revision_reason, revision_submitted_at, goal, videos, link
+RETURNING id, owner_id, status, reject_reason, title, city, nationwide, formats, access, min_views, reward_kopecks, publish_by, blocks, cover, photos, created_at, updated_at, submitted_at, published_at, publish_time, deadline_at, categories, review_notes, revision, revision_status, revision_reason, revision_submitted_at, goal, videos, link, details
 `
 
 type DropTaskRevisionParams struct {
@@ -256,6 +259,7 @@ func (q *Queries) DropTaskRevision(ctx context.Context, arg DropTaskRevisionPara
 		&i.Goal,
 		&i.Videos,
 		&i.Link,
+		&i.Details,
 	)
 	return i, err
 }
@@ -327,7 +331,7 @@ func (q *Queries) GetCard(ctx context.Context, userID int64) (CreatorCard, error
 }
 
 const getOwnTask = `-- name: GetOwnTask :one
-SELECT id, owner_id, status, reject_reason, title, city, nationwide, formats, access, min_views, reward_kopecks, publish_by, blocks, cover, photos, created_at, updated_at, submitted_at, published_at, publish_time, deadline_at, categories, review_notes, revision, revision_status, revision_reason, revision_submitted_at, goal, videos, link FROM tasks WHERE id = $1 AND owner_id = $2
+SELECT id, owner_id, status, reject_reason, title, city, nationwide, formats, access, min_views, reward_kopecks, publish_by, blocks, cover, photos, created_at, updated_at, submitted_at, published_at, publish_time, deadline_at, categories, review_notes, revision, revision_status, revision_reason, revision_submitted_at, goal, videos, link, details FROM tasks WHERE id = $1 AND owner_id = $2
 `
 
 type GetOwnTaskParams struct {
@@ -369,6 +373,7 @@ func (q *Queries) GetOwnTask(ctx context.Context, arg GetOwnTaskParams) (Task, e
 		&i.Goal,
 		&i.Videos,
 		&i.Link,
+		&i.Details,
 	)
 	return i, err
 }
@@ -433,7 +438,7 @@ func (q *Queries) GetPublishedCard(ctx context.Context, userID int64) (GetPublis
 }
 
 const getPublishedTask = `-- name: GetPublishedTask :one
-SELECT t.id, t.owner_id, t.status, t.reject_reason, t.title, t.city, t.nationwide, t.formats, t.access, t.min_views, t.reward_kopecks, t.publish_by, t.blocks, t.cover, t.photos, t.created_at, t.updated_at, t.submitted_at, t.published_at, t.publish_time, t.deadline_at, t.categories, t.review_notes, t.revision, t.revision_status, t.revision_reason, t.revision_submitted_at, t.goal, t.videos, t.link, COALESCE(NULLIF(b.name, ''), NULLIF(u.name, ''), '')::text AS brand, ARRAY(SELECT c.title FROM unnest(t.categories) WITH ORDINALITY AS x(slug, n)
+SELECT t.id, t.owner_id, t.status, t.reject_reason, t.title, t.city, t.nationwide, t.formats, t.access, t.min_views, t.reward_kopecks, t.publish_by, t.blocks, t.cover, t.photos, t.created_at, t.updated_at, t.submitted_at, t.published_at, t.publish_time, t.deadline_at, t.categories, t.review_notes, t.revision, t.revision_status, t.revision_reason, t.revision_submitted_at, t.goal, t.videos, t.link, t.details, COALESCE(NULLIF(b.name, ''), NULLIF(u.name, ''), '')::text AS brand, ARRAY(SELECT c.title FROM unnest(t.categories) WITH ORDINALITY AS x(slug, n)
                    JOIN categories c ON c.slug = x.slug ORDER BY x.n)::text[] AS category_titles
 FROM tasks t
 JOIN users u ON u.id = t.owner_id
@@ -472,6 +477,7 @@ type GetPublishedTaskRow struct {
 	Goal                string
 	Videos              []string
 	Link                string
+	Details             []byte
 	Brand               string
 	CategoryTitles      []string
 }
@@ -510,6 +516,7 @@ func (q *Queries) GetPublishedTask(ctx context.Context, id int64) (GetPublishedT
 		&i.Goal,
 		&i.Videos,
 		&i.Link,
+		&i.Details,
 		&i.Brand,
 		&i.CategoryTitles,
 	)
@@ -517,7 +524,7 @@ func (q *Queries) GetPublishedTask(ctx context.Context, id int64) (GetPublishedT
 }
 
 const getTask = `-- name: GetTask :one
-SELECT id, owner_id, status, reject_reason, title, city, nationwide, formats, access, min_views, reward_kopecks, publish_by, blocks, cover, photos, created_at, updated_at, submitted_at, published_at, publish_time, deadline_at, categories, review_notes, revision, revision_status, revision_reason, revision_submitted_at, goal, videos, link FROM tasks WHERE id = $1
+SELECT id, owner_id, status, reject_reason, title, city, nationwide, formats, access, min_views, reward_kopecks, publish_by, blocks, cover, photos, created_at, updated_at, submitted_at, published_at, publish_time, deadline_at, categories, review_notes, revision, revision_status, revision_reason, revision_submitted_at, goal, videos, link, details FROM tasks WHERE id = $1
 `
 
 func (q *Queries) GetTask(ctx context.Context, id int64) (Task, error) {
@@ -554,12 +561,13 @@ func (q *Queries) GetTask(ctx context.Context, id int64) (Task, error) {
 		&i.Goal,
 		&i.Videos,
 		&i.Link,
+		&i.Details,
 	)
 	return i, err
 }
 
 const listOwnTasks = `-- name: ListOwnTasks :many
-SELECT id, owner_id, status, reject_reason, title, city, nationwide, formats, access, min_views, reward_kopecks, publish_by, blocks, cover, photos, created_at, updated_at, submitted_at, published_at, publish_time, deadline_at, categories, review_notes, revision, revision_status, revision_reason, revision_submitted_at, goal, videos, link FROM tasks WHERE owner_id = $1 ORDER BY updated_at DESC, id DESC LIMIT $2
+SELECT id, owner_id, status, reject_reason, title, city, nationwide, formats, access, min_views, reward_kopecks, publish_by, blocks, cover, photos, created_at, updated_at, submitted_at, published_at, publish_time, deadline_at, categories, review_notes, revision, revision_status, revision_reason, revision_submitted_at, goal, videos, link, details FROM tasks WHERE owner_id = $1 ORDER BY updated_at DESC, id DESC LIMIT $2
 `
 
 type ListOwnTasksParams struct {
@@ -607,6 +615,7 @@ func (q *Queries) ListOwnTasks(ctx context.Context, arg ListOwnTasksParams) ([]T
 			&i.Goal,
 			&i.Videos,
 			&i.Link,
+			&i.Details,
 		); err != nil {
 			return nil, err
 		}
@@ -712,7 +721,7 @@ func (q *Queries) ListPublishedCards(ctx context.Context, arg ListPublishedCards
 }
 
 const listPublishedTasks = `-- name: ListPublishedTasks :many
-SELECT t.id, t.owner_id, t.status, t.reject_reason, t.title, t.city, t.nationwide, t.formats, t.access, t.min_views, t.reward_kopecks, t.publish_by, t.blocks, t.cover, t.photos, t.created_at, t.updated_at, t.submitted_at, t.published_at, t.publish_time, t.deadline_at, t.categories, t.review_notes, t.revision, t.revision_status, t.revision_reason, t.revision_submitted_at, t.goal, t.videos, t.link, COALESCE(NULLIF(b.name, ''), NULLIF(u.name, ''), '')::text AS brand, ARRAY(SELECT c.title FROM unnest(t.categories) WITH ORDINALITY AS x(slug, n)
+SELECT t.id, t.owner_id, t.status, t.reject_reason, t.title, t.city, t.nationwide, t.formats, t.access, t.min_views, t.reward_kopecks, t.publish_by, t.blocks, t.cover, t.photos, t.created_at, t.updated_at, t.submitted_at, t.published_at, t.publish_time, t.deadline_at, t.categories, t.review_notes, t.revision, t.revision_status, t.revision_reason, t.revision_submitted_at, t.goal, t.videos, t.link, t.details, COALESCE(NULLIF(b.name, ''), NULLIF(u.name, ''), '')::text AS brand, ARRAY(SELECT c.title FROM unnest(t.categories) WITH ORDINALITY AS x(slug, n)
                    JOIN categories c ON c.slug = x.slug ORDER BY x.n)::text[] AS category_titles
 FROM tasks t
 JOIN users u ON u.id = t.owner_id
@@ -766,6 +775,7 @@ type ListPublishedTasksRow struct {
 	Goal                string
 	Videos              []string
 	Link                string
+	Details             []byte
 	Brand               string
 	CategoryTitles      []string
 }
@@ -819,6 +829,7 @@ func (q *Queries) ListPublishedTasks(ctx context.Context, arg ListPublishedTasks
 			&i.Goal,
 			&i.Videos,
 			&i.Link,
+			&i.Details,
 			&i.Brand,
 			&i.CategoryTitles,
 		); err != nil {
@@ -957,11 +968,11 @@ UPDATE tasks
 SET title = $1, city = $2, nationwide = $3, categories = $4, formats = $5,
     access = $6, goal = $7, link = $8, min_views = $9, reward_kopecks = $10,
     publish_by = $11, publish_time = $12, deadline_at = $13,
-    blocks = $14, cover = $15, photos = $16, videos = $17,
+    blocks = $14, cover = $15, photos = $16, videos = $17, details = $18,
     revision = NULL, revision_status = NULL, revision_reason = '', revision_submitted_at = NULL, review_notes = '{}',
     updated_at = now()
-WHERE id = $18 AND status = $19::text AND revision_status = $20::text
-RETURNING id, owner_id, status, reject_reason, title, city, nationwide, formats, access, min_views, reward_kopecks, publish_by, blocks, cover, photos, created_at, updated_at, submitted_at, published_at, publish_time, deadline_at, categories, review_notes, revision, revision_status, revision_reason, revision_submitted_at, goal, videos, link
+WHERE id = $19 AND status = $20::text AND revision_status = $21::text
+RETURNING id, owner_id, status, reject_reason, title, city, nationwide, formats, access, min_views, reward_kopecks, publish_by, blocks, cover, photos, created_at, updated_at, submitted_at, published_at, publish_time, deadline_at, categories, review_notes, revision, revision_status, revision_reason, revision_submitted_at, goal, videos, link, details
 `
 
 type ReplaceTaskContentParams struct {
@@ -982,6 +993,7 @@ type ReplaceTaskContentParams struct {
 	Cover          pgtype.Text
 	Photos         []string
 	Videos         []string
+	Details        []byte
 	ID             int64
 	Status         string
 	RevisionStatus string
@@ -1008,6 +1020,7 @@ func (q *Queries) ReplaceTaskContent(ctx context.Context, arg ReplaceTaskContent
 		arg.Cover,
 		arg.Photos,
 		arg.Videos,
+		arg.Details,
 		arg.ID,
 		arg.Status,
 		arg.RevisionStatus,
@@ -1044,6 +1057,7 @@ func (q *Queries) ReplaceTaskContent(ctx context.Context, arg ReplaceTaskContent
 		&i.Goal,
 		&i.Videos,
 		&i.Link,
+		&i.Details,
 	)
 	return i, err
 }
@@ -1092,7 +1106,7 @@ const saveTaskRevision = `-- name: SaveTaskRevision :one
 UPDATE tasks SET revision = $1, revision_status = 'draft', revision_reason = '', updated_at = now()
 WHERE id = $2 AND owner_id = $3 AND status = 'published'
   AND (revision_status IS NULL OR revision_status IN ('draft', 'rejected', 'changes_requested'))
-RETURNING id, owner_id, status, reject_reason, title, city, nationwide, formats, access, min_views, reward_kopecks, publish_by, blocks, cover, photos, created_at, updated_at, submitted_at, published_at, publish_time, deadline_at, categories, review_notes, revision, revision_status, revision_reason, revision_submitted_at, goal, videos, link
+RETURNING id, owner_id, status, reject_reason, title, city, nationwide, formats, access, min_views, reward_kopecks, publish_by, blocks, cover, photos, created_at, updated_at, submitted_at, published_at, publish_time, deadline_at, categories, review_notes, revision, revision_status, revision_reason, revision_submitted_at, goal, videos, link, details
 `
 
 type SaveTaskRevisionParams struct {
@@ -1137,6 +1151,7 @@ func (q *Queries) SaveTaskRevision(ctx context.Context, arg SaveTaskRevisionPara
 		&i.Goal,
 		&i.Videos,
 		&i.Link,
+		&i.Details,
 	)
 	return i, err
 }
@@ -1255,7 +1270,7 @@ SET revision_status = $1::text,
     revision_submitted_at = CASE WHEN $1::text = 'pending_review' THEN now() ELSE revision_submitted_at END,
     updated_at = now()
 WHERE id = $4 AND status = 'published' AND revision_status = $5::text
-RETURNING id, owner_id, status, reject_reason, title, city, nationwide, formats, access, min_views, reward_kopecks, publish_by, blocks, cover, photos, created_at, updated_at, submitted_at, published_at, publish_time, deadline_at, categories, review_notes, revision, revision_status, revision_reason, revision_submitted_at, goal, videos, link
+RETURNING id, owner_id, status, reject_reason, title, city, nationwide, formats, access, min_views, reward_kopecks, publish_by, blocks, cover, photos, created_at, updated_at, submitted_at, published_at, publish_time, deadline_at, categories, review_notes, revision, revision_status, revision_reason, revision_submitted_at, goal, videos, link, details
 `
 
 type SetTaskRevisionStatusParams struct {
@@ -1307,6 +1322,7 @@ func (q *Queries) SetTaskRevisionStatus(ctx context.Context, arg SetTaskRevision
 		&i.Goal,
 		&i.Videos,
 		&i.Link,
+		&i.Details,
 	)
 	return i, err
 }
@@ -1321,7 +1337,7 @@ SET status = $1::text, reject_reason = CASE WHEN $1::text = 'rejected' THEN $2::
     submitted_at = CASE WHEN $1::text = 'pending_review' THEN now() ELSE submitted_at END,
     published_at = CASE WHEN $1::text = 'published' THEN now() ELSE published_at END
 WHERE id = $4 AND status = $5::text
-RETURNING id, owner_id, status, reject_reason, title, city, nationwide, formats, access, min_views, reward_kopecks, publish_by, blocks, cover, photos, created_at, updated_at, submitted_at, published_at, publish_time, deadline_at, categories, review_notes, revision, revision_status, revision_reason, revision_submitted_at, goal, videos, link
+RETURNING id, owner_id, status, reject_reason, title, city, nationwide, formats, access, min_views, reward_kopecks, publish_by, blocks, cover, photos, created_at, updated_at, submitted_at, published_at, publish_time, deadline_at, categories, review_notes, revision, revision_status, revision_reason, revision_submitted_at, goal, videos, link, details
 `
 
 type SetTaskStatusParams struct {
@@ -1374,6 +1390,7 @@ func (q *Queries) SetTaskStatus(ctx context.Context, arg SetTaskStatusParams) (T
 		&i.Goal,
 		&i.Videos,
 		&i.Link,
+		&i.Details,
 	)
 	return i, err
 }
@@ -1444,9 +1461,9 @@ const updateOwnTask = `-- name: UpdateOwnTask :one
 UPDATE tasks
 SET title = $1, city = $2, nationwide = $3, categories = $4, formats = $5,
     access = $6, goal = $7, link = $8, min_views = $9, reward_kopecks = $10,
-    publish_by = $11, publish_time = $12, deadline_at = $13, blocks = $14, cover = $15, photos = $16, videos = $17, updated_at = now()
-WHERE id = $18 AND owner_id = $19 AND status IN ('draft', 'rejected', 'changes_requested')
-RETURNING id, owner_id, status, reject_reason, title, city, nationwide, formats, access, min_views, reward_kopecks, publish_by, blocks, cover, photos, created_at, updated_at, submitted_at, published_at, publish_time, deadline_at, categories, review_notes, revision, revision_status, revision_reason, revision_submitted_at, goal, videos, link
+    publish_by = $11, publish_time = $12, deadline_at = $13, blocks = $14, cover = $15, photos = $16, videos = $17, details = $18, updated_at = now()
+WHERE id = $19 AND owner_id = $20 AND status IN ('draft', 'rejected', 'changes_requested')
+RETURNING id, owner_id, status, reject_reason, title, city, nationwide, formats, access, min_views, reward_kopecks, publish_by, blocks, cover, photos, created_at, updated_at, submitted_at, published_at, publish_time, deadline_at, categories, review_notes, revision, revision_status, revision_reason, revision_submitted_at, goal, videos, link, details
 `
 
 type UpdateOwnTaskParams struct {
@@ -1467,6 +1484,7 @@ type UpdateOwnTaskParams struct {
 	Cover         pgtype.Text
 	Photos        []string
 	Videos        []string
+	Details       []byte
 	ID            int64
 	OwnerID       int64
 }
@@ -1492,6 +1510,7 @@ func (q *Queries) UpdateOwnTask(ctx context.Context, arg UpdateOwnTaskParams) (T
 		arg.Cover,
 		arg.Photos,
 		arg.Videos,
+		arg.Details,
 		arg.ID,
 		arg.OwnerID,
 	)
@@ -1527,6 +1546,7 @@ func (q *Queries) UpdateOwnTask(ctx context.Context, arg UpdateOwnTaskParams) (T
 		&i.Goal,
 		&i.Videos,
 		&i.Link,
+		&i.Details,
 	)
 	return i, err
 }

@@ -133,6 +133,32 @@ func ValidGoal(g string) bool {
 	return false
 }
 
+type TaskGoal struct {
+	Goal          string `json:"goal"`
+	Target        int64  `json:"target"`
+	RewardKopecks int64  `json:"rewardKopecks"`
+	PaymentMode   string `json:"paymentMode"`
+	Link          string `json:"link"`
+}
+
+type TaskAudience struct {
+	AgeFrom  int    `json:"ageFrom"`
+	AgeTo    int    `json:"ageTo"`
+	Gender   string `json:"gender"`
+	Language string `json:"language"`
+}
+
+type TaskDetails struct {
+	BizType      string       `json:"bizType"`
+	Goals        []TaskGoal   `json:"goals"`
+	Audience     TaskAudience `json:"audience"`
+	MinFollowers int64        `json:"minFollowers"`
+	Requirements string       `json:"requirements"`
+	Script       string       `json:"script"`
+	Barter       string       `json:"barter"`
+	ResponseDays int          `json:"responseDays"`
+}
+
 // Task — задание бизнеса.
 type Task struct {
 	ID             int64
@@ -156,6 +182,7 @@ type Task struct {
 	Cover          string   // media.id обложки (16:9); "" — нет
 	Photos         []string // media.id примеров «что показать», по порядку
 	Videos         []string // media.id видео-примеров, по порядку, до 2
+	Details        TaskDetails
 	CategoryTitles []string // названия сфер по порядку (только в ленте и на странице задания)
 	Brand          string   // название бизнеса (только в ленте)
 	BrandSlug      string   // адрес опубликованной страницы бизнеса (/b/<slug>); "" — нет

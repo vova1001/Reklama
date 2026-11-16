@@ -1,43 +1,39 @@
 ---
-// Задание целиком (страница задания и своё на проверке): обложка, кто и где, название, условия, блоки, фото.
-// Слот — действие внизу (например, «Откликнуться»).
 import Icon from '../Icon.astro';
 import TaskBody from './TaskBody.astro';
-import { formatsTitle, goal, rub, until } from '../../lib/format';
+import { formatsTitle, goal, until } from '../../lib/format';
+import { rewardTerms } from '../../lib/reward';
+import { GOALS } from '../../content/app';
 import type { Task } from '../../lib/auth';
 interface Props { task: Task }
 const { task: t } = Astro.props;
 const where = t.nationwide ? 'Вся Россия' : t.city;
 const meta = [where, (t.categoryTitles ?? []).join(', ')].filter(Boolean).join(' · ');
-const g = goal(t.minViews, t.goal);
+const goals = t.goals?.length ? t.goals : [{ goal: t.goal, target: t.minViews, rewardKopecks: t.rewardKopecks, link: t.link }];
+const blocks = [...t.blocks];
+if (t.script) blocks.push({ kind: 'text', title: 'Сценарий', items: [t.script] });
+if (t.requirements) blocks.push({ kind: 'text', title: 'Требования к автору', items: [t.requirements] });
 ---
 <article class="page" data-task-page={t.id} data-lb-group>
-  {t.cover && (
-    <button type="button" class="lb-t page-cover-b" data-lb data-src={t.cover.src} data-large={t.cover.large} data-thumb={t.cover.thumb} aria-label="Открыть обложку">
-      <img class="page-cover" src={t.cover.src} srcset={`${t.cover.src} 800w, ${t.cover.large} 1600w`} sizes="(min-width: 768px) 720px, 100vw" alt="" width="800" height="450" decoding="async" />
-    </button>
-  )}
-  {(t.brand || meta) && (
-    <p class="page-meta">
-      {t.brand && (t.brandSlug ? <a class="brand-lnk" href={`/b/${t.brandSlug}`} data-brand-link>{t.brand}</a> : <span>{t.brand}</span>)}
-      {t.brand && meta && ' · '}{meta}
-    </p>
-  )}
+  {t.cover && <button type="button" class="lb-t page-cover-b" data-lb data-src={t.cover.src} data-large={t.cover.large} data-thumb={t.cover.thumb} aria-label="Открыть обложку"><img class="page-cover" src={t.cover.src} srcset={`${t.cover.src} 800w, ${t.cover.large} 1600w`} sizes="(min-width: 768px) 720px, 100vw" alt="" width="800" height="450" decoding="async" /></button>}
+  {(t.brand || meta) && <p class="page-meta">{t.brand && (t.brandSlug ? <a class="brand-lnk" href={`/b/${t.brandSlug}`} data-brand-link>{t.brand}</a> : <span>{t.brand}</span>)}{t.brand && meta && ' · '}{meta}</p>}
   <h1 class="page-t">{t.title || 'Без названия'}</h1>
   <dl class="terms">
-    {t.goal === 'barter' ? (
-      <div><dt><Icon name="gift" size={18} />Бартер</dt><dd>Товар или услуга вместо денег — условия в описании</dd></div>
-    ) : (
-      <>
-        {t.rewardKopecks > 0 && <div><dt><Icon name="wallet" size={18} />Оплата</dt><dd><b>{rub(t.rewardKopecks)}</b> за выполнение</dd></div>}
-        {g && <div><dt><Icon name="eye" size={18} />Условия</dt><dd>{g}</dd></div>}
-      </>
-    )}
-    {t.link && <div><dt><Icon name="link" size={18} />{t.goal === 'clicks' ? 'Ссылка или промокод' : 'Ссылка'}</dt><dd>{t.link.startsWith('http') ? <a href={t.link} rel="nofollow noopener noreferrer ugc" target="_blank">{t.link.replace(/^https?:\/\//, '')}</a> : t.link}</dd></div>}
-    {t.formats.length > 0 && <div><dt><Icon name="video" size={18} />Формат</dt><dd>{formatsTitle(t.formats)}</dd></div>}
+    {goals.map((g) => {
+      const title = GOALS.find((x) => x.id === g.goal)?.title ?? g.goal;
+      return <>
+        {g.goal === 'barter' ? <div><dt><Icon name="gift" size={18} />Бартер</dt><dd>{t.barter || 'Условия в описании'}</dd></div> : <>
+          {g.rewardKopecks > 0 && <div><dt><Icon name="wallet" size={18} />{title}: оплата</dt><dd>{rewardTerms(g)}</dd></div>}
+          {goal(g.target, g.goal) && <div><dt><Icon name="eye" size={18} />{title}: условие</dt><dd>{goal(g.target, g.goal)}</dd></div>}
+        </>}
+        {g.link && <div><dt><Icon name="link" size={18} />{title}: ссылка или промокод</dt><dd>{g.link.startsWith('http') ? <a href={g.link} rel="nofollow noopener noreferrer ugc" target="_blank">{g.link.replace(/^https?:\/\//, '')}</a> : g.link}</dd></div>}
+      </>;
+    })}
+    {t.formats.length > 0 && <div><dt><Icon name="video" size={18} />Форматы</dt><dd>{formatsTitle(t.formats)}</dd></div>}
     {t.publishBy && <div><dt><Icon name="calendar" size={18} />Срок</dt><dd>{until(t.publishBy, t.publishTime)}</dd></div>}
-    <div><dt><Icon name={t.access === 'approval' ? 'user-round-check' : 'zap'} size={18} />Кто берёт</dt><dd>{t.access === 'approval' ? 'С одобрением бизнеса' : 'Любой автор'}</dd></div>
+    {t.minFollowers > 0 && <div><dt><Icon name="users" size={18} />Автор</dt><dd>От {t.minFollowers.toLocaleString('ru-RU')} подписчиков{t.responseDays ? ` · ответ за ${t.responseDays} дн.` : ''}</dd></div>}
+    <div><dt><Icon name={t.access === 'approval' ? 'user-round-check' : 'zap'} size={18} />Кто берёт</dt><dd>{t.access === 'approval' ? 'С одобрения бизнеса' : 'Первый подходящий'}</dd></div>
   </dl>
-  <TaskBody blocks={t.blocks} photos={t.photos} videos={t.videos} />
+  <TaskBody blocks={blocks} photos={t.photos} videos={t.videos} />
   <slot />
 </article>

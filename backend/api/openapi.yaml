@@ -581,9 +581,9 @@ paths:
       summary: Отправить на проверку
       description: |
         Из `draft` или `rejected` в `pending_review` (при `MODERATION_MODE=auto` — сразу `published`). Обязательно:
-        название 5–100, город (или «Вся Россия»), сфера, формат, число по цели (`goal`: просмотры, подписчики,
-        переходы или гости), оплата от 100 ₽, срок — от завтра до 90 дней (по Москве), хотя бы один блок с пунктами
-        (заголовок блока — по желанию).
+        название 5–100, город (или «Вся Россия»), сфера, формат, срок — от завтра до 90 дней (по Москве), описание.
+        Для новой формы: тип бизнеса и хотя бы одна цель в `goals`; у каждой небартерной цели — своё число и оплата
+        от 100 ₽, у переходов — ссылка/промокод, у бартера — описание вознаграждения. Прежние одиночные поля поддерживаются.
       operationId: submitTask
       tags: [tasks]
       security: [{ session: [] }]
@@ -2052,6 +2052,25 @@ components:
         title: { type: string }
         builtin: { type: boolean }
         own: { type: boolean, description: Уже использован бизнесом }
+    TaskGoal:
+      type: object
+      required: [goal, target, rewardKopecks, link]
+      additionalProperties: false
+      properties:
+        goal: { type: string, enum: [views, subscribers, clicks, guests, barter] }
+        target: { type: integer, format: int64, minimum: 0, maximum: 1000000000 }
+        rewardKopecks: { type: integer, format: int64, minimum: 0, maximum: 100000000, description: "Фиксированная оплата или лимит бюджета при пропорциональной" }
+        paymentMode: { type: string, enum: [fixed, proportional], default: fixed, description: "fixed — при достижении target; proportional — за фактический результат, округление вниз до 100 ₽, от 100 ₽ и не выше бюджета" }
+        link: { type: string, maxLength: 200 }
+    TaskAudience:
+      type: object
+      required: [ageFrom, ageTo, gender, language]
+      additionalProperties: false
+      properties:
+        ageFrom: { type: integer, minimum: 0, maximum: 100 }
+        ageTo: { type: integer, minimum: 0, maximum: 100 }
+        gender: { type: string, enum: [any, female, male] }
+        language: { type: string, maxLength: 60 }
     TaskInput:
       type: object
       required: [title, city, nationwide, categories, formats, access, link, minViews, rewardKopecks, publishBy, publishTime, blocks, cover, photos, videos]
@@ -2084,9 +2103,17 @@ components:
         cover: { type: string, description: "id фото task_cover или \"\"" }
         photos: { type: array, maxItems: 6, items: { type: string }, description: id фото task_photo по порядку }
         videos: { type: array, maxItems: 2, items: { type: string }, description: id видео task_video по порядку }
+        bizType: { type: string, enum: [offline, online, services, ""] }
+        goals: { type: array, maxItems: 5, items: { $ref: "#/components/schemas/TaskGoal" }, description: "Несколько целей; у каждой своё число, оплата и ссылка" }
+        audience: { $ref: "#/components/schemas/TaskAudience" }
+        minFollowers: { type: integer, format: int64, minimum: 0, maximum: 1000000000 }
+        requirements: { type: string, maxLength: 5000 }
+        script: { type: string, maxLength: 10000 }
+        barter: { type: string, maxLength: 2000, description: "Что получит автор; обязательно при выбранном бартере" }
+        responseDays: { type: integer, minimum: 0, maximum: 30 }
     Task:
       type: object
-      required: [id, status, rejectReason, title, city, nationwide, categories, formats, access, goal, link, minViews, rewardKopecks, publishBy, publishTime, deadlineAt, blocks, cover, photos, videos, createdAt, updatedAt, submittedAt, publishedAt]
+      required: [id, status, rejectReason, title, city, nationwide, categories, formats, access, goal, link, minViews, rewardKopecks, publishBy, publishTime, deadlineAt, blocks, cover, photos, videos, bizType, goals, audience, minFollowers, requirements, script, barter, responseDays, createdAt, updatedAt, submittedAt, publishedAt]
       properties:
         id: { type: integer, format: int64 }
         status: { $ref: "#/components/schemas/Status" }
@@ -2109,6 +2136,14 @@ components:
         cover: { nullable: true, allOf: [{ $ref: "#/components/schemas/Photo" }] }
         photos: { type: array, items: { $ref: "#/components/schemas/Photo" } }
         videos: { type: array, items: { $ref: "#/components/schemas/TaskVideo" } }
+        bizType: { type: string, enum: [offline, online, services, ""] }
+        goals: { type: array, items: { $ref: "#/components/schemas/TaskGoal" } }
+        audience: { $ref: "#/components/schemas/TaskAudience" }
+        minFollowers: { type: integer, format: int64 }
+        requirements: { type: string }
+        script: { type: string }
+        barter: { type: string }
+        responseDays: { type: integer }
         brand: { type: string, description: Название бизнеса (только в ленте) }
         brandSlug: { type: string, description: "Адрес опубликованной страницы бизнеса (/b/<slug>); нет — не приходит" }
         createdAt: { type: string, format: date-time }

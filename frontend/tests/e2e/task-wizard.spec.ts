@@ -1,0 +1,137 @@
+import { test, expect } from '@playwright/test';
+import { jsErrors, login, uniq } from './helpers';
+
+const ready = (page: import('@playwright/test').Page) => expect(page.locator('[data-editor][data-ready]')).toHaveCount(1);
+const next = (page: import('@playwright/test').Page) => page.locator('[data-next]').click();
+
+test('мастер: несколько целей, динамика, шаги, черновик, обзор и отправка', async ({ page }, info) => {
+  const errors = jsErrors(page);
+  await login(page, uniq(info.project.name, 'wizard'));
+  await page.goto('/app/tasks/new');
+  await ready(page);
+  await expect(page.locator('[data-step]:visible')).toHaveAttribute('data-step', 'biz');
+  await page.getByRole('radio', { name: /Офлайн-бизнес/ }).click();
+  await expect(page).toHaveURL(/\/app\/tasks\/\d+$/, { timeout: 10_000 });
+  const id = Number(page.url().split('/').pop());
+  await next(page);
+
+  const views = page.locator('[data-goal-item="views"]');
+  const clicks = page.locator('[data-goal-item="clicks"]');
+  const barter = page.locator('[data-goal-item="barter"]');
+  await views.getByRole('checkbox').check();
+  await clicks.getByRole('checkbox').check();
+  await barter.getByRole('checkbox').check();
+  await expect(views.locator('[data-goal-terms]')).toBeVisible();
+  await expect(clicks.locator('[data-goal-terms]')).toBeVisible();
+  await expect(page.getByLabel('Что получит автор по бартеру')).toBeVisible();
+  await views.getByRole('radio', { name: 'По ставке' }).click();
+  await page.getByLabel('Просмотров от').fill('100000');
+  await views.getByLabel('Лимит бюджета').fill('10000');
+  await expect(views.locator('[data-reward-calc]')).toContainText('100 ₽ / 1 000');
+  await expect(views.locator('[data-reward-calc]')).toContainText('10 000 просм. = 1 000 ₽');
+  await expect(views.locator('[data-reward-calc]')).not.toContainText('10 000 10 000');
+  await expect(views.locator('[data-reward-calc]')).toContainText('Вниз до 100 ₽');
+  await views.getByRole('radio', { name: 'За цель' }).click();
+  await expect(views.getByLabel('Оплата за результат')).toBeVisible();
+  await expect(views.locator('[data-reward-calc]')).toContainText('только при достижении цели');
+  await views.getByRole('radio', { name: 'По ставке' }).click();
+  await page.getByLabel('Переходов от').fill('120');
+  await clicks.getByLabel('Оплата за результат').fill('1500');
+  await clicks.getByLabel('Ссылка или промокод').fill('WIZARD2026');
+  await page.getByLabel('Что получит автор по бартеру').fill('Ужин на двоих');
+  await expect(page.locator('[data-total-budget]')).toHaveText('Бюджет: 11 500 ₽');
+  await next(page);
+
+  await page.locator('[data-cats] [data-slug]').nth(0).click();
+  await page.locator('[data-cats] [data-slug]').nth(1).click();
+  await page.getByLabel('География').fill('Казань');
+  await page.getByRole('button', { name: 'Reels', exact: true }).click();
+  await page.getByRole('button', { name: 'Shorts', exact: true }).click();
+  await next(page);
+
+  await page.getByLabel('Возраст аудитории от').fill('18');
+  await page.getByLabel('До', { exact: true }).fill('35');
+  await page.getByLabel('Язык контента').fill('Русский');
+  await page.getByLabel('Подписчиков у автора от').fill('1000');
+  await page.getByLabel('Дней на ответ автора').fill('3');
+  await page.getByLabel('Требования к автору').fill('Пришлите два примера вертикальных роликов');
+  await page.getByRole('radio', { name: 'После моего одобрения' }).click();
+  await page.locator('[data-due]').getByRole('button', { name: 'Неделя' }).click();
+  await next(page);
+
+  await page.getByLabel('Название задания').fill('Видео о новом меню кафе');
+  await page.getByLabel('Суть задания').fill('Показать интерьер и три новых блюда');
+  await page.getByLabel('Сценарий и обязательные кадры').fill('Сначала фасад, затем блюда крупным планом');
+  await page.getByRole('button', { name: 'Сохранить черновик' }).click();
+  await expect(page.locator('[data-toast]')).toContainText('Черновик сохранён');
+  await page.reload();
+  await ready(page);
+  await expect(page.getByRole('radio', { name: /Офлайн-бизнес/ })).toHaveAttribute('aria-checked', 'true');
+  await next(page);
+  await expect(views.getByRole('checkbox')).toBeChecked();
+  await expect(clicks.getByRole('checkbox')).toBeChecked();
+  await expect(barter.getByRole('checkbox')).toBeChecked();
+  await expect(page.getByLabel('Просмотров от')).toHaveValue('100 000');
+  await expect(views.getByRole('radio', { name: 'По ставке' })).toHaveAttribute('aria-checked', 'true');
+  await expect(views.getByLabel('Лимит бюджета')).toHaveValue('10 000');
+  await expect(clicks.getByLabel('Оплата за результат')).toHaveValue('1 500');
+  await next(page);
+  await next(page);
+  await next(page);
+  await next(page);
+
+  const review = page.locator('[data-review-summary]');
+  await expect(review).toContainText('Видео о новом меню кафе');
+  await expect(review).toContainText('Просмотры');
+  await expect(review).toContainText('Переходы');
+  await expect(review).toContainText('Бартер');
+  await expect(review).toContainText('до 10 000 ₽ за фактический результат');
+  await expect(review).toContainText('100 ₽ за 1 000');
+  await expect(review).toContainText('1 500 ₽ при достижении цели');
+  await expect(review).toContainText('11 500 ₽');
+  const draft = await (await page.request.get(`/api/me/tasks/${id}`)).json();
+  expect(draft.goals).toHaveLength(3);
+  expect(draft.goals[0]).toMatchObject({ goal: 'views', target: 100000, rewardKopecks: 1000000, paymentMode: 'proportional' });
+  expect(draft.goals[1]).toMatchObject({ goal: 'clicks', target: 120, rewardKopecks: 150000, paymentMode: 'fixed', link: 'WIZARD2026' });
+  expect(draft.audience).toMatchObject({ ageFrom: 18, ageTo: 35, language: 'Русский' });
+  expect(draft.minFollowers).toBe(1000);
+  expect(draft.script).toContain('фасад');
+  await next(page);
+  await page.waitForURL(`**/app/tasks/${id}?sent=1`);
+  await expect(page.locator('[data-status-label]')).toHaveText('Опубликовано');
+  await expect(page.locator('.terms')).toContainText('Ужин на двоих');
+  await expect(page.locator('.terms')).toContainText('до 10 000 ₽ за фактический результат');
+  await expect(page.locator('.terms')).toContainText('100 ₽ за 1 000');
+  await expect(page.locator('.terms')).not.toContainText('автовыплат');
+  await page.goto('/app/tasks');
+  await expect(page.locator('.my-filt sup, .mysec-h sup')).toHaveCount(0);
+  expect(errors).toEqual([]);
+});
+
+test('мастер: тип бизнеса скрывает неподходящие цели, назад сохраняет ввод', async ({ page }, info) => {
+  await login(page, uniq(info.project.name, 'wizard-dynamic'));
+  await page.goto('/app/tasks/new');
+  await ready(page);
+  await page.getByRole('radio', { name: /Онлайн-бизнес/ }).click();
+  await next(page);
+  await expect(page.locator('[data-goal-item="guests"]')).toBeHidden();
+  await page.locator('[data-goal-item="views"]').getByRole('checkbox').check();
+  await page.getByLabel('Просмотров от').fill('900');
+  await page.locator('[data-prev]').click();
+  await page.getByRole('radio', { name: /Офлайн-бизнес/ }).click();
+  await next(page);
+  await expect(page.locator('[data-goal-item="guests"]')).toBeVisible();
+  await expect(page.getByLabel('Просмотров от')).toHaveValue('900');
+});
+
+test('мастер: нет горизонтального overflow на 320 px', async ({ page }, info) => {
+  await page.setViewportSize({ width: 320, height: 800 });
+  await login(page, uniq(info.project.name, 'wizard-320'));
+  await page.goto('/app/tasks/new');
+  await ready(page);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(320);
+  await page.getByRole('radio', { name: /Офлайн-бизнес/ }).click();
+  await next(page);
+  await page.locator('[data-goal-item="views"]').getByRole('checkbox').check();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(320);
+});

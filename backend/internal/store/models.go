@@ -408,6 +408,7 @@ type Task struct {
 	Goal                string
 	Videos              []string
 	Link                string
+	Details             []byte
 }
 
 type TelegramChannel struct {

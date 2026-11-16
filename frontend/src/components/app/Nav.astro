@@ -8,10 +8,14 @@ interface Props { page: Page; variant: 'rail' | 'bottom' }
 const { page, variant } = Astro.props;
 const cls = variant === 'rail' ? 'nv' : 'bn-it';
 const items = NAV.filter((n) => variant === 'rail' || !n.rail);
+const business = Astro.locals.me!.user.mode === 'business';
 ---
-{items.map((n) => (
-  <a class={cls} href={n.href} data-for-mode={n.mode} aria-current={page === n.id ? 'page' : undefined} data-tip={variant === 'rail' ? n.title : undefined} data-nav={n.id}>
-    <Icon name={n.icon} size={24} /><span>{n.title}</span>
+{items.map((n) => {
+  const title = business ? n.businessTitle ?? n.title : n.title;
+  return (
+  <a class={cls} href={n.href} data-for-mode={n.mode} aria-current={page === n.id ? 'page' : undefined} data-tip={variant === 'rail' ? title : undefined} data-nav={n.id}>
+    <Icon name={n.icon} size={24} /><span>{title}</span>
     {n.id === 'notifications' && <span class="bell-n" data-bell-count hidden></span>}
   </a>
-))}
+  );
+})}

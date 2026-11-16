@@ -9,7 +9,8 @@ const { task: t } = Astro.props;
 const where = t.nationwide ? 'Вся Россия' : t.city;
 const g = goal(t.minViews, t.goal);
 const due = until(t.publishBy, t.publishTime);
-const brief = [t.rewardKopecks ? rub(t.rewardKopecks) : '', g].filter(Boolean).join(' · ');
+const proportional = t.goals?.[0]?.paymentMode === 'proportional';
+const brief = [t.rewardKopecks ? `${proportional ? 'до ' : ''}${rub(t.rewardKopecks)}` : '', g, (t.goals?.length ?? 0) > 1 ? `ещё ${t.goals.length - 1} цели` : ''].filter(Boolean).join(' · ');
 ---
 <li class="tile" data-tile={t.id}>
   <a class="tile-a" href={`/app/task/${t.id}`}>

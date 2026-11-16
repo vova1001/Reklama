@@ -9,12 +9,13 @@ export const MODES: { id: Mode; title: string; icon: string }[] = [
 export type Page = 'feed' | 'create' | 'my' | 'profile' | 'settings' | 'notifications';
 
 /** Навигация: mode — пункт только для режима (Мои задания — у бизнеса, Анкета — у автора); rail — только в левой колонке. */
-export const NAV: { id: Page; title: string; icon: string; href: string; mode?: Mode; rail?: boolean }[] = [
-  { id: 'feed', title: 'Лента', icon: 'house', href: '/app' },
-  { id: 'my', title: 'Мои задания', icon: 'list', href: '/app/tasks', mode: 'business' },
+export const NAV: { id: Page; title: string; businessTitle?: string; icon: string; href: string; mode?: Mode; rail?: boolean }[] = [
+  { id: 'feed', title: 'Лента', businessTitle: 'Обзор', icon: 'house', href: '/app' },
+  { id: 'my', title: 'Мои задания', businessTitle: 'Задания', icon: 'list', href: '/app/tasks', mode: 'business' },
+  { id: 'create', title: 'Создать задание', icon: 'plus', href: '/app/tasks/new', mode: 'business' },
   { id: 'create', title: 'Анкета', icon: 'id-card', href: '/app/card', mode: 'creator' },
   { id: 'notifications', title: 'Уведомления', icon: 'bell-ring', href: '/app/notifications', rail: true },
-  { id: 'profile', title: 'Профиль', icon: 'user-round', href: '/app/profile' },
+  { id: 'profile', title: 'Профиль', businessTitle: 'Профиль компании', icon: 'user-round', href: '/app/profile' },
   { id: 'settings', title: 'Настройки', icon: 'settings-2', href: '/app/settings' },
 ];
 
@@ -75,33 +76,32 @@ export const BIZ_TYPES: { id: string; title: string; tip: string; icon: string }
   { id: 'services', title: 'Услуги в интернете', tip: 'Вы продаёте свои услуги и ищете клиентов онлайн', icon: 'monitor-smartphone' },
 ];
 
-/** Цель задания: под неё считается условие выполнения. kinds — для каких типов бизнеса доступна;
- *  about — плашка-пояснение при выборе; link — просить реферальную ссылку или промокод; nums — поля «число + оплата». */
+/** Цели можно сочетать. kinds — типы бизнеса; link — ссылка/промокод; nums — отдельные число и оплата. */
 export const GOALS: { id: string; title: string; tip: string; label: string; short: string; kinds: string[]; icon: string; about: string; link?: boolean; nums?: boolean }[] = [
   {
-    id: 'views', title: 'Просмотры', tip: 'Ролик набрал нужное число просмотров', label: 'Просмотров от', short: 'просмотры',
+    id: 'views', title: 'Просмотры', tip: 'Целевой охват опубликованного материала', label: 'Просмотров от', short: 'просмотры',
     kinds: ['offline', 'online', 'services'], icon: 'eye', nums: true,
-    about: 'Автор снимает ролик про вас. Как только он набрал нужное число просмотров — задание выполнено, оплата уходит автору. Число мы проверяем сами по площадке.',
+    about: 'Укажите желаемое число просмотров. Результат подтверждается материалами автора.',
   },
   {
-    id: 'subscribers', title: 'Подписчики', tip: 'Пришли новые подписчики на ваш аккаунт', label: 'Подписчиков от', short: 'подписчики',
+    id: 'subscribers', title: 'Подписчики', tip: 'Новая аудитория вашего аккаунта', label: 'Подписчиков от', short: 'подписчики',
     kinds: ['offline', 'online', 'services'], icon: 'users', nums: true, link: true,
-    about: 'Автор зовёт подписаться на вас. Укажите ссылку на аккаунт — авторы поставят её в ролик, а мы сверим прирост подписчиков по площадке.',
+    about: 'Добавьте ссылку на аккаунт и целевой прирост. Способ подтверждения согласуйте с автором.',
   },
   {
-    id: 'clicks', title: 'Переходы', tip: 'Люди перешли по вашей ссылке или промокоду', label: 'Переходов от', short: 'переходы',
+    id: 'clicks', title: 'Переходы', tip: 'Переходы по ссылке или использование промокода', label: 'Переходов от', short: 'переходы',
     kinds: ['offline', 'online', 'services'], icon: 'link', nums: true, link: true,
-    about: 'Дайте реферальную ссылку или промокод — авторы разместят их у себя. Переходы и покупки по ним видны и вам, и нам: платите только за реальный результат.',
+    about: 'Дайте ссылку или промокод. Статистику переходов предоставляет ваша система аналитики.',
   },
   {
-    id: 'guests', title: 'Гости', tip: 'Реальные люди пришли на вашу точку', label: 'Гостей от', short: 'гости',
+    id: 'guests', title: 'Гости', tip: 'Посетители офлайн-точки по промокоду', label: 'Гостей от', short: 'гости',
     kinds: ['offline'], icon: 'map-pin', nums: true, link: true,
-    about: 'Люди приходят на вашу точку и называют промокод или показывают ролик. Вы отмечаете каждого — считаем вместе, без накруток.',
+    about: 'Укажите промокод и фиксируйте посещения у себя. Платформа не считает гостей автоматически.',
   },
   {
-    id: 'barter', title: 'Бартер', tip: 'Товар или услуга вместо денег', label: '', short: 'бартер',
+    id: 'barter', title: 'Бартер', tip: 'Товар или услуга как часть вознаграждения', label: '', short: 'бартер',
     kinds: ['offline', 'online', 'services'], icon: 'gift',
-    about: 'Без денег: автор получает ваш товар, блюдо или услугу, а взамен снимает и публикует ролик. В описании напишите, что именно предлагаете. Онлайн-бизнес — отправьте товар на обзор.',
+    about: 'Опишите товар или услугу. Бартер может быть единственным вознаграждением или дополнением к оплате.',
   },
 ];
 
@@ -165,7 +165,7 @@ export const CARD_BLOCKS = [{ kind: 'text' as const, title: 'О себе', items
 
 /** Ошибки полноты — те же тексты, что у сервера (service/tasks.go complete, service/cards.go cardComplete). */
 export const TASK_RULES: Record<string, { short: string; msg: string }> = {
-  biz: { short: 'тип бизнеса', msg: 'Выберите, кто вы' },
+  biz: { short: 'тип бизнеса', msg: 'Выберите тип бизнеса' },
   title: { short: 'название', msg: 'Название — от 5 до 100 символов' },
   categories: { short: 'сфера', msg: 'Выберите сферу' },
   city: { short: 'город', msg: 'Укажите город или «Вся Россия»' },
@@ -180,10 +180,12 @@ export const DUE_RANGE = 'Срок — от завтра до 90 дней';
 
 /** Шаги мастера задания (бизнес). */
 export const TASK_STEPS = [
-  { id: 'biz', title: 'Кто вы', hint: 'Под тип бизнеса подберём цели' },
-  { id: 'goal', title: 'Что нужно', hint: 'Выберите результат — условия под него' },
-  { id: 'where', title: 'Где и когда', hint: 'Сфера, город, форматы и срок' },
-  { id: 'look', title: 'Оформление', hint: 'То, что увидят авторы первым' },
+  { id: 'biz', title: 'Бизнес', hint: 'Тип бизнеса' },
+  { id: 'goal', title: 'Цели', hint: 'Результаты и оплата' },
+  { id: 'where', title: 'Охват', hint: 'Сферы, география и форматы' },
+  { id: 'authors', title: 'Авторы', hint: 'Требования и сроки' },
+  { id: 'look', title: 'Задание', hint: 'Описание, сценарий и материалы' },
+  { id: 'review', title: 'Проверка', hint: 'Обзор перед отправкой' },
 ];
 export const CARD_RULES: Record<string, { short: string; msg: string }> = {
   name: { short: 'имя', msg: 'Имя — от 2 символов' },

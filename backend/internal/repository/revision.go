@@ -19,23 +19,24 @@ import (
 
 // taskContentRow — содержимое задания в jsonb правки (теги JSON — только здесь).
 type taskContentRow struct {
-	Title         string     `json:"title"`
-	City          string     `json:"city"`
-	Nationwide    bool       `json:"nationwide"`
-	Categories    []string   `json:"categories"`
-	Formats       []string   `json:"formats"`
-	Access        string     `json:"access"`
-	Goal          string     `json:"goal,omitempty"`
-	Link          string     `json:"link,omitempty"`
-	MinViews      int64      `json:"minViews"`
-	RewardKopecks int64      `json:"rewardKopecks"`
-	PublishBy     *time.Time `json:"publishBy,omitempty"`
-	PublishTime   string     `json:"publishTime,omitempty"`
-	DeadlineAt    *time.Time `json:"deadlineAt,omitempty"`
-	Blocks        []blockRow `json:"blocks"`
-	Cover         string     `json:"cover,omitempty"`
-	Photos        []string   `json:"photos"`
-	Videos        []string   `json:"videos,omitempty"`
+	Title         string          `json:"title"`
+	City          string          `json:"city"`
+	Nationwide    bool            `json:"nationwide"`
+	Categories    []string        `json:"categories"`
+	Formats       []string        `json:"formats"`
+	Access        string          `json:"access"`
+	Goal          string          `json:"goal,omitempty"`
+	Link          string          `json:"link,omitempty"`
+	MinViews      int64           `json:"minViews"`
+	RewardKopecks int64           `json:"rewardKopecks"`
+	PublishBy     *time.Time      `json:"publishBy,omitempty"`
+	PublishTime   string          `json:"publishTime,omitempty"`
+	DeadlineAt    *time.Time      `json:"deadlineAt,omitempty"`
+	Blocks        []blockRow      `json:"blocks"`
+	Cover         string          `json:"cover,omitempty"`
+	Photos        []string        `json:"photos"`
+	Videos        []string        `json:"videos,omitempty"`
+	Details       json.RawMessage `json:"details"`
 }
 
 type cardContentRow struct {
@@ -64,10 +65,14 @@ func blocksFromRows(rows []blockRow) []domain.Block {
 }
 
 func taskRevisionJSON(t domain.Task) ([]byte, error) {
+	details, err := json.Marshal(t.Details)
+	if err != nil {
+		return nil, err
+	}
 	b, err := json.Marshal(taskContentRow{
 		Title: t.Title, City: t.City, Nationwide: t.Nationwide, Categories: nonNil(t.Categories), Formats: nonNil(t.Formats),
 		Access: t.Access, Goal: t.Goal, Link: t.Link, MinViews: t.MinViews, RewardKopecks: t.RewardKopecks, PublishBy: t.PublishBy,
-		PublishTime: t.PublishTime, DeadlineAt: t.DeadlineAt, Blocks: blockRows(t.Blocks), Cover: t.Cover, Photos: nonNil(t.Photos), Videos: nonNil(t.Videos),
+		PublishTime: t.PublishTime, DeadlineAt: t.DeadlineAt, Blocks: blockRows(t.Blocks), Cover: t.Cover, Photos: nonNil(t.Photos), Videos: nonNil(t.Videos), Details: details,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("правка задания в JSON: %w", err)
@@ -80,10 +85,16 @@ func taskRevisionOf(raw []byte) (domain.Task, error) {
 	if err := json.Unmarshal(raw, &r); err != nil {
 		return domain.Task{}, fmt.Errorf("правка задания из JSON: %w", err)
 	}
+	var details domain.TaskDetails
+	if len(r.Details) > 0 {
+		if err := json.Unmarshal(r.Details, &details); err != nil {
+			return domain.Task{}, err
+		}
+	}
 	return domain.Task{
 		Title: r.Title, City: r.City, Nationwide: r.Nationwide, Categories: nonNil(r.Categories), Formats: nonNil(r.Formats),
 		Access: r.Access, Goal: r.Goal, Link: r.Link, MinViews: r.MinViews, RewardKopecks: r.RewardKopecks, PublishBy: r.PublishBy,
-		PublishTime: r.PublishTime, DeadlineAt: r.DeadlineAt, Blocks: blocksFromRows(r.Blocks), Cover: r.Cover, Photos: nonNil(r.Photos), Videos: nonNil(r.Videos),
+		PublishTime: r.PublishTime, DeadlineAt: r.DeadlineAt, Blocks: blocksFromRows(r.Blocks), Cover: r.Cover, Photos: nonNil(r.Photos), Videos: nonNil(r.Videos), Details: details,
 	}, nil
 }
 
@@ -262,11 +273,15 @@ func (r *Listings) ApplyTaskRevision(ctx context.Context, id int64, revStatus do
 		if err != nil {
 			return err
 		}
+		details, err := json.Marshal(rev.Details)
+		if err != nil {
+			return err
+		}
 		row, err = q.ReplaceTaskContent(ctx, store.ReplaceTaskContentParams{
 			ID: id, Status: string(domain.StatusPublished), RevisionStatus: string(revStatus),
 			Title: rev.Title, City: rev.City, Nationwide: rev.Nationwide, Categories: nonNil(rev.Categories), Formats: nonNil(rev.Formats),
 			Access: rev.Access, Goal: rev.Goal, Link: rev.Link, MinViews: rev.MinViews, RewardKopecks: rev.RewardKopecks, PublishBy: date(rev.PublishBy),
-			PublishTime: clockTime(rev.PublishTime), DeadlineAt: tsOpt(rev.DeadlineAt), Blocks: blocks, Cover: text(rev.Cover), Photos: nonNil(rev.Photos), Videos: nonNil(rev.Videos),
+			PublishTime: clockTime(rev.PublishTime), DeadlineAt: tsOpt(rev.DeadlineAt), Blocks: blocks, Cover: text(rev.Cover), Photos: nonNil(rev.Photos), Videos: nonNil(rev.Videos), Details: details,
 		})
 		if err != nil {
 			return err
