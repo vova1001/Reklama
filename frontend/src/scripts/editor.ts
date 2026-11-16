@@ -6,9 +6,11 @@
 import type { components } from '../lib/api.gen';
 import { $, $$, api, busy, clearErrs, setErr } from '../lib/client';
 import { confirmDialog, fmtNum, guard, parseNum, toast } from '../lib/ui';
-import { CARD_RULES, CITIES, DUE_RANGE, GOALS, PLATFORM_TITLE, TASK_RULES, type BlockKind } from '../content/app';
+import { CARD_RULES, DUE_RANGE, GOALS, PLATFORM_TITLE, TASK_RULES, type BlockKind } from '../content/app';
+import { CityCombobox } from './editor/city';
+import { SelectCombobox } from './editor/select';
 import { formatsTitle, goal, until } from '../lib/format';
-import { moneyKopecks, rewardExample, rewardTerms } from '../lib/reward';
+import { moneyKopecks, ratePer1000, rewardExample, rewardTerms } from '../lib/reward';
 import { BlocksEditor, type Block } from './editor/blocks';
 import { CategoryPicker } from './editor/category';
 import { FormatPicker } from './editor/formats';
@@ -74,6 +76,13 @@ function restore(form: HTMLFormElement, init: Init, d: Partial<Snap>) {
   for (const [k, v] of Object.entries(d.fields ?? {})) {
     const el = $<HTMLInputElement>(`[data-pane="edit"] input[name="${CSS.escape(k)}"], [data-pane="edit"] textarea[name="${CSS.escape(k)}"]`, form);
     if (el && typeof v === 'string') el.value = v.slice(0, el.maxLength > 0 ? el.maxLength : 1000);
+  }
+  const gender = d.fields?.gender;
+  const genderButton = $('[data-select="gender"]', form);
+  if (gender && genderButton) {
+    genderButton.dataset.value = gender;
+    const label = $('.select-value', genderButton);
+    if (label) label.textContent = gender === 'female' ? 'Преимущественно женская' : gender === 'male' ? 'Преимущественно мужская' : 'Любая';
   }
   const nation = $('[data-nationwide]', form);
   if (nation && typeof d.nationwide === 'boolean') nation.setAttribute('aria-checked', String(d.nationwide));
@@ -310,60 +319,14 @@ async function start(form: HTMLFormElement) {
   syncNation();
 
   const cityList = $('[data-city-list]', form);
-  if (city && cityList) {
-    let active = -1;
-    let matches: string[] = [];
-    const closeCities = () => {
-      cityList.hidden = true;
-      city.setAttribute('aria-expanded', 'false');
-      active = -1;
-      city.removeAttribute('aria-activedescendant');
-    };
-    const choose = (name: string) => {
-      city.value = name;
-      closeCities();
-      changed();
-    };
-    const highlight = () => {
-      $$<HTMLButtonElement>('[role="option"]', cityList).forEach((b, i) => {
-        b.classList.toggle('is-hi', i === active);
-        b.setAttribute('aria-selected', String(i === active));
-      });
-      const current = $$<HTMLButtonElement>('[role="option"]', cityList)[active];
-      if (current) city.setAttribute('aria-activedescendant', current.id);
-    };
-    const renderCities = () => {
-      const q = city.value.trim().toLocaleLowerCase('ru');
-      matches = CITIES.filter((name) => name.toLocaleLowerCase('ru').includes(q)).slice(0, 8);
-      active = matches.length ? 0 : -1;
-      cityList.replaceChildren(...matches.map((name, i) => {
-        const option = h('button', { type: 'button', id: `city-option-${i}`, role: 'option', 'aria-selected': 'false' }, name);
-        option.addEventListener('click', () => choose(name));
-        return option;
-      }));
-      cityList.hidden = !matches.length || city.disabled;
-      city.setAttribute('aria-expanded', String(!cityList.hidden));
-      highlight();
-    };
-    city.addEventListener('focus', renderCities);
-    city.addEventListener('input', renderCities);
-    city.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape') return closeCities();
-      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
-        e.preventDefault();
-        if (cityList.hidden) renderCities();
-        if (!matches.length) return;
-        active = (active + (e.key === 'ArrowDown' ? 1 : -1) + matches.length) % matches.length;
-        highlight();
-      } else if (e.key === 'Enter' && !cityList.hidden && active >= 0) {
-        e.preventDefault();
-        choose(matches[active]);
-      }
-    });
-    document.addEventListener('click', (e) => {
-      if (!cityList.contains(e.target as Node) && e.target !== city) closeCities();
-    });
-  }
+  if (city && cityList) new CityCombobox(city, cityList, changed);
+  const genderSelect = $('[data-select="gender"]', form);
+  const genderList = $('[data-select-list]', form);
+  if (genderSelect && genderList) new SelectCombobox(genderSelect, genderList, [
+    { value: 'any', title: 'Любая' },
+    { value: 'female', title: 'Преимущественно женская' },
+    { value: 'male', title: 'Преимущественно мужская' },
+  ], changed);
 
   // срок — пилюли и «+ Свой» с календарём и временем ЧЧ:ММ (scripts/editor/due.ts)
   const dueTime = $<HTMLInputElement>('[name="publishTime"]', form);
@@ -769,15 +732,24 @@ async function start(form: HTMLFormElement) {
     if (!box) return;
     const t = payload() as unknown as { title: string; city: string; nationwide: boolean; formats: string[]; goals: GoalState[]; publishBy: string; blocks: Block[]; barter: string };
     const row = (label: string, value: string) => h('div', { class: 'review-row' }, h('span', {}, label), h('strong', {}, value || '—'));
+    const goalsEl = h('div', { class: 'review-goals' });
+    t.goals.forEach((g) => {
+      const title = GOALS.find((x) => x.id === g.goal)?.title ?? g.goal;
+      if (g.goal === 'barter') {
+        goalsEl.append(h('div', { class: 'review-goal' }, h('div', { class: 'review-goal-top' }, h('strong', {}, title)), h('small', {}, t.barter)));
+        return;
+      }
+      const proportional = g.paymentMode === 'proportional';
+      const summary = `${goal(g.target, g.goal)} · ${proportional ? `По ставке · до ${moneyKopecks(g.rewardKopecks)}` : `За цель · ${moneyKopecks(g.rewardKopecks)}`}`;
+      const detail = proportional ? `${moneyKopecks(ratePer1000(g))} / 1 000 · вниз до 100 ₽` : 'Оплата при достижении цели';
+      goalsEl.append(h('div', { class: 'review-goal' }, h('div', { class: 'review-goal-top' }, h('strong', {}, title), h('span', {}, summary)), h('small', {}, detail)));
+    });
     box.replaceChildren(
       row('Задание', t.title),
       row('География', t.nationwide ? 'Вся Россия' : t.city),
       row('Сферы', picker.titles().join(', ')),
       row('Форматы', formatsTitle(t.formats)),
-      row('Цели', t.goals.map((g) => {
-        const meta = GOALS.find((x) => x.id === g.goal);
-        return g.goal === 'barter' ? 'Бартер' : `${meta?.title ?? g.goal}: ${rewardTerms(g)}`;
-      }).join(' · ')),
+      goalsEl,
       row('Лимит бюджета', moneyKopecks(t.goals.reduce((sum, g) => sum + g.rewardKopecks, 0))),
       row('Срок', t.publishBy ? until(t.publishBy, val('publishTime')) : ''),
     );

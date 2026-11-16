@@ -442,12 +442,21 @@ html:has(body.app-body) { background: var(--color-card); scroll-padding: 72px 0 
 .biz-rec { display: flex; align-items: center; gap: 18px; margin-top: 20px; padding-top: 20px; border-top: 1px solid var(--color-line); }
 .biz-rec p { flex: 1; color: var(--color-gray); font-size: 14px; line-height: 1.5; }
 .biz-rec .btn { flex: none; }
-.city-list button { display: flex; align-items: center; width: 100%; min-height: 42px; padding: 0 12px; border-radius: 8px; background: transparent; color: var(--color-ink); text-align: left; cursor: pointer; }
-.city-list button.is-hi, .city-list button[aria-selected='true'] { background: var(--color-panel); }
+.select-box { position: relative; }
+.select-button { display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; height: 48px; padding: 0 14px; border: 1px solid var(--color-line); border-radius: 12px; background: var(--color-card); color: var(--color-ink); font-size: 16px; text-align: left; cursor: pointer; }
+.select-button[aria-expanded='true'] { border-color: var(--color-emerald); box-shadow: 0 0 0 2px var(--color-emerald-soft); }
+.select-chevron { width: 8px; height: 8px; border-right: 1.5px solid var(--color-gray); border-bottom: 1.5px solid var(--color-gray); transform: rotate(45deg) translateY(-2px); transition: transform .15s ease; }
+.select-button[aria-expanded='true'] .select-chevron { transform: rotate(225deg) translateY(-2px); }
+.select-list { max-height: 260px; overflow-y: auto; }
+.city-list button, .select-list button { display: flex; align-items: center; width: 100%; min-height: 42px; padding: 0 12px; border-radius: 8px; background: transparent; color: var(--color-ink); text-align: left; cursor: pointer; }
+.city-list button.is-hi, .city-list button[aria-selected='true'], .select-list button.is-hi { background: var(--color-panel); }
+.select-list button[aria-selected='true'] { font-weight: 600; box-shadow: inset 3px 0 0 var(--color-emerald); }
 @media (max-width: 639px) { .biz-rec { align-items: stretch; flex-direction: column; gap: 12px; } .biz-rec .btn { align-self: flex-start; } }
 .task-wizard .sfx { position: relative; }
 .task-wizard .sfx .inp { padding-right: 38px; }
 .form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px 12px; margin-top: 26px; }
+.form-grid .field, .goal-terms > .field { min-width: 0; }
+.form-grid .lbl, .goal-terms .lbl { min-height: 22px; align-items: baseline; }
 select.inp { appearance: none; background: var(--color-card) linear-gradient(45deg, transparent 50%, var(--color-gray) 50%) calc(100% - 18px) 21px / 5px 5px no-repeat; }
 .compact-area { min-height: 96px !important; }
 .materials { margin-top: 20px; padding-top: 20px; border-top: 1px solid var(--color-line); }
@@ -456,6 +465,13 @@ select.inp { appearance: none; background: var(--color-card) linear-gradient(45d
 .review-row { display: grid; grid-template-columns: 140px minmax(0, 1fr); gap: 20px; padding: 16px 0; border-bottom: 1px solid var(--color-line); }
 .review-row span { color: var(--color-gray); }
 .review-row strong { font-weight: 550; overflow-wrap: anywhere; }
+.review-goals { border-bottom: 1px solid var(--color-line); }
+.review-goal { display: grid; gap: 5px; padding: 15px 0; border-bottom: 1px solid var(--color-line); }
+.review-goal:last-child { border-bottom: 0; }
+.review-goal-top { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; }
+.review-goal-top strong { flex: none; }
+.review-goal-top span { text-align: right; }
+.review-goal small { color: var(--color-gray); font-size: 13px; }
 .review-note { margin-top: 26px; padding: 20px; border-radius: 12px; background: var(--color-panel); }
 .review-note p { margin-top: 6px; color: var(--color-gray); line-height: 1.5; }
 .tw-submit { margin-top: 24px; }
@@ -485,6 +501,8 @@ select.inp { appearance: none; background: var(--color-card) linear-gradient(45d
   .goal-link { grid-column: auto; }
   .form-grid { grid-template-columns: 1fr; }
   .review-row { grid-template-columns: 1fr; gap: 5px; }
+  .review-goal-top { align-items: flex-start; flex-direction: column; gap: 4px; }
+  .review-goal-top span { text-align: left; }
   .tw-submit { width: 100%; }
   .wz-nav { flex-wrap: wrap; }
   .wz-save { order: 3; width: 100%; margin: 4px 0 0; }
