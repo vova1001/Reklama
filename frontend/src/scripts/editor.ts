@@ -10,7 +10,7 @@ import { CARD_RULES, DUE_RANGE, GOALS, PLATFORM_TITLE, TASK_RULES, type BlockKin
 import { CityCombobox } from './editor/city';
 import { SelectCombobox } from './editor/select';
 import { formatsTitle, goal, until } from '../lib/format';
-import { moneyKopecks, ratePer1000, rewardExample, rewardTerms } from '../lib/reward';
+import { moneyKopecks, rewardExample, rewardTerms } from '../lib/reward';
 import { BlocksEditor, type Block } from './editor/blocks';
 import { CategoryPicker } from './editor/category';
 import { FormatPicker } from './editor/formats';
@@ -259,15 +259,15 @@ async function start(form: HTMLFormElement) {
       const g = goalValues().find((x) => x.goal === id)!;
       const complete = g.target > 0 && g.rewardKopecks > 0;
       const calc = $(`[data-reward-calc="${id}"]`, form);
-      if (calc) calc.textContent = proportional ? rewardExample(g) : complete ? `${moneyKopecks(g.rewardKopecks)} при достижении ${goal(g.target, g.goal).replace('от ', '')}` : 'Укажите цель и бюджет — покажем условия оплаты.';
+      if (calc) calc.textContent = proportional ? rewardExample(g) : complete ? `${moneyKopecks(g.rewardKopecks)} при достижении цели` : 'Заполните цель и бюджет.';
       const summary = $(`[data-reward-summary="${id}"]`, form);
-      if (summary) summary.textContent = complete ? proportional ? `Автор получит до ${moneyKopecks(g.rewardKopecks)} по фактическому результату` : `Автор получит ${moneyKopecks(g.rewardKopecks)} при достижении цели` : '';
+      if (summary) summary.textContent = complete ? proportional ? `Бюджет до ${moneyKopecks(g.rewardKopecks)}` : '' : '';
     }
     const total = goalValues().reduce((sum, g) => sum + g.rewardKopecks, 0);
     const out = $('[data-total-budget]', form);
     if (out) {
       out.hidden = !total;
-      out.textContent = total ? `Бюджет: ${moneyKopecks(total)}` : '';
+      out.textContent = total ? `Общий бюджет: ${moneyKopecks(total)}` : '';
     }
   };
   const applyGoals = () => {
@@ -282,9 +282,9 @@ async function start(form: HTMLFormElement) {
   };
   if (bizBtns.length && goalChecks.length) {
     const recs: Record<string, { text: string; goals: string[]; formats: string[] }> = {
-      offline: { text: 'Для офлайн-точки: гости и короткие вертикальные видео — так проще привести людей к вам.', goals: ['guests'], formats: ['reels', 'vk_clips'] },
-      online: { text: 'Для онлайн-продаж: переходы по ссылке и видео с понятным следующим шагом.', goals: ['clicks'], formats: ['shorts', 'youtube'] },
-      services: { text: 'Для услуг: подписчики и экспертный формат, который помогает познакомиться с вами.', goals: ['subscribers'], formats: ['telegram', 'youtube'] },
+      offline: { text: 'Начните с гостей, Reels и VK Клипов.', goals: ['guests'], formats: ['reels', 'vk_clips'] },
+      online: { text: 'Начните с переходов, Shorts и YouTube.', goals: ['clicks'], formats: ['shorts', 'youtube'] },
+      services: { text: 'Начните с подписчиков, Telegram и YouTube.', goals: ['subscribers'], formats: ['telegram', 'youtube'] },
     };
     syncRecommendation = (applied = false) => {
       const rec = recs[bizVal()];
@@ -293,7 +293,7 @@ async function start(form: HTMLFormElement) {
       if (!rec || !button) return;
       const missing = rec.goals.some((id) => !selectedGoals().includes(id)) || rec.formats.some((id) => !(fmts?.value() ?? []).includes(id));
       button.disabled = !missing;
-      button.textContent = missing ? 'Применить рекомендации' : 'Применено';
+      button.textContent = missing ? 'Применить' : 'Применено';
       if (status) status.textContent = applied ? 'Рекомендации применены' : missing ? '' : 'Уже выбрано';
     };
     const applyBiz = () => {
@@ -794,8 +794,8 @@ async function start(form: HTMLFormElement) {
         return;
       }
       const proportional = g.paymentMode === 'proportional';
-      const summary = `${goal(g.target, g.goal)} · ${proportional ? `По ставке · до ${moneyKopecks(g.rewardKopecks)}` : `За цель · ${moneyKopecks(g.rewardKopecks)}`}`;
-      const detail = proportional ? `${moneyKopecks(ratePer1000(g))} / 1 000 · вниз до 100 ₽` : 'Оплата при достижении цели';
+      const summary = goal(g.target, g.goal);
+      const detail = proportional ? `${rewardExample(g)} · Бюджет до ${moneyKopecks(g.rewardKopecks)}` : `${moneyKopecks(g.rewardKopecks)} при достижении цели`;
       goalsEl.append(h('div', { class: 'review-goal' }, h('div', { class: 'review-goal-top' }, h('strong', {}, title), h('span', {}, summary)), h('small', {}, detail)));
     });
     box.replaceChildren(

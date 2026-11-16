@@ -205,7 +205,7 @@ export class PageBlocks {
     switch (b.type) {
       case 'about':
       case 'text': {
-        const t = area(b.text, TEXT_MAX[b.type]!, b.type === 'about' ? (this.d.kind === 'creator' ? 'Кто вы, о чём снимаете, чем полезны бизнесу' : 'Чем вы занимаетесь, для кого и почему к вам идут') : 'Текст — абзацы через пустую строку', 'Текст блока', 5);
+        const t = area(b.text, TEXT_MAX[b.type]!, b.type === 'about' ? (this.d.kind === 'creator' ? 'Кто вы, о чём снимаете, чем полезны бизнесу' : 'Чем занимаетесь и что предлагаете клиентам') : 'Текст — абзацы через пустую строку', 'Текст блока', 5);
         return { value: () => ({ text: t.value.trim() }) };
       }
       case 'facts': {

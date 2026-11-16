@@ -25,10 +25,9 @@ export function rewardForResult(g: RewardGoal, actual: number): number {
 }
 
 export function rewardExample(g: RewardGoal): string {
-  if (!g.target || !g.rewardKopecks) return 'Укажите цель и бюджет — покажем ставку и примеры.';
-  const examples = [Math.max(1, Math.floor(g.target / 10)), Math.max(1, Math.floor(g.target / 2))]
-    .map((actual) => `${goal(actual, g.goal).replace('от ', '')} = ${moneyKopecks(rewardForResult(g, actual))}`);
-  return `${moneyKopecks(ratePer1000(g))} / 1 000 · ${examples.join(' · ')} · не более ${moneyKopecks(g.rewardKopecks)}. Вниз до 100 ₽, минимум 100 ₽.`;
+  if (!g.target || !g.rewardKopecks) return 'Заполните цель и бюджет.';
+  const units: Record<string, string> = { views: 'просмотров', subscribers: 'подписчиков', clicks: 'переходов', guests: 'гостей' };
+  return `${moneyKopecks(ratePer1000(g))} за 1 000 ${units[g.goal] ?? units.views}`;
 }
 
 export function rewardTerms(g: RewardGoal): string {

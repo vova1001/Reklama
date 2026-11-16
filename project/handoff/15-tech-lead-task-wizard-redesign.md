@@ -111,4 +111,12 @@
 - Standalone Playwright без test runner: invalid/fixed/proportional проверены в отдельных browser contexts на 1440 и 320 px. Проверены обе ошибки после «Далее», их исчезновение после исправления, пример `100 ₽ / 1 000`, выплаты `1 000 ₽` и `5 000 ₽`, отсутствие JS-ошибок и overflow. Шесть screenshots сохранены в `.wizard-check/goal-{invalid,fixed,proportional}-{1440,320}.png` и осмотрены.
 - Production build изолированного HEAD+task: `docker build -f deploy/render/Dockerfile -t ohvat-production-task .wizard-check` — успешен. Тестовые наборы по условию не запускались. Auth/2fa и pre-existing `navigation.ts` не изменялись.
 
+## Product UI мастера и BUSINESS profile/page
+- Мастер переведён на рабочую колонку 760 px, labels 13 px, inputs 14 px / 44 px, белые surfaces, тонкие borders, компактный stepper и SaaS CTA. Тексты всех шагов сокращены. Бартер находится внутри выбранной белой карточки с конкретным placeholder и коротким hint о стоимости/доставке.
+- Fixed: `12 321 ₽ при достижении цели`. Proportional: только ставка с полной единицей цели (`100 ₽ за 1 000 просмотров`) и отдельный `Бюджет до …`; длинные примеры и округление убраны из формы и обзора. Native number spinners скрыты.
+- Submit находится в общем CTA-ряду и виден только на review. Standalone Playwright (не test runner): все 6 шагов на 1440 и 320, 12 screenshots `.wizard-check/saas-step-{1..6}-{1440,320}.png`; проверены barter, proportional, submit visibility, отсутствие JS-ошибок и overflow.
+- BUSINESS profile и page получили изолированные классы `biz-profile` / `biz-page` и ту же типографику, поля, chips, spacing и CTA; creator/auth не менялись. Тексты разделов сокращены, длинный email переносится на mobile.
+- Standalone BUSINESS на 1440/320: полный scroll, city combobox, invalid/valid ИНН, сохранение профиля, cover/logo upload + crop, описание, адрес, часы, телефон, сайт, соцсети, autosave/reload и preview. Screenshots `.wizard-check/business-{profile,page,preview}-{1440,320}.png` осмотрены.
+- Production build изолированного HEAD+task: `docker build -f deploy/render/Dockerfile -t ohvat-production-task .wizard-check` — успешен. Тестовые наборы не запускались.
+
 ## Приёмка (менеджер)

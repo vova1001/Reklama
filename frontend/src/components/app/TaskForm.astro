@@ -27,14 +27,14 @@ const saveState = t?.status === 'published' ? 'Редактирование' : t
     <a class="tw-close" href={close} aria-label="Закрыть" data-close><Icon name="x" size={20} /></a>
     <div class="tw-heading"><h1>Новое задание</h1><p data-state aria-live="polite">{saveState}</p></div>
     <div class="tw-view" role="tablist" aria-label="Вид">
-      <button type="button" role="tab" aria-selected="true" data-view="edit">Заполнение</button>
-      <button type="button" role="tab" aria-selected="false" tabindex="-1" data-view="preview">Предпросмотр</button>
+      <button type="button" role="tab" aria-selected="true" data-view="edit">Форма</button>
+      <button type="button" role="tab" aria-selected="false" tabindex="-1" data-view="preview">Просмотр</button>
     </div>
   </header>
   <p class="tw-left" data-left hidden></p>
 
   <div class="ed-col">
-    {t?.status === 'published' && <p class="banner" role="note"><Icon name="eye" size={20} /><span>Опубликованная версия останется видна авторам, пока модератор проверяет правку.</span></p>}
+    {t?.status === 'published' && <p class="banner" role="note"><Icon name="eye" size={20} /><span>Текущая версия будет видна авторам до завершения проверки.</span></p>}
     {revision ? <ReviewNote status={revision.status} reason={revision.rejectReason} notes={t?.reviewNotes} revision /> : <ReviewNote status={t?.status} reason={t?.rejectReason} notes={t?.reviewNotes} />}
 
     <div data-pane="edit" data-wizard>
@@ -50,8 +50,8 @@ const saveState = t?.status === 'published' ? 'Редактирование' : t
       </nav>
 
       <section class="grp wz-panel" data-step="biz" aria-labelledby="st-biz">
-        <h2 class="grp-h" id="st-biz">Тип бизнеса</h2>
-        <p class="grp-d">Выберите один вариант.</p>
+        <h2 class="grp-h" id="st-biz">Что вы продвигаете?</h2>
+        <p class="grp-d">Выберите тип бизнеса.</p>
         <div class="wopts biz-options" role="radiogroup" aria-label="Тип бизнеса" data-biz>
           {BIZ_TYPES.map((b) => (
             <button type="button" class="wopt" role="radio" aria-checked={t?.bizType === b.id ? 'true' : 'false'} data-v={b.id}>
@@ -61,15 +61,15 @@ const saveState = t?.status === 'published' ? 'Редактирование' : t
         </div>
         <div class="biz-rec" data-recommendations hidden>
           <p data-rec-text></p>
-          <button class="btn pill-ghost" type="button" data-apply-rec>Применить рекомендации</button>
+          <button class="btn pill-ghost" type="button" data-apply-rec>Применить</button>
           <span class="rec-status" data-rec-status aria-live="polite"></span>
         </div>
         <p class="ferr" data-err="biz"></p>
       </section>
 
       <section class="grp wz-panel" data-step="goal" hidden aria-labelledby="st-goal">
-        <h2 class="grp-h" id="st-goal">Цели и оплата</h2>
-        <p class="grp-d">Можно несколько. У каждой — свои условия.</p>
+        <h2 class="grp-h" id="st-goal">Результат и оплата</h2>
+        <p class="grp-d">Выберите одну или несколько целей.</p>
         <div class="goal-list" data-goal>
           {GOALS.map((g) => {
             const savedGoal = legacyGoals.find((x) => x.goal === g.id);
@@ -96,7 +96,12 @@ const saveState = t?.status === 'published' ? 'Редактирование' : t
                     </div>
                     <p class="reward-calc" data-reward-calc={g.id} aria-live="polite"></p>
                     <p class="reward-summary" data-reward-summary={g.id} aria-live="polite"></p>
-                  </> : <p class="goal-note">Бартер можно сочетать с денежными целями. Если выбран только бартер, денежная оплата не указывается.</p>}
+                  </> : <div class="field" data-sec="barter" data-barter-box>
+                    <label class="lbl" for="t-barter">Что получит автор?</label>
+                    <textarea class="inp compact-area" id="t-barter" name="barter" rows="3" maxlength="2000" placeholder="Например, ужин на двоих и десерт в подарок">{t?.barter ?? ''}</textarea>
+                    <p class="field-hint">При необходимости укажите стоимость и условия доставки.</p>
+                    <p class="ferr" data-err="barter"></p>
+                  </div>}
                   {g.link && <div class="field goal-link" data-sec={`link.${g.id}`}>
                     <label class="lbl" for={`t-link-${g.id}`}>{g.id === 'guests' ? 'Промокод для подтверждения визита' : g.id === 'clicks' ? 'Ссылка или промокод' : 'Ссылка на аккаунт'}</label>
                     <input class="inp" id={`t-link-${g.id}`} name={`link.${g.id}`} maxlength="200" value={savedGoal?.link ?? ''} placeholder={g.id === 'guests' ? 'Например: КОФЕ2026' : g.id === 'clicks' ? 'https://… или ПРОМО2026' : 'https://…'} />
@@ -108,23 +113,18 @@ const saveState = t?.status === 'published' ? 'Редактирование' : t
           })}
         </div>
         <p class="total-budget" data-total-budget aria-live="polite"></p>
-        <div class="field" data-sec="barter" data-barter-box hidden={!selected('barter')}>
-          <label class="lbl" for="t-barter">Что получит автор по бартеру</label>
-          <textarea class="inp compact-area" id="t-barter" name="barter" rows="3" maxlength="2000" placeholder="Например: ужин на двоих и доставка новой коллекции">{t?.barter ?? ''}</textarea>
-          <p class="ferr" data-err="barter"></p>
-        </div>
         <p class="ferr" data-err="goals"></p>
       </section>
 
       <section class="grp wz-panel" data-step="where" hidden aria-labelledby="st-where">
-        <h2 class="grp-h" id="st-where">Охват</h2>
-        <p class="grp-d">Сфера, география и формат публикации.</p>
+        <h2 class="grp-h" id="st-where">Где и в каком формате?</h2>
+        <p class="grp-d">Так авторы найдут подходящее задание.</p>
         <div class="sec" data-sec="categories">
           <span class="lbl">Сферы <span class="hint">· до 5</span></span>
           <div data-cats data-input="categories"></div><p class="ferr" data-err="categories"></p>
         </div>
         <div class="sec field" data-sec="city">
-          <label class="lbl" for="t-city">География</label>
+          <label class="lbl" for="t-city">Город</label>
           <div class="city">
             <div class="city-box" data-city-box>
               <input class="inp" id="t-city" name="city" maxlength="80" value={t?.city ?? ''} placeholder="Город" data-ph="Город" role="combobox" aria-expanded="false" aria-controls="t-cities" data-input="city" />
@@ -134,72 +134,73 @@ const saveState = t?.status === 'published' ? 'Редактирование' : t
           </div><p class="ferr" data-err="city"></p>
         </div>
         <div class="sec" data-sec="formats">
-          <span class="lbl">Форматы и площадки <span class="hint">· можно несколько</span></span>
+          <span class="lbl">Форматы <span class="hint">· можно несколько</span></span>
           <div data-formats data-input="formats"></div><p class="ferr" data-err="formats"></p>
           <div class="publication-grid" data-publications></div>
         </div>
         <div class="sec field" data-offline-fields hidden={t?.bizType !== 'offline'}>
-          <label class="lbl" for="t-address">Адрес точки <span class="hint">· по желанию</span></label>
+          <label class="lbl" for="t-address">Адрес <span class="hint">· необязательно</span></label>
           <input class="inp" id="t-address" name="address" maxlength="300" value={t?.address ?? ''} placeholder="Улица, дом, ориентир" />
         </div>
         <div class="sec field" data-online-fields hidden={t?.bizType !== 'online'}>
-          <label class="lbl" for="t-delivery">Доставка товара <span class="hint">· условия и география, по желанию</span></label>
-          <input class="inp" id="t-delivery" name="delivery" maxlength="300" value={t?.delivery ?? ''} placeholder="Например: СДЭК по России, за счёт бизнеса" />
+          <label class="lbl" for="t-delivery">Доставка <span class="hint">· необязательно</span></label>
+          <input class="inp" id="t-delivery" name="delivery" maxlength="300" value={t?.delivery ?? ''} placeholder="Например, СДЭК по России за наш счёт" />
         </div>
       </section>
 
       <section class="grp wz-panel" data-step="authors" hidden aria-labelledby="st-authors">
-        <h2 class="grp-h" id="st-authors">Авторы и сроки</h2>
-        <p class="grp-d">Только нужные ограничения.</p>
+        <h2 class="grp-h" id="st-authors">Автор и сроки</h2>
+        <p class="grp-d">Ограничения необязательны.</p>
         <div class="form-grid">
           <div class="field"><label class="lbl" for="t-age-from">Возраст от</label><input class="inp" id="t-age-from" name="ageFrom" type="number" min="0" max="100" value={audience.ageFrom || ''} placeholder="18" /></div>
           <div class="field"><label class="lbl" for="t-age-to">Возраст до</label><input class="inp" id="t-age-to" name="ageTo" type="number" min="0" max="100" value={audience.ageTo || ''} placeholder="35" /></div>
           <div class="field"><span class="lbl" id="gender-label">Аудитория</span><div class="select-box"><button class="select-button" type="button" aria-labelledby="gender-label" aria-haspopup="listbox" aria-expanded="false" aria-controls="gender-options" data-select="gender" data-value={audience.gender}><span class="select-value">{audience.gender === 'female' ? 'Преимущественно женская' : audience.gender === 'male' ? 'Преимущественно мужская' : 'Любая'}</span><span class="select-chevron" aria-hidden="true"></span></button><input type="hidden" name="gender" value={audience.gender} /><ul class="cb-list select-list" id="gender-options" role="listbox" hidden data-select-list></ul></div></div>
-          <div class="field"><label class="lbl" for="t-language">Язык контента</label><input class="inp" id="t-language" name="language" maxlength="60" value={audience.language} placeholder="Русский" /></div>
-          <div class="field"><label class="lbl" for="t-followers">Подписчиков у автора от</label><input class="inp" id="t-followers" name="minFollowers" inputmode="numeric" maxlength="13" value={t?.minFollowers || ''} placeholder="1 000" data-num /></div>
-          <div class="field"><label class="lbl" for="t-response">Дней на ответ автора</label><input class="inp" id="t-response" name="responseDays" type="number" min="0" max="30" value={t?.responseDays || ''} placeholder="3" /></div>
+          <div class="field"><label class="lbl" for="t-language">Язык</label><input class="inp" id="t-language" name="language" maxlength="60" value={audience.language} placeholder="Русский" /></div>
+          <div class="field"><label class="lbl" for="t-followers">Подписчиков от</label><input class="inp" id="t-followers" name="minFollowers" inputmode="numeric" maxlength="13" value={t?.minFollowers || ''} placeholder="1 000" data-num /></div>
+          <div class="field"><label class="lbl" for="t-response">Ответ автору, дней</label><input class="inp" id="t-response" name="responseDays" type="number" min="0" max="30" value={t?.responseDays || ''} placeholder="3" /></div>
         </div>
         <p class="ferr" data-err="audience"></p><p class="ferr" data-err="requirements"></p>
-        <div class="sec field"><label class="lbl" for="t-requirements">Требования к автору и отклику <span class="hint">· по желанию</span></label><textarea class="inp compact-area" id="t-requirements" name="requirements" rows="3" maxlength="5000" placeholder="Опыт, стиль, примеры работ, что нужно прислать в отклике">{t?.requirements ?? ''}</textarea></div>
+        <div class="sec field"><label class="lbl" for="t-requirements">Требования к автору <span class="hint">· необязательно</span></label><textarea class="inp compact-area" id="t-requirements" name="requirements" rows="3" maxlength="5000" placeholder="Опыт, стиль и что прислать в отклике">{t?.requirements ?? ''}</textarea></div>
         <div class="sec usage-grid">
-          <div class="field"><span class="lbl" id="rights-label">Права на контент</span><div class="select-box"><button class="select-button" type="button" aria-labelledby="rights-label" aria-haspopup="listbox" aria-expanded="false" aria-controls="rights-options" data-select="usageRights" data-value={t?.usageRights || 'organic'}><span class="select-value">{t?.usageRights === 'ads' ? 'Органика, репосты и реклама' : t?.usageRights === 'reposts' ? 'Органика и репосты' : 'Только органика'}</span><span class="select-chevron" aria-hidden="true"></span></button><input type="hidden" name="usageRights" value={t?.usageRights || 'organic'} /><ul class="cb-list select-list" id="rights-options" role="listbox" hidden data-rights-list></ul></div></div>
-          <div class="field" data-usage-days hidden={t?.usageRights !== 'ads'}><label class="lbl" for="t-usage-days">Дней на использование</label><input class="inp" id="t-usage-days" name="usageDays" type="number" min="0" max="3650" value={t?.usageDays || 90} /></div>
+          <div class="field"><span class="lbl" id="rights-label">Использование контента</span><div class="select-box"><button class="select-button" type="button" aria-labelledby="rights-label" aria-haspopup="listbox" aria-expanded="false" aria-controls="rights-options" data-select="usageRights" data-value={t?.usageRights || 'organic'}><span class="select-value">{t?.usageRights === 'ads' ? 'Органика, репосты и реклама' : t?.usageRights === 'reposts' ? 'Органика и репосты' : 'Только органика'}</span><span class="select-chevron" aria-hidden="true"></span></button><input type="hidden" name="usageRights" value={t?.usageRights || 'organic'} /><ul class="cb-list select-list" id="rights-options" role="listbox" hidden data-rights-list></ul></div></div>
+          <div class="field" data-usage-days hidden={t?.usageRights !== 'ads'}><label class="lbl" for="t-usage-days">Срок использования, дней</label><input class="inp" id="t-usage-days" name="usageDays" type="number" min="0" max="3650" value={t?.usageDays || 90} /></div>
         </div>
-        <div class="sec"><span class="lbl" id="acc-l">Как выбираете автора</span><div class="mseg" role="radiogroup" aria-labelledby="acc-l" data-access>
+        <div class="sec"><span class="lbl" id="acc-l">Выбор автора</span><div class="mseg" role="radiogroup" aria-labelledby="acc-l" data-access>
           <button type="button" role="radio" aria-checked={access === 'open' ? 'true' : 'false'} tabindex={access === 'open' ? 0 : -1} data-v="open">Первый подходящий</button>
-          <button type="button" role="radio" aria-checked={access === 'approval' ? 'true' : 'false'} tabindex={access === 'approval' ? 0 : -1} data-v="approval">После моего одобрения</button>
+          <button type="button" role="radio" aria-checked={access === 'approval' ? 'true' : 'false'} tabindex={access === 'approval' ? 0 : -1} data-v="approval">После одобрения</button>
         </div></div>
         <div class="sec" data-sec="publishBy" data-due>
-          <span class="lbl" id="due-l">Опубликовать результат до</span>
+          <span class="lbl" id="due-l">Дедлайн публикации</span>
           <div class="chips" role="group" aria-labelledby="due-l" data-input="publishBy">
             <button type="button" class="chip is-check" aria-pressed="false" data-days="3">3 дня</button><button type="button" class="chip is-check" aria-pressed="false" data-days="7">Неделя</button><button type="button" class="chip is-check" aria-pressed="false" data-days="14">2 недели</button><button type="button" class="chip is-check" aria-pressed="false" data-days="30">Месяц</button><button type="button" class="chip chip-add" aria-pressed="false" aria-expanded="false" aria-controls="due-panel" data-due-custom>Своя дата</button>
           </div>
-          <div class="due-p" id="due-panel" data-due-panel hidden><div data-cal></div><div class="due-t"><label class="lbl" for="t-time">Время <span class="hint">· по Москве</span></label><input class="inp" id="t-time" name="publishTime" inputmode="numeric" maxlength="5" value={t?.publishTime ?? ''} placeholder="чч:мм" /></div><p class="due-sum" data-due-sum aria-live="polite"></p></div>
+          <div class="due-p" id="due-panel" data-due-panel hidden><div data-cal></div><div class="due-t"><label class="lbl" for="t-time">Время <span class="hint">· МСК</span></label><input class="inp" id="t-time" name="publishTime" inputmode="numeric" maxlength="5" value={t?.publishTime ?? ''} placeholder="чч:мм" /></div><p class="due-sum" data-due-sum aria-live="polite"></p></div>
           <input type="hidden" name="publishBy" value={due} /><p class="ferr" data-err="publishBy"></p>
         </div>
       </section>
 
       <section class="grp wz-panel" data-step="look" hidden aria-labelledby="st-look">
-        <h2 class="grp-h" id="st-look">Текст и материалы</h2>
-        <div class="sec field ed-name" data-sec="title"><div class="cnt-w"><input class="inp ed-title" id="t-title" name="title" maxlength="100" value={t?.title ?? ''} placeholder="Название задания" aria-label="Название задания" data-input="title" data-count /><span class="cnt" data-count-for="title"></span></div><p class="ferr" data-err="title"></p></div>
-        <div class="sec field" data-sec="blocks"><label class="lbl" for="t-desc">Суть задания</label><textarea class="inp ed-desc" id="t-desc" name="description" rows="6" maxlength="15000" placeholder="Что показать, какое впечатление оставить, что обязательно упомянуть" data-input="blocks">{desc}</textarea><p class="ferr" data-err="blocks"></p></div>
-        <div class="sec field"><label class="lbl" for="t-script">Сценарий и обязательные кадры <span class="hint">· по желанию</span></label><textarea class="inp compact-area" id="t-script" name="script" rows="5" maxlength="10000" placeholder="Начало, основные кадры, финальный призыв">{t?.script ?? ''}</textarea></div>
-        <div class="sec ed-cover"><span class="lbl">Обложка <span class="hint">· по желанию</span></span><div data-cover></div><p class="ferr" data-err="cover"></p></div>
-        <details class="materials"><summary>Фото и видео для автора</summary><p class="grp-d">Примеры, референсы или исходники: до 6 фото и 2 видео.</p><div class="sec"><span class="lbl">Фото</span><div data-photos></div><p class="ferr" data-err="photos"></p></div><div class="sec"><span class="lbl">Видео</span><div data-videos></div><p class="ferr" data-err="videos"></p></div></details>
+        <h2 class="grp-h" id="st-look">Что нужно снять?</h2>
+        <p class="grp-d">Коротко опишите результат для автора.</p>
+        <div class="sec field ed-name" data-sec="title"><label class="lbl" for="t-title">Название</label><div class="cnt-w"><input class="inp ed-title" id="t-title" name="title" maxlength="100" value={t?.title ?? ''} placeholder="Например, обзор нового меню" data-input="title" data-count /><span class="cnt" data-count-for="title"></span></div><p class="ferr" data-err="title"></p></div>
+        <div class="sec field" data-sec="blocks"><label class="lbl" for="t-desc">Описание задания</label><textarea class="inp ed-desc" id="t-desc" name="description" rows="6" maxlength="15000" placeholder="Что показать и что обязательно сказать" data-input="blocks">{desc}</textarea><p class="ferr" data-err="blocks"></p></div>
+        <div class="sec field"><label class="lbl" for="t-script">Сценарий <span class="hint">· необязательно</span></label><textarea class="inp compact-area" id="t-script" name="script" rows="5" maxlength="10000" placeholder="Начало, ключевые кадры и финал">{t?.script ?? ''}</textarea></div>
+        <div class="sec ed-cover"><span class="lbl">Обложка <span class="hint">· необязательно</span></span><div data-cover></div><p class="ferr" data-err="cover"></p></div>
+        <details class="materials"><summary>Материалы для автора</summary><p class="grp-d">До 6 фото и 2 видео.</p><div class="sec"><span class="lbl">Фото</span><div data-photos></div><p class="ferr" data-err="photos"></p></div><div class="sec"><span class="lbl">Видео</span><div data-videos></div><p class="ferr" data-err="videos"></p></div></details>
       </section>
 
       <section class="grp wz-panel" data-step="review" hidden aria-labelledby="st-review">
-        <h2 class="grp-h" id="st-review">Проверка</h2>
-        <p class="grp-d">Проверьте условия перед отправкой.</p>
+        <h2 class="grp-h" id="st-review">Всё готово?</h2>
+        <p class="grp-d">Проверьте задание перед отправкой.</p>
         <div class="review-card" data-review-summary></div>
-        <div class="review-note"><p>После отправки — обычная модерация.</p></div>
-        <button class="btn pill-emerald tw-submit" type="button" data-submit>Отправить на проверку<Icon name="arrow-right" size={18} /></button>
+        <div class="review-note"><p>После отправки задание пройдёт модерацию.</p></div>
       </section>
 
       <div class="wz-nav">
         <button class="btn pill-ghost" type="button" data-prev hidden><Icon name="arrow-left" size={18} />Назад</button>
-        <button class="btn pill-text wz-save" type="button" data-save>Сохранить черновик</button>
+        <button class="btn pill-text wz-save" type="button" data-save>Сохранить</button>
         <button class="btn pill-emerald" type="button" data-next><span data-next-t>Далее</span><Icon name="arrow-right" size={18} /></button>
+        <button class="btn pill-emerald tw-submit" type="button" data-submit>Отправить на модерацию<Icon name="arrow-right" size={18} /></button>
       </div>
       <div class="sec ed-danger" hidden={!t || t.status === 'published'} data-delete-wrap><button class="btn pill-text" type="button" data-delete><Icon name="trash-2" size={18} />Удалить черновик</button></div>
     </div>

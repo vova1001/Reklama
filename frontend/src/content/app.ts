@@ -70,35 +70,35 @@ export const CITIES = [
 
 /** Тип бизнеса — первый шаг мастера задания; ведёт выбор цели. */
 export const BIZ_TYPES: { id: string; title: string; tip: string; icon: string }[] = [
-  { id: 'offline', title: 'Офлайн-бизнес', tip: 'Кафе, магазин, салон — есть точка, куда приходят люди', icon: 'store' },
-  { id: 'online', title: 'Онлайн-бизнес', tip: 'Магазин или сервис в интернете — заказ без визита', icon: 'globe' },
-  { id: 'services', title: 'Услуги в интернете', tip: 'Вы продаёте свои услуги и ищете клиентов онлайн', icon: 'monitor-smartphone' },
+  { id: 'offline', title: 'Офлайн-точка', tip: 'Кафе, магазин или салон', icon: 'store' },
+  { id: 'online', title: 'Онлайн-продажи', tip: 'Товары и заказы в интернете', icon: 'globe' },
+  { id: 'services', title: 'Услуги', tip: 'Консультации и работа с клиентами', icon: 'monitor-smartphone' },
 ];
 
 /** Цели можно сочетать. kinds — типы бизнеса; link — ссылка/промокод; nums — отдельные число и оплата. */
 export const GOALS: { id: string; title: string; tip: string; label: string; short: string; kinds: string[]; icon: string; about: string; link?: boolean; nums?: boolean }[] = [
   {
-    id: 'views', title: 'Просмотры', tip: 'Целевой охват опубликованного материала', label: 'Просмотров от', short: 'просмотры',
+    id: 'views', title: 'Просмотры', tip: 'Охват публикации', label: 'Цель, просмотров', short: 'просмотры',
     kinds: ['offline', 'online', 'services'], icon: 'eye', nums: true,
     about: 'Укажите желаемое число просмотров. Результат подтверждается материалами автора.',
   },
   {
-    id: 'subscribers', title: 'Подписчики', tip: 'Новая аудитория вашего аккаунта', label: 'Подписчиков от', short: 'подписчики',
+    id: 'subscribers', title: 'Подписчики', tip: 'Рост аудитории аккаунта', label: 'Цель, подписчиков', short: 'подписчики',
     kinds: ['offline', 'online', 'services'], icon: 'users', nums: true, link: true,
     about: 'Добавьте ссылку на аккаунт и целевой прирост. Способ подтверждения согласуйте с автором.',
   },
   {
-    id: 'clicks', title: 'Переходы', tip: 'Переходы по ссылке или использование промокода', label: 'Переходов от', short: 'переходы',
+    id: 'clicks', title: 'Переходы', tip: 'По ссылке или промокоду', label: 'Цель, переходов', short: 'переходы',
     kinds: ['offline', 'online', 'services'], icon: 'link', nums: true, link: true,
     about: 'Дайте ссылку или промокод. Статистику переходов предоставляет ваша система аналитики.',
   },
   {
-    id: 'guests', title: 'Гости', tip: 'Посетители офлайн-точки по промокоду', label: 'Гостей от', short: 'гости',
+    id: 'guests', title: 'Гости', tip: 'Визиты по промокоду', label: 'Цель, гостей', short: 'гости',
     kinds: ['offline'], icon: 'map-pin', nums: true, link: true,
     about: 'Укажите промокод и фиксируйте посещения у себя. Платформа не считает гостей автоматически.',
   },
   {
-    id: 'barter', title: 'Бартер', tip: 'Товар или услуга как часть вознаграждения', label: '', short: 'бартер',
+    id: 'barter', title: 'Бартер', tip: 'Товар или услуга в обмен на публикацию', label: '', short: 'бартер',
     kinds: ['offline', 'online', 'services'], icon: 'gift',
     about: 'Опишите товар или услугу. Бартер может быть единственным вознаграждением или дополнением к оплате.',
   },
