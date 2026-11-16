@@ -22,7 +22,6 @@ const sections = [
 <App title="Мои задания" page="my" only="business">
   <div class="head">
     <h1>Мои задания</h1>
-    <a class="btn pill-emerald" href="/app/tasks/new"><Icon name="plus" size={20} />Создать</a>
   </div>
   {!tasks ? (
     <div class="empty"><Icon name="circle-alert" size={32} /><h2>Не загрузилось</h2><p>Обновите страницу через минуту.</p></div>
@@ -34,7 +33,8 @@ const sections = [
       <a class="btn pill-emerald" href="/app/tasks/new"><Icon name="plus" size={20} />Создать задание</a>
     </div>
   ) : (
-    <div data-my>
+    <div data-my class="tasks-board">
+      <div class="tasks-board-head"><h2>Статусы</h2><a class="btn pill-emerald" href="/app/tasks/new"><Icon name="plus" size={18} />Создать задание</a></div>
       <div class="filt my-filt" role="group" aria-label="Статус заданий" data-filter>
         <button type="button" aria-pressed="true" data-f="">Все</button>
         {sections.map((s) => (

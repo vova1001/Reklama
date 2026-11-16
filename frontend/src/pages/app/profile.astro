@@ -1,32 +1,17 @@
 ---
-// Профиль: общие данные (как называть, город) и вкладки «Бизнес» и «Автор» — профили режимов. Профиль режима
-// не обязателен: заполняется, когда понадобится. Вкладка по умолчанию — включённый режим (или ?tab=).
+// Профиль: общие данные и публичные страницы. Режим переключается только в основной навигации.
 import App from '../../layouts/App.astro';
 import Icon from '../../components/Icon.astro';
 import Avatar from '../../components/Avatar.astro';
-import { FORM_GROUPS, MODES } from '../../content/app';
-import { fetchMyPage, fetchProfiles, type Mode } from '../../lib/auth';
+import { FORM_GROUPS } from '../../content/app';
+import { fetchMyPage } from '../../lib/auth';
 import { PAGE_PATH, PAGE_TITLE, STATUS } from '../../content/app';
-import { getHome, type Category } from '../../lib/api';
 
 const me = Astro.locals.me;
 if (!me) return Astro.redirect('/login', 303);
 const u = me.user;
-const q = Astro.url.searchParams.get('tab');
-const tab: Mode = q === 'business' || q === 'creator' ? q : u.mode;
-const [{ business, creator }, categories] = await Promise.all([
-  fetchProfiles(Astro.request),
-  getHome().then((h) => h.categories).catch((err): Category[] => {
-    console.error('профиль: темы недоступны', err);
-    return [];
-  }),
-]);
 const [bizPage, crePage] = await Promise.all([fetchMyPage(Astro.request, 'business'), fetchMyPage(Astro.request, 'creator')]);
 const pages = ([['business', bizPage?.page ?? null], ['creator', crePage?.page ?? null]] as const);
-const bizSpheres = new Set(business?.spheres ?? []);
-const creSpheres = new Set(creator?.spheres ?? []);
-const channels = creator?.channels.length ? creator.channels : [''];
-const filled: Record<Mode, boolean> = { business: !!business, creator: !!creator };
 const G = FORM_GROUPS.profile;
 ---
 <App title="Профиль" page="profile">
@@ -35,7 +20,6 @@ const G = FORM_GROUPS.profile;
     <button class="btn pill-ghost" type="button" data-logout><Icon name="log-out" size={20} />Выйти</button>
   </div>
 
-  <!-- общие данные -->
   <section class="sec" aria-labelledby="basics-t">
     <div class="who">
       <div class="ava-up" data-avatar data-photo={u.avatarUrl.startsWith('/media/') ? u.avatarUrl : ''}><Avatar user={u} size={64} /></div>
@@ -54,7 +38,10 @@ const G = FORM_GROUPS.profile;
         </div>
         <div class="field">
           <label class="lbl" for="b-city">Город</label>
-          <input class="inp" id="b-city" name="city" autocomplete="address-level2" maxlength="80" value={u.city} placeholder="Например, Казань" aria-describedby="b-city-err" data-input="city" />
+          <div class="city-box">
+            <input class="inp" id="b-city" name="city" autocomplete="address-level2" maxlength="80" value={u.city} placeholder="Например, Казань" aria-describedby="b-city-err" role="combobox" aria-expanded="false" aria-controls="b-cities" data-input="city" />
+            <ul class="cb-list city-list" id="b-cities" role="listbox" hidden data-city-list></ul>
+          </div>
           <p class="ferr" id="b-city-err" data-err="city" aria-live="polite"></p>
         </div>
       </div>
@@ -63,8 +50,6 @@ const G = FORM_GROUPS.profile;
     </form>
   </section>
 
-  <!-- профили режимов -->
-  <!-- страницы: витрина бизнеса и профиль автора -->
   <section class="sec" aria-labelledby="pages-t">
     <h2 id="pages-t" class="grp-h">Страницы</h2>
     <p class="grp-d">Витрина бизнеса и профиль автора — по ссылке для всех</p>
@@ -81,94 +66,5 @@ const G = FORM_GROUPS.profile;
       ))}
     </ul>
   </section>
-
-  <section class="sec" aria-labelledby="modes-t">
-    <h2 id="modes-t" class="grp-h">{G.modes.title}</h2>
-    <p class="grp-d">{G.modes.hint}</p>
-    <div class="tabs" role="tablist" aria-label="Профили режимов" data-tabs>
-      {MODES.map((m) => (
-        <button type="button" role="tab" id={`tab-${m.id}`} aria-controls={`panel-${m.id}`} aria-selected={tab === m.id ? 'true' : 'false'} tabindex={tab === m.id ? 0 : -1} data-tab={m.id}>
-          <Icon name={m.icon} size={18} />{m.title}
-          <span class={`tab-dot ${filled[m.id] ? 'is-on' : ''}`} data-filled={m.id}><span class="sr-only">{filled[m.id] ? 'заполнен' : 'не заполнен'}</span></span>
-        </button>
-      ))}
-    </div>
-
-    <!-- бизнес -->
-    <div class="tabp" role="tabpanel" id="panel-business" aria-labelledby="tab-business" hidden={tab !== 'business'} tabindex="0">
-      <form class="form" novalidate data-form="business">
-        <div class="row2">
-          <div class="field">
-            <label class="lbl" for="bz-name">Название</label>
-            <input class="inp" id="bz-name" name="name" autocomplete="organization" maxlength="80" value={business?.name ?? ''} placeholder="Кофейня «Зерно»" aria-describedby="bz-name-err" data-input="name" />
-            <p class="ferr" id="bz-name-err" data-err="name" aria-live="polite"></p>
-          </div>
-          <div class="field">
-            <label class="lbl" for="bz-city">Город</label>
-            <div class="city-box">
-              <input class="inp" id="bz-city" name="city" autocomplete="address-level2" maxlength="80" value={business?.city ?? u.city} placeholder="Например, Казань" aria-describedby="bz-city-err" role="combobox" aria-expanded="false" aria-controls="bz-cities" data-input="city" />
-              <ul class="cb-list city-list" id="bz-cities" role="listbox" hidden data-city-list></ul>
-            </div>
-            <p class="ferr" id="bz-city-err" data-err="city" aria-live="polite"></p>
-          </div>
-        </div>
-        <div class="field">
-          <span class="lbl" id="bz-sph-l">Сферы <span class="hint">· можно несколько, до 5</span></span>
-          <div class="chips" role="group" aria-labelledby="bz-sph-l" aria-describedby="bz-sph-err" data-spheres>
-            {categories.map((c) => (
-              <button type="button" class="chip" aria-pressed={bizSpheres.has(c.slug) ? 'true' : 'false'} data-slug={c.slug}><Icon name={c.icon} size={18} />{c.title}</button>
-            ))}
-          </div>
-          <p class="ferr" id="bz-sph-err" data-err="spheres" aria-live="polite"></p>
-        </div>
-        <p class="ferr" data-err="form" role="alert"></p>
-        <div class="form-act"><button class="btn pill-dark" type="submit" data-submit><span>Сохранить</span></button><p class="saved" role="status" data-saved></p></div>
-      </form>
-    </div>
-
-    <!-- автор -->
-    <div class="tabp" role="tabpanel" id="panel-creator" aria-labelledby="tab-creator" hidden={tab !== 'creator'} tabindex="0">
-      <form class="form" novalidate data-form="creator">
-        <div class="row2">
-          <div class="field">
-            <label class="lbl" for="cr-name">Имя</label>
-            <input class="inp" id="cr-name" name="name" autocomplete="nickname" maxlength="80" value={creator?.name ?? u.name} aria-describedby="cr-name-err" data-input="name" />
-            <p class="ferr" id="cr-name-err" data-err="name" aria-live="polite"></p>
-          </div>
-          <div class="field">
-            <label class="lbl" for="cr-city">Город</label>
-            <input class="inp" id="cr-city" name="city" autocomplete="address-level2" maxlength="80" value={creator?.city ?? u.city} placeholder="Например, Казань" aria-describedby="cr-city-err" data-input="city" />
-            <p class="ferr" id="cr-city-err" data-err="city" aria-live="polite"></p>
-          </div>
-        </div>
-        <div class="field">
-          <span class="lbl" id="cr-sph-l">Темы <span class="hint">· можно несколько, до 5</span></span>
-          <div class="chips" role="group" aria-labelledby="cr-sph-l" aria-describedby="cr-sph-err" data-spheres>
-            {categories.map((c) => (
-              <button type="button" class="chip" aria-pressed={creSpheres.has(c.slug) ? 'true' : 'false'} data-slug={c.slug}><Icon name={c.icon} size={18} />{c.title}</button>
-            ))}
-          </div>
-          <p class="ferr" id="cr-sph-err" data-err="spheres" aria-live="polite"></p>
-        </div>
-        <div class="field">
-          <span class="lbl" id="cr-ch-l">Каналы <span class="hint">· до 5</span></span>
-          <div class="chans" role="group" aria-labelledby="cr-ch-l" aria-describedby="cr-ch-err" data-channels>
-            {channels.map((c, i) => (
-              <div class="chan">
-                <Icon name="link" size={20} />
-                <input class="inp" type="text" inputmode="url" maxlength="200" placeholder="youtube.com/@канал" aria-label={`Канал ${i + 1}`} value={c} data-input="channels" />
-                {i > 0 && <button type="button" class="rm" aria-label="Убрать канал" data-rm><Icon name="x" size={18} /></button>}
-              </div>
-            ))}
-          </div>
-          <button class="lnk-btn" type="button" data-add-channel hidden={channels.length >= 5}><Icon name="plus" size={18} />Добавить ещё</button>
-          <p class="ferr" id="cr-ch-err" data-err="channels" aria-live="polite"></p>
-        </div>
-        <p class="ferr" data-err="form" role="alert"></p>
-        <div class="form-act"><button class="btn pill-dark" type="submit" data-submit><span>Сохранить</span></button><p class="saved" role="status" data-saved></p></div>
-      </form>
-    </div>
-  </section>
-
 </App>
 <script src="../../scripts/avatar.ts"></script>

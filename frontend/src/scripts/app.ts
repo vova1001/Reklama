@@ -250,7 +250,7 @@ function initForms() {
   $$<HTMLFormElement>('[data-form]').forEach((form) => {
     const kind = form.dataset.form as FormKind;
     const cityList = $('[data-city-list]', form);
-    if (kind === 'business' && cityList) new CityCombobox($<HTMLInputElement>('[name="city"]', form)!, cityList, () => { if (saved) saved.textContent = ''; });
+    if ((kind === 'business' || kind === 'basics') && cityList) new CityCombobox($<HTMLInputElement>('[name="city"]', form)!, cityList, () => { if (saved) saved.textContent = ''; });
     const spheres = kind === 'basics' ? () => [] : initChips(form);
     const channels = kind === 'creator' ? initChannels(form) : () => [];
     const btn = $<HTMLButtonElement>('[data-submit]', form);

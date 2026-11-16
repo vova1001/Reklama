@@ -12,7 +12,6 @@ export type Page = 'feed' | 'create' | 'my' | 'profile' | 'settings' | 'notifica
 export const NAV: { id: Page; title: string; businessTitle?: string; icon: string; href: string; mode?: Mode; rail?: boolean }[] = [
   { id: 'feed', title: 'Лента', businessTitle: 'Обзор', icon: 'house', href: '/app' },
   { id: 'my', title: 'Мои задания', businessTitle: 'Задания', icon: 'list', href: '/app/tasks', mode: 'business' },
-  { id: 'create', title: 'Создать задание', icon: 'plus', href: '/app/tasks/new', mode: 'business' },
   { id: 'create', title: 'Анкета', icon: 'id-card', href: '/app/card', mode: 'creator' },
   { id: 'notifications', title: 'Уведомления', icon: 'bell-ring', href: '/app/notifications', rail: true },
   { id: 'profile', title: 'Профиль', businessTitle: 'Профиль компании', icon: 'user-round', href: '/app/profile' },
