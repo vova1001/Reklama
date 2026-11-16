@@ -407,6 +407,7 @@ type Task struct {
 	RevisionSubmittedAt pgtype.Timestamptz
 	Goal                string
 	Videos              []string
+	Link                string
 }
 
 type TelegramChannel struct {

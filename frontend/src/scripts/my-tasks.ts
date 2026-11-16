@@ -1,9 +1,21 @@
-// Мои задания: действия без перезагрузки, где можно — удалить черновик/архивное (спрашиваем), вернуть с проверки,
-// убрать в архив и вернуть из него, опубликовать просроченное снова (в черновик и сразу на проверку).
-import { $, api, busy } from '../lib/client';
+// Мои задания: цветные переключатели статусов (своя секция на весь экран, «Все» — все), действия — удалить
+// черновик/архивное (спрашиваем), вернуть с проверки, убрать в архив и вернуть, опубликовать просроченное снова
+// (в черновик и сразу на проверку).
+import { $, $$, api, busy } from '../lib/client';
 import { confirmDialog, guard, toast } from '../lib/ui';
 
 const root = $('[data-my]');
+const filt = $('[data-filter]');
+
+if (filt && root) {
+  filt.addEventListener('click', (e) => {
+    const b = (e.target as HTMLElement).closest<HTMLButtonElement>('button[data-f]');
+    if (!b) return;
+    const f = b.dataset.f!;
+    $$<HTMLButtonElement>('button', filt).forEach((x) => x.setAttribute('aria-pressed', String(x === b)));
+    $$<HTMLElement>('[data-sec-list]', root).forEach((s) => (s.hidden = !!f && s.dataset.secList !== f));
+  });
+}
 
 if (root) {
   root.addEventListener('click', async (e) => {
@@ -24,9 +36,20 @@ if (root) {
       const sec = b.closest<HTMLElement>('.mysec');
       b.closest('.it')?.remove();
       const left = sec?.querySelectorAll('.it').length ?? 0;
-      const sup = sec?.querySelector('sup');
-      if (sup) sup.textContent = String(left);
-      if (sec && !left) sec.hidden = true;
+      sec?.querySelectorAll('sup').forEach((sup) => (sup.textContent = String(left)));
+      if (filt) {
+        const chip = $<HTMLButtonElement>(`[data-f="${sec?.dataset.secList}"]`, filt)?.querySelector('sup');
+        if (chip) chip.textContent = String(left);
+        const all = filt.querySelector('[data-f=""] sup');
+        if (all) all.textContent = String(Number(all.textContent) - 1);
+      }
+      if (sec && !left) {
+        sec.querySelector('.list')?.remove();
+        const none = document.createElement('p');
+        none.className = 'mysec-none';
+        none.textContent = 'Пока пусто';
+        sec.append(none);
+      }
       toast('Удалено');
       return;
     }

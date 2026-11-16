@@ -319,7 +319,7 @@ func (q *Queries) GetPublishedPageBySlug(ctx context.Context, arg GetPublishedPa
 }
 
 const listOwnerOpenTasks = `-- name: ListOwnerOpenTasks :many
-SELECT t.id, t.owner_id, t.status, t.reject_reason, t.title, t.city, t.nationwide, t.formats, t.access, t.min_views, t.reward_kopecks, t.publish_by, t.blocks, t.cover, t.photos, t.created_at, t.updated_at, t.submitted_at, t.published_at, t.publish_time, t.deadline_at, t.categories, t.review_notes, t.revision, t.revision_status, t.revision_reason, t.revision_submitted_at, t.goal, t.videos, ARRAY(SELECT c.title FROM unnest(t.categories) WITH ORDINALITY AS x(slug, n)
+SELECT t.id, t.owner_id, t.status, t.reject_reason, t.title, t.city, t.nationwide, t.formats, t.access, t.min_views, t.reward_kopecks, t.publish_by, t.blocks, t.cover, t.photos, t.created_at, t.updated_at, t.submitted_at, t.published_at, t.publish_time, t.deadline_at, t.categories, t.review_notes, t.revision, t.revision_status, t.revision_reason, t.revision_submitted_at, t.goal, t.videos, t.link, ARRAY(SELECT c.title FROM unnest(t.categories) WITH ORDINALITY AS x(slug, n)
                   JOIN categories c ON c.slug = x.slug ORDER BY x.n)::text[] AS category_titles
 FROM tasks t
 WHERE t.owner_id = $1 AND t.status = 'published' AND (t.deadline_at IS NULL OR t.deadline_at > now())
@@ -362,6 +362,7 @@ type ListOwnerOpenTasksRow struct {
 	RevisionSubmittedAt pgtype.Timestamptz
 	Goal                string
 	Videos              []string
+	Link                string
 	CategoryTitles      []string
 }
 
@@ -405,6 +406,7 @@ func (q *Queries) ListOwnerOpenTasks(ctx context.Context, arg ListOwnerOpenTasks
 			&i.RevisionSubmittedAt,
 			&i.Goal,
 			&i.Videos,
+			&i.Link,
 			&i.CategoryTitles,
 		); err != nil {
 			return nil, err

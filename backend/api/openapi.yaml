@@ -2054,7 +2054,7 @@ components:
         own: { type: boolean, description: Уже использован бизнесом }
     TaskInput:
       type: object
-      required: [title, city, nationwide, categories, formats, access, minViews, rewardKopecks, publishBy, publishTime, blocks, cover, photos, videos]
+      required: [title, city, nationwide, categories, formats, access, link, minViews, rewardKopecks, publishBy, publishTime, blocks, cover, photos, videos]
       additionalProperties: false
       description: Черновик может быть неполным; ограничения формы проверяются всегда, обязательность — при отправке.
       properties:
@@ -2073,8 +2073,9 @@ components:
         access: { type: string, enum: [open, approval, ""] }
         goal:
           type: string
-          enum: [views, subscribers, clicks, guests, ""]
-          description: "Цель задания: просмотры (по умолчанию) | подписчики | переходы по ссылке | гости (офлайн-точка)"
+          enum: [views, subscribers, clicks, guests, barter, ""]
+          description: "Цель задания: просмотры (по умолчанию) | подписчики | переходы по ссылке или промокоду | гости (офлайн-точка) | бартер (товар/услуга вместо денег — оплата и число не нужны)"
+        link: { type: string, maxLength: 200, description: "Реферальная ссылка или промокод; видна авторам; обязательна для goal=clicks" }
         minViews: { type: integer, format: int64, minimum: 0, maximum: 1000000000, description: "Условие выполнения — число по цели (goal): просмотры, подписчики, переходы или гости" }
         rewardKopecks: { type: integer, format: int64, minimum: 0, maximum: 100000000 }
         publishBy: { type: string, description: "ГГГГ-ММ-ДД или \"\"; к отправке — от завтра до 90 дней (по Москве)" }
@@ -2085,7 +2086,7 @@ components:
         videos: { type: array, maxItems: 2, items: { type: string }, description: id видео task_video по порядку }
     Task:
       type: object
-      required: [id, status, rejectReason, title, city, nationwide, categories, formats, access, goal, minViews, rewardKopecks, publishBy, publishTime, deadlineAt, blocks, cover, photos, videos, createdAt, updatedAt, submittedAt, publishedAt]
+      required: [id, status, rejectReason, title, city, nationwide, categories, formats, access, goal, link, minViews, rewardKopecks, publishBy, publishTime, deadlineAt, blocks, cover, photos, videos, createdAt, updatedAt, submittedAt, publishedAt]
       properties:
         id: { type: integer, format: int64 }
         status: { $ref: "#/components/schemas/Status" }
@@ -2097,7 +2098,8 @@ components:
         categoryTitles: { type: array, items: { type: string }, description: Названия сфер по порядку (только в ленте и на странице задания) }
         formats: { type: array, items: { type: string }, description: Slug формата списка или своё название }
         access: { type: string, enum: [open, approval] }
-        goal: { type: string, enum: [views, subscribers, clicks, guests], description: Цель задания }
+        goal: { type: string, enum: [views, subscribers, clicks, guests, barter], description: Цель задания }
+        link: { type: string, description: "Реферальная ссылка или промокод (\"\" — нет)" }
         minViews: { type: integer, format: int64, description: "Число по цели (goal)" }
         rewardKopecks: { type: integer, format: int64 }
         publishBy: { type: string, format: date, nullable: true }

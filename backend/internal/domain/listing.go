@@ -121,12 +121,13 @@ const (
 	GoalSubscribers = "subscribers" // новые подписчики
 	GoalClicks      = "clicks"      // переходы по ссылке
 	GoalGuests      = "guests"      // пришедшие гости (по промокоду)
+	GoalBarter      = "barter"      // бартер: автор получает товар/услугу вместо денег
 )
 
 // ValidGoal — цель из списка.
 func ValidGoal(g string) bool {
 	switch g {
-	case GoalViews, GoalSubscribers, GoalClicks, GoalGuests:
+	case GoalViews, GoalSubscribers, GoalClicks, GoalGuests, GoalBarter:
 		return true
 	}
 	return false
@@ -145,6 +146,7 @@ type Task struct {
 	Formats        []string // форматы: slug из списка (FormatReels…) или своё название
 	Access         string
 	Goal           string     // цель: GoalViews… ("" в старых записях — GoalViews)
+	Link           string     // ссылка (реферальная) или промокод; обязательна для GoalClicks
 	MinViews       int64      // условие выполнения — целевое количество в единицах цели (Goal)
 	RewardKopecks  int64      // оплата за выполнение
 	PublishBy      *time.Time // срок публикации (дата, 00:00 UTC); nil — не задан

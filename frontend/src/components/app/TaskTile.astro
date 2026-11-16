@@ -18,8 +18,14 @@ const brief = [t.rewardKopecks ? rub(t.rewardKopecks) : '', g].filter(Boolean).j
         <img src={t.cover.thumb} srcset={`${t.cover.thumb} 320w, ${t.cover.src} 800w`} sizes="(min-width: 1200px) 320px, (min-width: 768px) 30vw, 50vw" alt="" loading="lazy" decoding="async" width="320" height="240" />
       ) : <span class="tile-none"><Icon name="video" size={28} /></span>}
       <ul class="tile-sheet" data-sheet>
-        {t.rewardKopecks > 0 && <li><Icon name="wallet" size={16} /><b>{rub(t.rewardKopecks)}</b></li>}
-        {g && <li><Icon name="eye" size={16} />{g}</li>}
+        {t.goal === 'barter' ? (
+          <li><Icon name="gift" size={16} /><b>Бартер</b></li>
+        ) : (
+          <>
+            {t.rewardKopecks > 0 && <li><Icon name="wallet" size={16} /><b>{rub(t.rewardKopecks)}</b></li>}
+            {g && <li><Icon name="eye" size={16} />{g}</li>}
+          </>
+        )}
         {t.formats.length > 0 && <li><Icon name="video" size={16} />{formatsTitle(t.formats)}</li>}
         {t.publishBy && <li><Icon name="calendar" size={16} />{until(t.publishBy, t.publishTime)}</li>}
       </ul>

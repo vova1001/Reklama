@@ -1,6 +1,7 @@
 ---
-// Мои задания (бизнес): секции по статусам — активные (зелёный), просроченные (жёлтый, можно опубликовать снова),
-// заблокированные (красный — отклонил модератор), архивные (серый — убирает только владелец); ниже — черновики.
+// Мои задания (бизнес): цветные переключатели сверху — активные (зелёный), просроченные (жёлтый, можно опубликовать
+// снова), заблокированные (красный — отклонил модератор), архивные (серый — убирает только владелец), черновики.
+// Переключатель оставляет свою секцию, «Все» — все; пустая секция видна с пометкой.
 import App from '../../../layouts/App.astro';
 import Icon from '../../../components/Icon.astro';
 import TaskItem from '../../../components/app/TaskItem.astro';
@@ -34,51 +35,61 @@ const sections = [
     </div>
   ) : (
     <div data-my>
+      <div class="filt my-filt" role="group" aria-label="Статус заданий" data-filter>
+        <button type="button" aria-pressed="true" data-f="">Все<sup>{tasks.length}</sup></button>
+        {sections.map((s) => (
+          <button type="button" class={`is-${s.id}`} aria-pressed="false" data-f={s.id}>{s.title}<sup>{s.items.length}</sup></button>
+        ))}
+      </div>
       {sections.map((s) => (
-        <section class={`mysec is-${s.id}`} hidden={!s.items.length} data-sec-list={s.id}>
+        <section class={`mysec is-${s.id}`} data-sec-list={s.id}>
           <h2 class="mysec-h">{s.title}<sup>{s.items.length}</sup></h2>
-          <div class="list">
-            {s.items.map((t) => (
-              <TaskItem task={t} own>
-                <div class="it-act">
-                  {t.status === 'published' && (
-                    <>
-                      <a class="btn pill-text" href={`/app/task/${t.id}`}><Icon name="eye" size={18} />В ленте</a>
-                      <button class="btn pill-text" type="button" data-archive={t.id}><Icon name="archive" size={18} />В архив</button>
-                    </>
-                  )}
-                  {t.status === 'pending_review' && (
-                    <button class="btn pill-text" type="button" data-withdraw={t.id}><Icon name="undo-2" size={18} />В черновик</button>
-                  )}
-                  {t.status === 'expired' && (
-                    <>
-                      <button class="btn pill-text" type="button" data-republish={t.id}><Icon name="refresh-cw" size={18} />Опубликовать снова</button>
-                      <button class="btn pill-text" type="button" data-archive={t.id}><Icon name="archive" size={18} />В архив</button>
-                    </>
-                  )}
-                  {t.status === 'rejected' && (
-                    <>
-                      <a class="btn pill-text" href={`/app/tasks/${t.id}`}><Icon name="pencil" size={18} />Изменить</a>
-                      <button class="btn pill-text" type="button" data-archive={t.id}><Icon name="archive" size={18} />В архив</button>
-                      <button class="btn pill-text" type="button" data-delete={t.id}><Icon name="trash-2" size={18} />Удалить</button>
-                    </>
-                  )}
-                  {t.status === 'archived' && (
-                    <>
-                      <button class="btn pill-text" type="button" data-unarchive={t.id}><Icon name="archive-restore" size={18} />Вернуть из архива</button>
-                      <button class="btn pill-text" type="button" data-delete={t.id}><Icon name="trash-2" size={18} />Удалить</button>
-                    </>
-                  )}
-                  {(t.status === 'draft' || t.status === 'changes_requested') && (
-                    <>
-                      <a class="btn pill-text" href={`/app/tasks/${t.id}`}><Icon name="pencil" size={18} />Изменить</a>
-                      <button class="btn pill-text" type="button" data-delete={t.id}><Icon name="trash-2" size={18} />Удалить</button>
-                    </>
-                  )}
-                </div>
-              </TaskItem>
-            ))}
-          </div>
+          {s.items.length === 0 ? (
+            <p class="mysec-none">Пока пусто</p>
+          ) : (
+            <div class="list">
+              {s.items.map((t) => (
+                <TaskItem task={t} own>
+                  <div class="it-act">
+                    {t.status === 'published' && (
+                      <>
+                        <a class="btn pill-text" href={`/app/task/${t.id}`}><Icon name="eye" size={18} />В ленте</a>
+                        <button class="btn pill-text" type="button" data-archive={t.id}><Icon name="archive" size={18} />В архив</button>
+                      </>
+                    )}
+                    {t.status === 'pending_review' && (
+                      <button class="btn pill-text" type="button" data-withdraw={t.id}><Icon name="undo-2" size={18} />В черновик</button>
+                    )}
+                    {t.status === 'expired' && (
+                      <>
+                        <button class="btn pill-text" type="button" data-republish={t.id}><Icon name="refresh-cw" size={18} />Опубликовать снова</button>
+                        <button class="btn pill-text" type="button" data-archive={t.id}><Icon name="archive" size={18} />В архив</button>
+                      </>
+                    )}
+                    {t.status === 'rejected' && (
+                      <>
+                        <a class="btn pill-text" href={`/app/tasks/${t.id}`}><Icon name="pencil" size={18} />Изменить</a>
+                        <button class="btn pill-text" type="button" data-archive={t.id}><Icon name="archive" size={18} />В архив</button>
+                        <button class="btn pill-text" type="button" data-delete={t.id}><Icon name="trash-2" size={18} />Удалить</button>
+                      </>
+                    )}
+                    {t.status === 'archived' && (
+                      <>
+                        <button class="btn pill-text" type="button" data-unarchive={t.id}><Icon name="archive-restore" size={18} />Вернуть из архива</button>
+                        <button class="btn pill-text" type="button" data-delete={t.id}><Icon name="trash-2" size={18} />Удалить</button>
+                      </>
+                    )}
+                    {(t.status === 'draft' || t.status === 'changes_requested') && (
+                      <>
+                        <a class="btn pill-text" href={`/app/tasks/${t.id}`}><Icon name="pencil" size={18} />Изменить</a>
+                        <button class="btn pill-text" type="button" data-delete={t.id}><Icon name="trash-2" size={18} />Удалить</button>
+                      </>
+                    )}
+                  </div>
+                </TaskItem>
+              ))}
+            </div>
+          )}
         </section>
       ))}
     </div>

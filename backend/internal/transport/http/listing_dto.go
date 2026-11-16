@@ -27,6 +27,7 @@ type taskIn struct {
 	Formats       []string   `json:"formats"`
 	Access        string     `json:"access"`
 	Goal          string     `json:"goal"`
+	Link          string     `json:"link"`
 	MinViews      int64      `json:"minViews"`
 	RewardKopecks int64      `json:"rewardKopecks"`
 	PublishBy     string     `json:"publishBy"`
@@ -66,6 +67,7 @@ type taskDTO struct {
 	Formats        []string   `json:"formats"`
 	Access         string     `json:"access"`
 	Goal           string     `json:"goal"`
+	Link           string     `json:"link"`
 	MinViews       int64      `json:"minViews"`
 	RewardKopecks  int64      `json:"rewardKopecks"`
 	PublishBy      *string    `json:"publishBy"`
@@ -223,7 +225,7 @@ func toBlocksDTO(bs []domain.Block) []blockDTO {
 func (in taskIn) toService() service.TaskInput {
 	return service.TaskInput{
 		Title: in.Title, City: in.City, Nationwide: in.Nationwide, Categories: in.Categories, Formats: in.Formats,
-		Access: in.Access, Goal: in.Goal, MinViews: in.MinViews, RewardKopecks: in.RewardKopecks,
+		Access: in.Access, Goal: in.Goal, Link: in.Link, MinViews: in.MinViews, RewardKopecks: in.RewardKopecks,
 		PublishBy: in.PublishBy, PublishTime: in.PublishTime, Blocks: blocksIn(in.Blocks), Cover: in.Cover, Photos: in.Photos, Videos: in.Videos,
 	}
 }
@@ -265,7 +267,7 @@ func toTaskDTO(t domain.Task) taskDTO {
 	out := taskDTO{
 		ID: t.ID, Status: string(t.Status), RejectReason: t.RejectReason, Title: t.Title, City: t.City, Nationwide: t.Nationwide,
 		Categories: nonNilStr(t.Categories), CategoryTitles: t.CategoryTitles, Formats: nonNilStr(t.Formats), Access: t.Access,
-		Goal: t.Goal, MinViews: t.MinViews, RewardKopecks: t.RewardKopecks, PublishBy: by, PublishTime: t.PublishTime, DeadlineAt: utcPtr(t.DeadlineAt), Blocks: toBlocksDTO(t.Blocks),
+		Goal: t.Goal, Link: t.Link, MinViews: t.MinViews, RewardKopecks: t.RewardKopecks, PublishBy: by, PublishTime: t.PublishTime, DeadlineAt: utcPtr(t.DeadlineAt), Blocks: toBlocksDTO(t.Blocks),
 		Cover: photo(t.Cover), Photos: photos(t.Photos), Videos: videosOf(t.Videos), Brand: t.Brand, BrandSlug: t.BrandSlug,
 		CreatedAt: t.CreatedAt.UTC(), UpdatedAt: t.UpdatedAt.UTC(), SubmittedAt: utcPtr(t.SubmittedAt), PublishedAt: utcPtr(t.PublishedAt),
 	}

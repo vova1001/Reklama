@@ -1970,10 +1970,12 @@ export interface components {
             /** @enum {string} */
             access: "open" | "approval" | "";
             /**
-             * @description Цель задания: просмотры (по умолчанию) | подписчики | переходы по ссылке | гости (офлайн-точка)
+             * @description Цель задания: просмотры (по умолчанию) | подписчики | переходы по ссылке или промокоду | гости (офлайн-точка) | бартер (товар/услуга вместо денег — оплата и число не нужны)
              * @enum {string}
              */
-            goal?: "views" | "subscribers" | "clicks" | "guests" | "";
+            goal?: "views" | "subscribers" | "clicks" | "guests" | "barter" | "";
+            /** @description Реферальная ссылка или промокод; видна авторам; обязательна для goal=clicks */
+            link: string;
             /**
              * Format: int64
              * @description Условие выполнения — число по цели (goal): просмотры, подписчики, переходы или гости
@@ -2012,7 +2014,9 @@ export interface components {
              * @description Цель задания
              * @enum {string}
              */
-            goal: "views" | "subscribers" | "clicks" | "guests";
+            goal: "views" | "subscribers" | "clicks" | "guests" | "barter";
+            /** @description Реферальная ссылка или промокод ("" — нет) */
+            link: string;
             /**
              * Format: int64
              * @description Число по цели (goal)

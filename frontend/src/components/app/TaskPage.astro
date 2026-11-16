@@ -25,8 +25,15 @@ const g = goal(t.minViews, t.goal);
   )}
   <h1 class="page-t">{t.title || 'Без названия'}</h1>
   <dl class="terms">
-    {t.rewardKopecks > 0 && <div><dt><Icon name="wallet" size={18} />Оплата</dt><dd><b>{rub(t.rewardKopecks)}</b> за выполнение</dd></div>}
-    {g && <div><dt><Icon name="eye" size={18} />Условия</dt><dd>{g}</dd></div>}
+    {t.goal === 'barter' ? (
+      <div><dt><Icon name="gift" size={18} />Бартер</dt><dd>Товар или услуга вместо денег — условия в описании</dd></div>
+    ) : (
+      <>
+        {t.rewardKopecks > 0 && <div><dt><Icon name="wallet" size={18} />Оплата</dt><dd><b>{rub(t.rewardKopecks)}</b> за выполнение</dd></div>}
+        {g && <div><dt><Icon name="eye" size={18} />Условия</dt><dd>{g}</dd></div>}
+      </>
+    )}
+    {t.link && <div><dt><Icon name="link" size={18} />{t.goal === 'clicks' ? 'Ссылка или промокод' : 'Ссылка'}</dt><dd>{t.link.startsWith('http') ? <a href={t.link} rel="nofollow noopener noreferrer ugc" target="_blank">{t.link.replace(/^https?:\/\//, '')}</a> : t.link}</dd></div>}
     {t.formats.length > 0 && <div><dt><Icon name="video" size={18} />Формат</dt><dd>{formatsTitle(t.formats)}</dd></div>}
     {t.publishBy && <div><dt><Icon name="calendar" size={18} />Срок</dt><dd>{until(t.publishBy, t.publishTime)}</dd></div>}
     <div><dt><Icon name={t.access === 'approval' ? 'user-round-check' : 'zap'} size={18} />Кто берёт</dt><dd>{t.access === 'approval' ? 'С одобрением бизнеса' : 'Любой автор'}</dd></div>

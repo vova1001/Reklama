@@ -266,6 +266,13 @@ html:has(body.app-body) { background: var(--color-card); scroll-padding: 72px 0 
 .mysec.is-expired .mysec-h::before { background: var(--color-amber); }
 .mysec.is-blocked .mysec-h { color: var(--color-error); }
 .mysec.is-blocked .mysec-h::before { background: var(--color-error); }
+.mysec-none { margin-top: 8px; font-size: 15px; color: var(--color-gray); }
+/* переключатели статусов — в цвет своей секции */
+.my-filt button.is-active[aria-pressed='true'] { background: var(--color-emerald); }
+.my-filt button.is-expired[aria-pressed='true'] { background: var(--color-amber); }
+.my-filt button.is-blocked[aria-pressed='true'] { background: var(--color-error); }
+.my-filt button.is-archived[aria-pressed='true'],
+.my-filt button.is-drafts[aria-pressed='true'] { background: var(--color-gray); }
 
 /* пусто: значок, заголовок, одна строка, кнопка */
 .empty { display: grid; justify-items: center; gap: 6px; padding: 56px 16px 40px; text-align: center; }
@@ -376,6 +383,30 @@ html:has(body.app-body) { background: var(--color-card); scroll-padding: 72px 0 
 /* город + «Вся Россия» (переключатель) */
 .city { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .city .inp { flex: 1 1 200px; }
+.city-box { position: relative; flex: 1 1 200px; }
+.city-box .inp { width: 100%; }
+
+/* ===== мастер задания: шаги сверху, большие варианты, навигация снизу ===== */
+.wz-steps { display: flex; gap: 4px; margin: 16px 0 4px; padding: 0; list-style: none; overflow-x: auto; scrollbar-width: none; }
+.wz-steps::-webkit-scrollbar { display: none; }
+.wz-steps li { display: flex; align-items: center; gap: 8px; flex: none; padding: 5px 12px 5px 5px; border-radius: 999px; font-size: 14px; font-weight: 500; color: var(--color-gray); background: var(--color-panel); }
+.wz-n { display: grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; background: var(--color-sunken); font-size: 12px; font-weight: 650; }
+.wz-steps li[aria-current='step'] { color: var(--color-ink); background: var(--color-emerald-soft); }
+.wz-steps li[aria-current='step'] .wz-n { background: var(--color-emerald); color: #fff; }
+.wz-steps li.is-done { color: var(--color-emerald-ink); }
+.wz-steps li.is-done .wz-n { background: var(--color-emerald-soft); color: var(--color-emerald-ink); }
+.wopts { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 8px; margin-top: 14px; }
+.wopt { display: grid; gap: 4px; justify-items: start; padding: 14px; border-radius: 16px; background: var(--color-panel); text-align: left; cursor: pointer; }
+.wopt .ic { color: var(--color-gray); }
+.wopt-t { font-size: 16px; font-weight: 620; }
+.wopt-d { font-size: 13.5px; line-height: 1.35; color: var(--color-gray); }
+.wopt[aria-checked='true'] { background: var(--color-emerald-soft); box-shadow: inset 0 0 0 1.5px var(--color-emerald); }
+.wopt[aria-checked='true'] .ic { color: var(--color-emerald); }
+.wopt[aria-checked='true'] .wopt-d { color: var(--color-emerald-ink); }
+@media (hover: hover) { .wopt:hover { box-shadow: inset 0 0 0 1px var(--color-line-strong); } }
+.wz-about { margin-top: 14px; }
+.wz-nav { display: flex; justify-content: space-between; gap: 8px; margin-top: 20px; padding-top: 14px; border-top: 1px solid var(--color-line); }
+.wz-nav [data-next] { margin-left: auto; }
 .city .inp:disabled { opacity: 1; background: var(--color-panel); color: var(--color-gray); }
 .sw { display: inline-flex; align-items: center; gap: 10px; min-height: 44px; padding: 0 6px; border-radius: 10px; font-size: 15px; font-weight: 500; color: var(--color-ink); cursor: pointer; white-space: nowrap; }
 .sw-k { position: relative; width: 36px; height: 22px; border-radius: 999px; background: var(--color-line-strong); transition: background-color 0.18s ease; }

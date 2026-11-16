@@ -69,18 +69,40 @@ export const CITIES = [
 ];
 
 /** Тип бизнеса — первый шаг мастера задания; ведёт выбор цели. */
-export const BIZ_TYPES: { id: string; title: string; tip: string }[] = [
-  { id: 'offline', title: 'Офлайн-бизнес', tip: 'Кафе, магазин, салон — есть точка, куда приходят люди' },
-  { id: 'online', title: 'Онлайн-бизнес', tip: 'Магазин или сервис в интернете — заказ без визита' },
-  { id: 'services', title: 'Услуги в интернете', tip: 'Вы продаёте свои услуги и ищете клиентов онлайн' },
+export const BIZ_TYPES: { id: string; title: string; tip: string; icon: string }[] = [
+  { id: 'offline', title: 'Офлайн-бизнес', tip: 'Кафе, магазин, салон — есть точка, куда приходят люди', icon: 'store' },
+  { id: 'online', title: 'Онлайн-бизнес', tip: 'Магазин или сервис в интернете — заказ без визита', icon: 'globe' },
+  { id: 'services', title: 'Услуги в интернете', tip: 'Вы продаёте свои услуги и ищете клиентов онлайн', icon: 'monitor-smartphone' },
 ];
 
-/** Цель задания: под неё считается условие выполнения. kinds — для каких типов бизнеса доступна. */
-export const GOALS: { id: string; title: string; tip: string; label: string; short: string; kinds: string[] }[] = [
-  { id: 'views', title: 'Просмотры', tip: 'Ролик набрал нужное число просмотров', label: 'Просмотров от', short: 'просмотры', kinds: ['offline', 'online', 'services'] },
-  { id: 'subscribers', title: 'Подписчики', tip: 'Пришли новые подписчики на ваш аккаунт', label: 'Подписчиков от', short: 'подписчики', kinds: ['offline', 'online', 'services'] },
-  { id: 'clicks', title: 'Переходы', tip: 'Люди перешли по вашей ссылке или промокоду', label: 'Переходов от', short: 'переходы', kinds: ['offline', 'online', 'services'] },
-  { id: 'guests', title: 'Гости', tip: 'Реальные люди пришли на вашу точку', label: 'Гостей от', short: 'гости', kinds: ['offline'] },
+/** Цель задания: под неё считается условие выполнения. kinds — для каких типов бизнеса доступна;
+ *  about — плашка-пояснение при выборе; link — просить реферальную ссылку или промокод; nums — поля «число + оплата». */
+export const GOALS: { id: string; title: string; tip: string; label: string; short: string; kinds: string[]; icon: string; about: string; link?: boolean; nums?: boolean }[] = [
+  {
+    id: 'views', title: 'Просмотры', tip: 'Ролик набрал нужное число просмотров', label: 'Просмотров от', short: 'просмотры',
+    kinds: ['offline', 'online', 'services'], icon: 'eye', nums: true,
+    about: 'Автор снимает ролик про вас. Как только он набрал нужное число просмотров — задание выполнено, оплата уходит автору. Число мы проверяем сами по площадке.',
+  },
+  {
+    id: 'subscribers', title: 'Подписчики', tip: 'Пришли новые подписчики на ваш аккаунт', label: 'Подписчиков от', short: 'подписчики',
+    kinds: ['offline', 'online', 'services'], icon: 'users', nums: true, link: true,
+    about: 'Автор зовёт подписаться на вас. Укажите ссылку на аккаунт — авторы поставят её в ролик, а мы сверим прирост подписчиков по площадке.',
+  },
+  {
+    id: 'clicks', title: 'Переходы', tip: 'Люди перешли по вашей ссылке или промокоду', label: 'Переходов от', short: 'переходы',
+    kinds: ['offline', 'online', 'services'], icon: 'link', nums: true, link: true,
+    about: 'Дайте реферальную ссылку или промокод — авторы разместят их у себя. Переходы и покупки по ним видны и вам, и нам: платите только за реальный результат.',
+  },
+  {
+    id: 'guests', title: 'Гости', tip: 'Реальные люди пришли на вашу точку', label: 'Гостей от', short: 'гости',
+    kinds: ['offline'], icon: 'map-pin', nums: true, link: true,
+    about: 'Люди приходят на вашу точку и называют промокод или показывают ролик. Вы отмечаете каждого — считаем вместе, без накруток.',
+  },
+  {
+    id: 'barter', title: 'Бартер', tip: 'Товар или услуга вместо денег', label: '', short: 'бартер',
+    kinds: ['offline', 'online', 'services'], icon: 'gift',
+    about: 'Без денег: автор получает ваш товар, блюдо или услугу, а взамен снимает и публикует ролик. В описании напишите, что именно предлагаете. Онлайн-бизнес — отправьте товар на обзор.',
+  },
 ];
 
 /** Разделы форм: заголовок и подсказка в одну строку (до ~45 знаков — помещается на телефоне). */
@@ -143,16 +165,26 @@ export const CARD_BLOCKS = [{ kind: 'text' as const, title: 'О себе', items
 
 /** Ошибки полноты — те же тексты, что у сервера (service/tasks.go complete, service/cards.go cardComplete). */
 export const TASK_RULES: Record<string, { short: string; msg: string }> = {
+  biz: { short: 'тип бизнеса', msg: 'Выберите, кто вы' },
   title: { short: 'название', msg: 'Название — от 5 до 100 символов' },
   categories: { short: 'сфера', msg: 'Выберите сферу' },
   city: { short: 'город', msg: 'Укажите город или «Вся Россия»' },
   formats: { short: 'формат', msg: 'Выберите хотя бы один формат' },
+  link: { short: 'ссылка', msg: 'Укажите ссылку или промокод — по ним считаются переходы' },
   minViews: { short: 'цель', msg: 'Укажите целевое число' },
   reward: { short: 'оплата', msg: 'Оплата — от 100 ₽' },
   publishBy: { short: 'срок', msg: 'Укажите срок публикации' },
   blocks: { short: 'описание', msg: 'Опишите задание: добавьте описание или требования' },
 };
 export const DUE_RANGE = 'Срок — от завтра до 90 дней';
+
+/** Шаги мастера задания (бизнес). */
+export const TASK_STEPS = [
+  { id: 'biz', title: 'Кто вы', hint: 'Под тип бизнеса подберём цели' },
+  { id: 'goal', title: 'Что нужно', hint: 'Выберите результат — условия под него' },
+  { id: 'where', title: 'Где и когда', hint: 'Сфера, город, форматы и срок' },
+  { id: 'look', title: 'Оформление', hint: 'То, что увидят авторы первым' },
+];
 export const CARD_RULES: Record<string, { short: string; msg: string }> = {
   name: { short: 'имя', msg: 'Имя — от 2 символов' },
   city: { short: 'город', msg: 'Укажите город' },

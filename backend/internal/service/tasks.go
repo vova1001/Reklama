@@ -94,7 +94,8 @@ type TaskInput struct {
 	Categories    []string // slug сфер, до 5
 	Formats       []string // slug из списка или свои названия
 	Access        string
-	Goal          string // цель: views (по умолчанию), subscribers, clicks, guests
+	Goal          string // цель: views (по умолчанию), subscribers, clicks, guests, barter
+	Link          string // реферальная ссылка или промокод; обязательна для clicks
 	MinViews      int64
 	RewardKopecks int64
 	PublishBy     string // ГГГГ-ММ-ДД или ""
@@ -477,7 +478,7 @@ func (s *Tasks) shape(ctx context.Context, userID, id int64, in TaskInput) (doma
 	ve := &ValidationError{}
 	t := domain.Task{
 		Title: squash(in.Title), City: squash(in.City), Nationwide: in.Nationwide,
-		Access: in.Access, Goal: squash(in.Goal), MinViews: in.MinViews, RewardKopecks: in.RewardKopecks,
+		Access: in.Access, Goal: squash(in.Goal), Link: squash(in.Link), MinViews: in.MinViews, RewardKopecks: in.RewardKopecks,
 	}
 	maxLen(ve, "title", t.Title, 100, "Название — до 100 символов")
 	if t.Nationwide {
@@ -508,10 +509,11 @@ func (s *Tasks) shape(ctx context.Context, userID, id int64, in TaskInput) (doma
 	switch t.Goal {
 	case "":
 		t.Goal = domain.GoalViews
-	case domain.GoalViews, domain.GoalSubscribers, domain.GoalClicks, domain.GoalGuests:
+	case domain.GoalViews, domain.GoalSubscribers, domain.GoalClicks, domain.GoalGuests, domain.GoalBarter:
 	default:
-		ve.add("goal", "Цель — просмотры, подписчики, переходы или гости")
+		ve.add("goal", "Цель — просмотры, подписчики, переходы, гости или бартер")
 	}
+	maxLen(ve, "link", t.Link, 200, "Ссылка или промокод — до 200 символов")
 	checkCount(ve, "minViews", t.MinViews)
 	if t.RewardKopecks < 0 || t.RewardKopecks > maxRewardKop {
 		ve.add("reward", "Оплата — до 1 000 000 ₽")
@@ -557,15 +559,20 @@ func (s *Tasks) complete(t domain.Task) error {
 	if len(t.Formats) == 0 {
 		ve.add("formats", "Выберите хотя бы один формат")
 	}
-	if t.MinViews <= 0 {
-		if t.Goal == "" || t.Goal == domain.GoalViews {
-			ve.add("minViews", "Укажите число просмотров")
-		} else {
-			ve.add("minViews", "Укажите целевое число: "+goalUnit(t.Goal))
+	if t.Goal != domain.GoalBarter {
+		if t.MinViews <= 0 {
+			if t.Goal == "" || t.Goal == domain.GoalViews {
+				ve.add("minViews", "Укажите число просмотров")
+			} else {
+				ve.add("minViews", "Укажите целевое число: "+goalUnit(t.Goal))
+			}
+		}
+		if t.RewardKopecks < minRewardKop {
+			ve.add("reward", "Оплата — от 100 ₽")
 		}
 	}
-	if t.RewardKopecks < minRewardKop {
-		ve.add("reward", "Оплата — от 100 ₽")
+	if t.Goal == domain.GoalClicks && t.Link == "" {
+		ve.add("link", "Укажите ссылку или промокод — по ним считаются переходы")
 	}
 	day := today(s.Clock.Now())
 	switch {

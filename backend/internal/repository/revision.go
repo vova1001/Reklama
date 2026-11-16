@@ -26,6 +26,7 @@ type taskContentRow struct {
 	Formats       []string   `json:"formats"`
 	Access        string     `json:"access"`
 	Goal          string     `json:"goal,omitempty"`
+	Link          string     `json:"link,omitempty"`
 	MinViews      int64      `json:"minViews"`
 	RewardKopecks int64      `json:"rewardKopecks"`
 	PublishBy     *time.Time `json:"publishBy,omitempty"`
@@ -65,7 +66,7 @@ func blocksFromRows(rows []blockRow) []domain.Block {
 func taskRevisionJSON(t domain.Task) ([]byte, error) {
 	b, err := json.Marshal(taskContentRow{
 		Title: t.Title, City: t.City, Nationwide: t.Nationwide, Categories: nonNil(t.Categories), Formats: nonNil(t.Formats),
-		Access: t.Access, Goal: t.Goal, MinViews: t.MinViews, RewardKopecks: t.RewardKopecks, PublishBy: t.PublishBy,
+		Access: t.Access, Goal: t.Goal, Link: t.Link, MinViews: t.MinViews, RewardKopecks: t.RewardKopecks, PublishBy: t.PublishBy,
 		PublishTime: t.PublishTime, DeadlineAt: t.DeadlineAt, Blocks: blockRows(t.Blocks), Cover: t.Cover, Photos: nonNil(t.Photos), Videos: nonNil(t.Videos),
 	})
 	if err != nil {
@@ -81,7 +82,7 @@ func taskRevisionOf(raw []byte) (domain.Task, error) {
 	}
 	return domain.Task{
 		Title: r.Title, City: r.City, Nationwide: r.Nationwide, Categories: nonNil(r.Categories), Formats: nonNil(r.Formats),
-		Access: r.Access, Goal: r.Goal, MinViews: r.MinViews, RewardKopecks: r.RewardKopecks, PublishBy: r.PublishBy,
+		Access: r.Access, Goal: r.Goal, Link: r.Link, MinViews: r.MinViews, RewardKopecks: r.RewardKopecks, PublishBy: r.PublishBy,
 		PublishTime: r.PublishTime, DeadlineAt: r.DeadlineAt, Blocks: blocksFromRows(r.Blocks), Cover: r.Cover, Photos: nonNil(r.Photos), Videos: nonNil(r.Videos),
 	}, nil
 }
@@ -264,7 +265,7 @@ func (r *Listings) ApplyTaskRevision(ctx context.Context, id int64, revStatus do
 		row, err = q.ReplaceTaskContent(ctx, store.ReplaceTaskContentParams{
 			ID: id, Status: string(domain.StatusPublished), RevisionStatus: string(revStatus),
 			Title: rev.Title, City: rev.City, Nationwide: rev.Nationwide, Categories: nonNil(rev.Categories), Formats: nonNil(rev.Formats),
-			Access: rev.Access, Goal: rev.Goal, MinViews: rev.MinViews, RewardKopecks: rev.RewardKopecks, PublishBy: date(rev.PublishBy),
+			Access: rev.Access, Goal: rev.Goal, Link: rev.Link, MinViews: rev.MinViews, RewardKopecks: rev.RewardKopecks, PublishBy: date(rev.PublishBy),
 			PublishTime: clockTime(rev.PublishTime), DeadlineAt: tsOpt(rev.DeadlineAt), Blocks: blocks, Cover: text(rev.Cover), Photos: nonNil(rev.Photos), Videos: nonNil(rev.Videos),
 		})
 		if err != nil {

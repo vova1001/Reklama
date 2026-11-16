@@ -1,13 +1,12 @@
 ---
-// Задание на весь экран: мастер ведёт по шагам — сначала «Кто вы» (тип бизнеса), затем цель (просмотры, подписчики,
-// переходы; гости — только у офлайна). Дальше обложка и название крупно, разделы с заголовком и подсказкой в одну
-// строку — «Основное» (сферы, город, форматы), «Условия» (цель, кто берёт, оплата, срок), «Описание» (одно поле),
-// «Фото и видео». Сферы и форматы — несколько, с «+ Своя / + Свой»; срок — пилюлями или «+ Свой» (календарь и
-// время). Логика — scripts/editor.ts.
+// Задание — мастер по шагам (не одна длинная форма): «Кто вы» (тип бизнеса) → «Что нужно» (цель с плашкой-
+// пояснением, условия и кто берёт) → «Где и когда» (сфера, город, форматы, срок) → «Оформление» (название, описание,
+// обложка, фото и видео). Цели фильтруются под тип бизнеса; у бартера нет числа и оплаты, у переходов обязательна
+// ссылка или промокод. Черновик пишется сам, проверка — на каждом «Далее». Логика — scripts/editor.ts.
 import Icon from '../Icon.astro';
 import EditorBar from './EditorBar.astro';
 import ReviewNote from './ReviewNote.astro';
-import { BIZ_TYPES, CITIES, FORM_GROUPS, GOALS } from '../../content/app';
+import { BIZ_TYPES, CITIES, GOALS, TASK_STEPS } from '../../content/app';
 import type { CategoryItem, Task } from '../../lib/auth';
 // revision — правка опубликованного: в форме новая версия, опубликованная видна всем до одобрения.
 interface Props { task: Task | null; categories: { common: CategoryItem[]; own: CategoryItem[] }; brand: string; revision?: Task['revision'] | null }
@@ -25,8 +24,7 @@ const views = t && t.minViews ? String(t.minViews) : '';
 const access = t?.access ?? 'open';
 const goal = t?.goal ?? 'views';
 const desc = t ? t.blocks.map((b) => b.items.join('\n')).filter(Boolean).join('\n\n') : '';
-const goalLabel = (id: string) => GOALS.find((g) => g.id === id)?.label ?? 'Просмотров от';
-const G = FORM_GROUPS.task;
+const goalMeta = (id: string) => GOALS.find((g) => g.id === id);
 ---
 <form class="ed" novalidate autocomplete="off" data-editor="task">
   <script type="application/json" data-init set:html={json} />
@@ -36,66 +34,58 @@ const G = FORM_GROUPS.task;
     {t?.status === 'published' && <p class="banner" role="note"><Icon name="eye" size={20} /><span>Правка опубликованного: пока её не проверят, авторы видят прежнюю версию.</span></p>}
     {revision ? <ReviewNote status={revision.status} reason={revision.rejectReason} notes={t?.reviewNotes} revision /> : <ReviewNote status={t?.status} reason={t?.rejectReason} notes={t?.reviewNotes} />}
 
-    <div data-pane="edit">
-      <section class="grp" aria-labelledby="g-biz" aria-describedby="g-biz-d">
-        <h2 class="grp-h" id="g-biz">Шаг 1 · Кто вы</h2>
-        <p class="grp-d" id="g-biz-d">Под тип бизнеса подберём подходящие цели</p>
-        <div class="chips" role="radiogroup" aria-label="Тип бизнеса" data-biz>
+    <div data-pane="edit" data-wizard>
+      <ol class="wz-steps">
+        {TASK_STEPS.map((s, i) => (
+          <li data-wz={s.id} aria-current={i === 0 ? 'step' : undefined}><span class="wz-n">{i + 1}</span><span class="wz-t">{s.title}</span></li>
+        ))}
+      </ol>
+
+      <section class="grp" data-step="biz" aria-labelledby="st-biz">
+        <h2 class="grp-h" id="st-biz">{TASK_STEPS[0].title}</h2>
+        <p class="grp-d">{TASK_STEPS[0].hint}</p>
+        <div class="wopts" role="radiogroup" aria-label="Тип бизнеса" data-biz>
           {BIZ_TYPES.map((b) => (
-            <button type="button" class="chip is-check" role="radio" aria-checked="false" data-v={b.id} data-tip={b.tip} data-tip-show>{b.title}</button>
+            <button type="button" class="wopt" role="radio" aria-checked="false" data-v={b.id}>
+              <Icon name={b.icon} size={24} />
+              <span class="wopt-t">{b.title}</span>
+              <span class="wopt-d">{b.tip}</span>
+            </button>
           ))}
         </div>
+        <p class="ferr" data-err="biz"></p>
       </section>
 
-      <div class="sec ed-cover">
-        <div data-cover></div>
-        <p class="ferr" data-err="cover"></p>
-      </div>
+      <section class="grp" data-step="goal" hidden aria-labelledby="st-goal">
+        <h2 class="grp-h" id="st-goal">{TASK_STEPS[1].title}</h2>
+        <p class="grp-d">{TASK_STEPS[1].hint}</p>
+        <div class="wopts" role="radiogroup" aria-label="Цель задания" data-goal>
+          {GOALS.map((g) => (
+            <button type="button" class="wopt" role="radio" aria-checked={goal === g.id ? 'true' : 'false'} data-v={g.id} data-kinds={g.kinds.join(' ')}>
+              <Icon name={g.icon} size={24} />
+              <span class="wopt-t">{g.title}</span>
+              <span class="wopt-d">{g.tip}</span>
+            </button>
+          ))}
+        </div>
+        <p class="banner wz-about" role="note" data-goal-about><Icon name="lightbulb" size={20} /><span>{goalMeta(goal)?.about}</span></p>
 
-      <div class="sec field ed-name" data-sec="title">
-        <div class="cnt-w"><input class="inp ed-title" id="t-title" name="title" maxlength="100" value={t?.title ?? ''} placeholder="Название задания" aria-label="Название задания" data-input="title" data-count /><span class="cnt" data-count-for="title"></span></div>
-        <p class="ferr" data-err="title"></p>
-      </div>
-
-      <section class="grp" aria-labelledby="g-main" aria-describedby="g-main-d">
-        <h2 class="grp-h" id="g-main">{G.main.title}</h2>
-        <p class="grp-d" id="g-main-d">{G.main.hint}</p>
-
-        <div class="sec" data-sec="categories">
-          <span class="lbl" id="cat-l">Сфера <span class="hint">· можно несколько, до 5</span></span>
-          <div data-cats data-input="categories"></div>
-          <p class="ferr" data-err="categories"></p>
+        <div class="sec field" data-sec="link" data-goal-link hidden={!goalMeta(goal)?.link}>
+          <label class="lbl" for="t-link">Ссылка или промокод</label>
+          <div class="ifx"><Icon name="link" size={20} /><input class="inp" id="t-link" name="link" maxlength="200" value={t?.link ?? ''} placeholder="https://… или ПРОМО2026" data-input="link" /></div>
+          <p class="ferr" data-err="link"></p>
         </div>
 
-        <div class="sec field" data-sec="city">
-          <label class="lbl" for="t-city">Город</label>
-          <div class="city">
-            <input class="inp" id="t-city" name="city" maxlength="80" value={t?.city ?? ''} placeholder="Казань" data-ph="Казань" autocomplete="address-level2" list="t-cities" data-input="city" />
-            <datalist id="t-cities">
-              {CITIES.map((c) => <option value={c} />)}
-            </datalist>
-            <button class="sw" type="button" role="switch" aria-checked={t?.nationwide ? 'true' : 'false'} data-nationwide><span class="sw-k" aria-hidden="true"></span>Вся Россия</button>
+        <div class="sec row2" data-goal-nums hidden={!goalMeta(goal)?.nums}>
+          <div class="field" data-sec="minViews">
+            <label class="lbl" for="t-views" data-goal-label>{goalMeta(goal)?.label ?? 'Просмотров от'}</label>
+            <div class="ifx"><Icon name="eye" size={20} /><input class="inp" id="t-views" name="minViews" inputmode="numeric" maxlength="13" value={views} placeholder="5 000" data-num data-input="minViews" /></div>
+            <p class="ferr" data-err="minViews"></p>
           </div>
-          <p class="ferr" data-err="city"></p>
-        </div>
-
-        <div class="sec" data-sec="formats">
-          <span class="lbl" id="fmt-l">Формат <span class="hint">· можно несколько</span></span>
-          <div data-formats data-input="formats"></div>
-          <p class="ferr" data-err="formats"></p>
-        </div>
-      </section>
-
-      <section class="grp" aria-labelledby="g-terms" aria-describedby="g-terms-d">
-        <h2 class="grp-h" id="g-terms">{G.terms.title}</h2>
-        <p class="grp-d" id="g-terms-d">{G.terms.hint}</p>
-
-        <div class="sec">
-          <span class="lbl" id="goal-l">Шаг 2 · Цель задания</span>
-          <div class="chips" role="radiogroup" aria-labelledby="goal-l" data-goal>
-            {GOALS.map((g) => (
-              <button type="button" class="chip is-check" role="radio" aria-checked={goal === g.id ? 'true' : 'false'} data-v={g.id} data-kinds={g.kinds.join(' ')} data-tip={g.tip} data-tip-show>{g.title}</button>
-            ))}
+          <div class="field" data-sec="reward">
+            <label class="lbl" for="t-reward">Оплата</label>
+            <div class="ifx sfx"><Icon name="wallet" size={20} /><input class="inp" id="t-reward" name="reward" inputmode="numeric" maxlength="9" value={rub} placeholder="3 000" data-num data-input="reward" /><span class="sfx-t">₽</span></div>
+            <p class="ferr" data-err="reward"></p>
           </div>
         </div>
 
@@ -106,18 +96,34 @@ const G = FORM_GROUPS.task;
             <button type="button" role="radio" aria-checked={access === 'approval' ? 'true' : 'false'} tabindex={access === 'approval' ? 0 : -1} data-v="approval" data-tip="Заявки авторов сначала приходят вам — выбираете сами" data-tip-show><Icon name="user-round-check" size={18} />С одобрением</button>
           </div>
         </div>
+      </section>
 
-        <div class="sec row2">
-          <div class="field" data-sec="minViews">
-            <label class="lbl" for="t-views" data-goal-label>{goalLabel(goal)}</label>
-            <div class="ifx"><Icon name="eye" size={20} /><input class="inp" id="t-views" name="minViews" inputmode="numeric" maxlength="13" value={views} placeholder="5 000" data-num data-input="minViews" /></div>
-            <p class="ferr" data-err="minViews"></p>
+      <section class="grp" data-step="where" hidden aria-labelledby="st-where">
+        <h2 class="grp-h" id="st-where">{TASK_STEPS[2].title}</h2>
+        <p class="grp-d">{TASK_STEPS[2].hint}</p>
+
+        <div class="sec" data-sec="categories">
+          <span class="lbl" id="cat-l">Сфера <span class="hint">· можно несколько, до 5</span></span>
+          <div data-cats data-input="categories"></div>
+          <p class="ferr" data-err="categories"></p>
+        </div>
+
+        <div class="sec field" data-sec="city">
+          <label class="lbl" for="t-city">Город</label>
+          <div class="city">
+            <div class="city-box" data-city-box>
+              <input class="inp" id="t-city" name="city" maxlength="80" value={t?.city ?? ''} placeholder="Начните вводить — подскажем" data-ph="Начните вводить — подскажем" autocomplete="off" role="combobox" aria-expanded="false" aria-controls="t-cities" data-input="city" />
+              <ul class="cb-list city-list" id="t-cities" role="listbox" hidden data-city-list></ul>
+            </div>
+            <button class="sw" type="button" role="switch" aria-checked={t?.nationwide ? 'true' : 'false'} data-nationwide><span class="sw-k" aria-hidden="true"></span>Вся Россия</button>
           </div>
-          <div class="field" data-sec="reward">
-            <label class="lbl" for="t-reward">Оплата</label>
-            <div class="ifx sfx"><Icon name="wallet" size={20} /><input class="inp" id="t-reward" name="reward" inputmode="numeric" maxlength="9" value={rub} placeholder="3 000" data-num data-input="reward" /><span class="sfx-t">₽</span></div>
-            <p class="ferr" data-err="reward"></p>
-          </div>
+          <p class="ferr" data-err="city"></p>
+        </div>
+
+        <div class="sec" data-sec="formats">
+          <span class="lbl" id="fmt-l">Формат <span class="hint">· можно несколько</span></span>
+          <div data-formats data-input="formats"></div>
+          <p class="ferr" data-err="formats"></p>
         </div>
 
         <div class="sec" data-sec="publishBy" data-due>
@@ -142,28 +148,43 @@ const G = FORM_GROUPS.task;
         </div>
       </section>
 
-      <section class="grp" aria-labelledby="g-desc" aria-describedby="g-desc-d">
-        <h2 class="grp-h" id="g-desc">{G.desc.title}</h2>
-        <p class="grp-d" id="g-desc-d">{G.desc.hint}</p>
+      <section class="grp" data-step="look" hidden aria-labelledby="st-look">
+        <h2 class="grp-h" id="st-look">{TASK_STEPS[3].title}</h2>
+        <p class="grp-d">{TASK_STEPS[3].hint}</p>
+
+        <div class="sec field ed-name" data-sec="title">
+          <div class="cnt-w"><input class="inp ed-title" id="t-title" name="title" maxlength="100" value={t?.title ?? ''} placeholder="Название задания" aria-label="Название задания" data-input="title" data-count /><span class="cnt" data-count-for="title"></span></div>
+          <p class="ferr" data-err="title"></p>
+        </div>
+
         <div class="sec field" data-sec="blocks">
+          <label class="lbl" for="t-desc">Описание <span class="hint">· что снять и что важно — читают первым</span></label>
           <textarea class="inp ed-desc" id="t-desc" name="description" rows="7" maxlength="15000" placeholder="Что снять, что показать, что важно — каждая мысль с новой строки" aria-label="Описание задания" data-input="blocks">{desc}</textarea>
           <p class="ferr" data-err="blocks"></p>
         </div>
-      </section>
 
-      <section class="grp" aria-labelledby="g-photo" aria-describedby="g-photo-d">
-        <h2 class="grp-h" id="g-photo">{G.photo.title}</h2>
-        <p class="grp-d" id="g-photo-d">{G.photo.hint}</p>
+        <div class="sec ed-cover">
+          <div data-cover></div>
+          <p class="ferr" data-err="cover"></p>
+        </div>
+
         <div class="sec">
+          <span class="lbl">Фото <span class="hint">· примеры, что показать, — до 6</span></span>
           <div data-photos></div>
           <p class="ferr" data-err="photos"></p>
         </div>
+
         <div class="sec">
           <span class="lbl">Видео <span class="hint">· до 2, MP4 или WebM</span></span>
           <div data-videos></div>
           <p class="ferr" data-err="videos"></p>
         </div>
       </section>
+
+      <div class="wz-nav">
+        <button class="btn pill-ghost" type="button" data-prev hidden><Icon name="arrow-left" size={18} />Назад</button>
+        <button class="btn pill-emerald" type="button" data-next><span data-next-t>Далее</span><Icon name="arrow-right" size={18} /></button>
+      </div>
 
       <div class="sec ed-danger" hidden={!t || t.status === 'published'} data-delete-wrap><button class="btn pill-text" type="button" data-delete><Icon name="trash-2" size={18} />Удалить черновик</button></div>
     </div>
