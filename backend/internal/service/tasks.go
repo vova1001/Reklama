@@ -547,7 +547,7 @@ func (s *Tasks) shape(ctx context.Context, userID, id int64, in TaskInput) (doma
 			ve.add("goals", "Выберите разные цели из списка")
 		}
 		seenGoals[g.Goal] = true
-		if g.Target < 0 || g.Target > 1e9 || g.RewardKopecks < 0 || g.RewardKopecks > maxRewardKop {
+		if g.Target < 0 || g.Target > 1e9 || g.RewardKopecks < 0 || g.RewardKopecks > maxRewardKop || g.RateKopecks < 0 || g.RateKopecks > maxRewardKop || g.MinResult < 0 || g.MinResult > 1e9 {
 			ve.add("goals", "Проверьте числа в условиях целей")
 		}
 		if !domain.ValidPaymentMode(g.PaymentMode) {
@@ -572,9 +572,14 @@ func (s *Tasks) shape(ctx context.Context, userID, id int64, in TaskInput) (doma
 	if len(t.Details.Publications) > 10 {
 		ve.add("publications", "Площадок — не больше десяти")
 	}
-	for _, p := range t.Details.Publications {
-		if p.Count < 0 || p.Count > 100 {
-			ve.add("publications", "Публикаций по площадке — до 100")
+	for i := range t.Details.Publications {
+		p := &t.Details.Publications[i]
+		if p.MinCount == 0 && p.MaxCount == 0 {
+			p.MinCount, p.MaxCount = p.Count, p.Count
+		}
+		p.Count = p.MaxCount
+		if p.MinCount < 0 || p.MaxCount < 0 || p.MinCount > 100 || p.MaxCount > 100 || p.MinCount > p.MaxCount {
+			ve.add("publications", "Публикации: от 0 до 100, «от» не больше «до»")
 		}
 	}
 	maxLen(ve, "language", t.Details.Audience.Language, 60, "Язык — до 60 символов")

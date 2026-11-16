@@ -138,6 +138,8 @@ type TaskGoal struct {
 	Target        int64  `json:"target"`
 	RewardKopecks int64  `json:"rewardKopecks"`
 	PaymentMode   string `json:"paymentMode"`
+	RateKopecks   int64  `json:"rateKopecks,omitempty"`
+	MinResult     int64  `json:"minResult,omitempty"`
 	Link          string `json:"link"`
 }
 
@@ -149,8 +151,10 @@ type TaskAudience struct {
 }
 
 type TaskPublication struct {
-	Format string `json:"format"`
-	Count  int    `json:"count"`
+	Format   string `json:"format"`
+	Count    int    `json:"count"`
+	MinCount int    `json:"minCount"`
+	MaxCount int    `json:"maxCount"`
 }
 
 type TaskDetails struct {

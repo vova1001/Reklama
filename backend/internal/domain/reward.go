@@ -17,10 +17,10 @@ func PaymentModeOrDefault(mode string) string {
 	return mode
 }
 
-// RewardForResult — расчёт в копейках без float. Пропорциональная оплата округляется
-// вниз до 100 ₽, начинается от 100 ₽ и ограничена целевым бюджетом.
+// RewardForResult — расчёт в копейках без float. Новая ставка задаётся за 1000 результатов;
+// для старых целей она выводится из бюджета и цели. Выплата ограничена бюджетом.
 func RewardForResult(g TaskGoal, actual int64) int64 {
-	if actual <= 0 || g.Target <= 0 || g.RewardKopecks <= 0 {
+	if actual <= 0 || g.Target <= 0 || g.RewardKopecks <= 0 || actual < g.MinResult {
 		return 0
 	}
 	if PaymentModeOrDefault(g.PaymentMode) == PaymentFixed {
@@ -28,6 +28,13 @@ func RewardForResult(g TaskGoal, actual int64) int64 {
 			return 0
 		}
 		return g.RewardKopecks
+	}
+	if g.RateKopecks > 0 {
+		reward := actual * g.RateKopecks / 1000
+		if reward > g.RewardKopecks {
+			reward = g.RewardKopecks
+		}
+		return reward
 	}
 	reward := actual * g.RewardKopecks / g.Target
 	if reward > g.RewardKopecks {

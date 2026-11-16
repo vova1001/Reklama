@@ -1958,7 +1958,10 @@ export interface components {
         };
         TaskPublication: {
             format: string;
-            count: number;
+            /** @description Старое единое количество; fallback для minCount/maxCount */
+            count?: number;
+            minCount?: number;
+            maxCount?: number;
         };
         TaskGoal: {
             /** @enum {string} */
@@ -1971,11 +1974,21 @@ export interface components {
              */
             rewardKopecks: number;
             /**
-             * @description fixed — при достижении target; proportional — за фактический результат, округление вниз до 100 ₽, от 100 ₽ и не выше бюджета
+             * @description fixed — при достижении target; proportional — по ставке за 1000 результатов, не выше бюджета
              * @default fixed
              * @enum {string}
              */
             paymentMode: "fixed" | "proportional";
+            /**
+             * Format: int64
+             * @description Ставка за 1000 результатов; 0 — вычислить из budget/target для старых целей
+             */
+            rateKopecks?: number;
+            /**
+             * Format: int64
+             * @description Минимальный результат для оплаты; 0 — без минимума
+             */
+            minResult?: number;
             link: string;
         };
         TaskAudience: {

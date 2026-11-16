@@ -24,6 +24,8 @@ type taskGoalDTO struct {
 	Target        int64  `json:"target"`
 	RewardKopecks int64  `json:"rewardKopecks"`
 	PaymentMode   string `json:"paymentMode"`
+	RateKopecks   int64  `json:"rateKopecks"`
+	MinResult     int64  `json:"minResult"`
 	Link          string `json:"link"`
 }
 
@@ -35,8 +37,10 @@ type taskAudienceDTO struct {
 }
 
 type taskPublicationDTO struct {
-	Format string `json:"format"`
-	Count  int    `json:"count"`
+	Format   string `json:"format"`
+	Count    int    `json:"count"`
+	MinCount int    `json:"minCount"`
+	MaxCount int    `json:"maxCount"`
 }
 
 type taskIn struct {
@@ -271,7 +275,7 @@ func toBlocksDTO(bs []domain.Block) []blockDTO {
 func taskGoalsIn(in []taskGoalDTO) []domain.TaskGoal {
 	out := make([]domain.TaskGoal, 0, len(in))
 	for _, g := range in {
-		out = append(out, domain.TaskGoal{Goal: g.Goal, Target: g.Target, RewardKopecks: g.RewardKopecks, PaymentMode: g.PaymentMode, Link: g.Link})
+		out = append(out, domain.TaskGoal{Goal: g.Goal, Target: g.Target, RewardKopecks: g.RewardKopecks, PaymentMode: g.PaymentMode, RateKopecks: g.RateKopecks, MinResult: g.MinResult, Link: g.Link})
 	}
 	return out
 }
@@ -279,7 +283,7 @@ func taskGoalsIn(in []taskGoalDTO) []domain.TaskGoal {
 func taskGoalsOut(in []domain.TaskGoal) []taskGoalDTO {
 	out := make([]taskGoalDTO, 0, len(in))
 	for _, g := range in {
-		out = append(out, taskGoalDTO{Goal: g.Goal, Target: g.Target, RewardKopecks: g.RewardKopecks, PaymentMode: domain.PaymentModeOrDefault(g.PaymentMode), Link: g.Link})
+		out = append(out, taskGoalDTO{Goal: g.Goal, Target: g.Target, RewardKopecks: g.RewardKopecks, PaymentMode: domain.PaymentModeOrDefault(g.PaymentMode), RateKopecks: g.RateKopecks, MinResult: g.MinResult, Link: g.Link})
 	}
 	return out
 }
@@ -287,7 +291,11 @@ func taskGoalsOut(in []domain.TaskGoal) []taskGoalDTO {
 func publicationsIn(in []taskPublicationDTO) []domain.TaskPublication {
 	out := make([]domain.TaskPublication, 0, len(in))
 	for _, p := range in {
-		out = append(out, domain.TaskPublication{Format: p.Format, Count: p.Count})
+		minCount, maxCount := p.MinCount, p.MaxCount
+		if minCount == 0 && maxCount == 0 {
+			minCount, maxCount = p.Count, p.Count
+		}
+		out = append(out, domain.TaskPublication{Format: p.Format, Count: p.Count, MinCount: minCount, MaxCount: maxCount})
 	}
 	return out
 }
@@ -295,7 +303,11 @@ func publicationsIn(in []taskPublicationDTO) []domain.TaskPublication {
 func publicationsOut(in []domain.TaskPublication) []taskPublicationDTO {
 	out := make([]taskPublicationDTO, 0, len(in))
 	for _, p := range in {
-		out = append(out, taskPublicationDTO{Format: p.Format, Count: p.Count})
+		minCount, maxCount := p.MinCount, p.MaxCount
+		if minCount == 0 && maxCount == 0 {
+			minCount, maxCount = p.Count, p.Count
+		}
+		out = append(out, taskPublicationDTO{Format: p.Format, Count: maxCount, MinCount: minCount, MaxCount: maxCount})
 	}
 	return out
 }

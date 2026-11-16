@@ -3,23 +3,21 @@
 import App from '../../layouts/App.astro';
 import Icon from '../../components/Icon.astro';
 import Avatar from '../../components/Avatar.astro';
-import { FORM_GROUPS } from '../../content/app';
-import { fetchMyPage, fetchProfiles } from '../../lib/auth';
-import { PAGE_PATH, PAGE_TITLE, STATUS } from '../../content/app';
-import { getHome, type Category } from '../../lib/api';
+import PageForm from '../../components/app/PageForm.astro';
+import { fetchCategories, fetchMyPage, fetchProfiles } from '../../lib/auth';
 
 const me = Astro.locals.me;
 if (!me) return Astro.redirect('/login', 303);
 const u = me.user;
 const businessMode = u.mode === 'business';
-const [{ business }, pageResult, categories] = await Promise.all([
+const [profiles, pageResult, categories] = await Promise.all([
   fetchProfiles(Astro.request),
   fetchMyPage(Astro.request, u.mode),
-  businessMode ? getHome().then((h) => h.categories).catch((): Category[] => []) : Promise.resolve([]),
+  fetchCategories(Astro.request),
 ]);
+const business = profiles.business;
 const page = pageResult?.page ?? null;
 const spheres = new Set(business?.spheres ?? []);
-const G = FORM_GROUPS.profile;
 ---
 <App title="Профиль" page="profile">
   <div class={businessMode ? 'biz-profile' : undefined}>
@@ -49,20 +47,15 @@ const G = FORM_GROUPS.profile;
           <div class="field"><label class="lbl" for="bz-city">Город</label><div class="city-box"><input class="inp" id="bz-city" name="city" maxlength="80" value={business?.city ?? u.city} placeholder="Казань" role="combobox" aria-expanded="false" aria-controls="bz-cities" data-input="city" /><ul class="cb-list city-list" id="bz-cities" role="listbox" hidden data-city-list></ul></div><p class="ferr" data-err="city"></p></div>
         </div>
         <div class="field"><label class="lbl" for="bz-inn">ИНН <span class="hint">· 10 или 12 цифр, необязательно</span></label><input class="inp" id="bz-inn" name="inn" inputmode="numeric" pattern="[0-9]*" maxlength="12" value={business?.inn ?? ''} placeholder="1234567890" data-input="inn" /><p class="ferr" data-err="inn"></p></div>
-        <div class="field"><span class="lbl">Сферы <span class="hint">· до 5</span></span><div class="chips" role="group" data-spheres>{categories.map((c) => <button type="button" class="chip" aria-pressed={spheres.has(c.slug) ? 'true' : 'false'} data-slug={c.slug}><Icon name={c.icon} size={16} />{c.title}</button>)}</div><p class="ferr" data-err="spheres"></p></div>
+        <div class="field"><span class="lbl">Сферы <span class="hint">· до 5</span></span><div class="chips" role="group" data-spheres>{categories.common.map((c) => <button type="button" class="chip" aria-pressed={spheres.has(c.slug) ? 'true' : 'false'} data-slug={c.slug}><Icon name={c.icon} size={16} />{c.title}</button>)}</div><p class="ferr" data-err="spheres"></p></div>
         <p class="ferr" data-err="form" role="alert"></p>
         <div class="form-act"><button class="btn pill-dark" type="submit" data-submit><span>Сохранить</span></button><p class="saved" role="status" data-saved></p></div>
       </form>
     </section>}
 
-    <section class="sec" aria-labelledby="page-t">
-      <h2 id="page-t" class="grp-h">{PAGE_TITLE[u.mode]}</h2>
-      <p class="grp-d">{businessMode ? 'Публичная информация для авторов.' : 'Фото, описание и примеры работ автора'}</p>
-      <ul class="rows pg-rows"><li data-my-page={u.mode}>
-        <Icon name={businessMode ? 'store' : 'user-round'} size={20} />
-        <div><p class="row-t">{PAGE_TITLE[u.mode]}</p><p class="row-s">{page ? <><span class="st" data-s={page.status}>{STATUS[page.status]}</span>{page.status === 'published' && <> · <a href={`${PAGE_PATH[u.mode]}${page.slug}`}>{PAGE_PATH[u.mode]}{page.slug}</a></>}</> : 'Пока не создана'}</p></div>
-        <a class="btn pill-ghost" href={`/app/page?kind=${u.mode}`}>{page ? 'Изменить' : 'Создать страницу'}</a>
-      </li></ul>
+    <section class="sec profile-page-section">
+      {Astro.url.searchParams.get('sent') === '1' && <p class="banner is-ok" role="status"><Icon name="check" size={18} />Страница отправлена на проверку.</p>}
+      <PageForm kind={u.mode} page={page} suggestedSlug={pageResult?.suggestedSlug ?? ''} profile={businessMode ? business : profiles.creator} user={u} categories={categories} embedded />
     </section>
   </div>
 </App>

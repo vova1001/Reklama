@@ -51,6 +51,8 @@ export const COMPLAINT_REASONS: { id: string; title: string }[] = [
   { id: 'other', title: 'Другое' },
 ];
 
+export const CONTENT_LANGUAGES = ['Таджикский', 'Русский', 'Английский', 'Узбекский', 'Казахский', 'Кыргызский', 'Армянский', 'Азербайджанский', 'Грузинский'];
+
 export const FORMATS: { id: string; title: string }[] = [
   { id: 'reels', title: 'Reels' },
   { id: 'shorts', title: 'Shorts' },

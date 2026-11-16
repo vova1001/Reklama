@@ -119,4 +119,13 @@
 - Standalone BUSINESS на 1440/320: полный scroll, city combobox, invalid/valid ИНН, сохранение профиля, cover/logo upload + crop, описание, адрес, часы, телефон, сайт, соцсети, autosave/reload и preview. Screenshots `.wizard-check/business-{profile,page,preview}-{1440,320}.png` осмотрены.
 - Production build изолированного HEAD+task: `docker build -f deploy/render/Dockerfile -t ohvat-production-task .wizard-check` — успешен. Тестовые наборы не запускались.
 
+## Пакет настраиваемой оплаты, диапазонов и единого профиля
+- `TaskGoal` дополнен `rateKopecks` и `minResult`; proportional считает новые цели как `actual × rate / 1000` на BigInt/int64, с min threshold и budget cap. Старые цели используют прежний budget/target и округление. Live-строка, обзор и public используют короткие условия без формул.
+- `TaskPublication` дополнен `minCount/maxCount`; старый `count` остаётся fallback и заполняется как maxCount. UI показывает «от»/«до», клиент и сервер проверяют диапазон. Обзор и public выводят оба значения.
+- Аудитория и язык — `SelectCombobox`; язык ограничен девятью заданными вариантами. Значение сохраняется в details и восстанавливается в draft.
+- Профиль текущего режима включает встроенный `PageForm`: отдельная карточка/ссылка создания страницы удалена. Embedded редактор сохраняет address, фото, сферы, блоки, preview, autosave и publish; после submit возвращает в `/app/profile`. Mode switch перезагружает профиль целиком.
+- «Задания» по умолчанию показывают все секции; «Все» активно, фильтры показывают один статус, повторный клик возвращает полный список.
+- Standalone Playwright 1440/320: live rate/min, invalid/valid publication range, language, review, API persistence, tasks default/filter, фактическая публикация и public. BUSINESS: invalid/valid ИНН, city, сохранение, cover/logo crop, контакты/ссылки, reload, embedded preview, business→creator switch. Screenshots `owner-*` и `business-*` / `creator-profile-*` в `.wizard-check`; JS-ошибок и overflow нет. Тестовые наборы не запускались.
+- Production build HEAD+task — успешен. Первая попытка остановилась на Docker Desktop export (`parent snapshot … does not exist`); повтор стандартной команды без очистки завершился успешно.
+
 ## Приёмка (менеджер)

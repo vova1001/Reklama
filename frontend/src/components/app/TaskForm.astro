@@ -1,7 +1,7 @@
 ---
 import Icon from '../Icon.astro';
 import ReviewNote from './ReviewNote.astro';
-import { BIZ_TYPES, GOALS, TASK_STEPS } from '../../content/app';
+import { BIZ_TYPES, CONTENT_LANGUAGES, GOALS, TASK_STEPS } from '../../content/app';
 import type { CategoryItem, Task } from '../../lib/auth';
 interface Props { task: Task | null; categories: { common: CategoryItem[]; own: CategoryItem[] }; brand: string; revision?: Task['revision'] | null }
 const { task: t, categories, brand, revision = null } = Astro.props;
@@ -9,7 +9,7 @@ const legacyGoals: NonNullable<Task['goals']> = t?.goals?.length ? t.goals : t ?
 const init = {
   kind: 'task', id: t?.id ?? null, status: t?.status ?? 'draft', blocks: [], templates: [],
   cover: t?.cover ? [t.cover] : [], photos: t?.photos ?? [], selected: t?.categories ?? [], formats: t?.formats ?? [],
-  goals: legacyGoals, bizType: t?.bizType ?? '', videos: (t?.videos ?? []).map((v) => ({ media: v.id, src: v.src })),
+  goals: legacyGoals, bizType: t?.bizType ?? '', publications: t?.publications ?? [], videos: (t?.videos ?? []).map((v) => ({ media: v.id, src: v.src })),
   categories, brand, uid: Astro.locals.me!.user.id, updatedAt: t?.updatedAt ?? null,
 };
 const json = JSON.stringify(init).replace(/</g, '\\u003c');
@@ -94,6 +94,16 @@ const saveState = t?.status === 'published' ? 'Редактирование' : t
                       <button type="button" role="radio" aria-checked={(savedGoal?.paymentMode ?? 'fixed') === 'fixed' ? 'true' : 'false'} data-v="fixed">За цель</button>
                       <button type="button" role="radio" aria-checked={savedGoal?.paymentMode === 'proportional' ? 'true' : 'false'} data-v="proportional">По ставке</button>
                     </div>
+                    <div class="rate-fields" data-rate-fields={g.id} hidden={savedGoal?.paymentMode !== 'proportional'}>
+                      <div class="field">
+                        <label class="lbl" for={`t-rate-${g.id}`}>Ставка за 1 000, ₽</label>
+                        <input class="inp" id={`t-rate-${g.id}`} name={`rate.${g.id}`} inputmode="numeric" maxlength="9" value={savedGoal?.rateKopecks ? Math.round(savedGoal.rateKopecks / 100) : ''} placeholder="100" data-num />
+                      </div>
+                      <div class="field">
+                        <label class="lbl" for={`t-min-result-${g.id}`}>Оплата от, {g.short}</label>
+                        <input class="inp" id={`t-min-result-${g.id}`} name={`minResult.${g.id}`} inputmode="numeric" maxlength="13" value={savedGoal?.minResult || ''} placeholder="500" data-num />
+                      </div>
+                    </div>
                     <p class="reward-calc" data-reward-calc={g.id} aria-live="polite"></p>
                     <p class="reward-summary" data-reward-summary={g.id} aria-live="polite"></p>
                   </> : <div class="field" data-sec="barter" data-barter-box>
@@ -155,7 +165,7 @@ const saveState = t?.status === 'published' ? 'Редактирование' : t
           <div class="field"><label class="lbl" for="t-age-from">Возраст от</label><input class="inp" id="t-age-from" name="ageFrom" type="number" min="0" max="100" value={audience.ageFrom || ''} placeholder="18" /></div>
           <div class="field"><label class="lbl" for="t-age-to">Возраст до</label><input class="inp" id="t-age-to" name="ageTo" type="number" min="0" max="100" value={audience.ageTo || ''} placeholder="35" /></div>
           <div class="field"><span class="lbl" id="gender-label">Аудитория</span><div class="select-box"><button class="select-button" type="button" aria-labelledby="gender-label" aria-haspopup="listbox" aria-expanded="false" aria-controls="gender-options" data-select="gender" data-value={audience.gender}><span class="select-value">{audience.gender === 'female' ? 'Преимущественно женская' : audience.gender === 'male' ? 'Преимущественно мужская' : 'Любая'}</span><span class="select-chevron" aria-hidden="true"></span></button><input type="hidden" name="gender" value={audience.gender} /><ul class="cb-list select-list" id="gender-options" role="listbox" hidden data-select-list></ul></div></div>
-          <div class="field"><label class="lbl" for="t-language">Язык</label><input class="inp" id="t-language" name="language" maxlength="60" value={audience.language} placeholder="Русский" /></div>
+          <div class="field"><span class="lbl" id="language-label">Язык</span><div class="select-box"><button class="select-button" type="button" aria-labelledby="language-label" aria-haspopup="listbox" aria-expanded="false" aria-controls="language-options" data-select="language" data-value={audience.language || 'Русский'}><span class="select-value">{audience.language || 'Русский'}</span><span class="select-chevron" aria-hidden="true"></span></button><input type="hidden" name="language" value={audience.language || 'Русский'} /><ul class="cb-list select-list" id="language-options" role="listbox" hidden data-language-list></ul></div></div>
           <div class="field"><label class="lbl" for="t-followers">Подписчиков от</label><input class="inp" id="t-followers" name="minFollowers" inputmode="numeric" maxlength="13" value={t?.minFollowers || ''} placeholder="1 000" data-num /></div>
           <div class="field"><label class="lbl" for="t-response">Ответ автору, дней</label><input class="inp" id="t-response" name="responseDays" type="number" min="0" max="30" value={t?.responseDays || ''} placeholder="3" /></div>
         </div>

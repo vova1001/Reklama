@@ -491,6 +491,10 @@ html:has(body.app-body) { background: var(--color-card); scroll-padding: 72px 0 
 .publication-row { min-width: 0; }
 .publication-row .lbl { font-size: 12px; }
 .publication-row .inp { height: 44px; }
+.rate-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; grid-column: 1 / -1; }
+.publication-range { display: grid; grid-template-columns: auto minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: 8px; }
+.publication-prefix { color: var(--color-gray); font-size: 13px; }
+@media (max-width: 639px) { .rate-fields { grid-template-columns: 1fr; } }
 .form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px 12px; margin-top: 24px; }
 select.inp { appearance: none; background: var(--color-card) linear-gradient(45deg, transparent 50%, var(--color-gray) 50%) calc(100% - 18px) 21px / 5px 5px no-repeat; }
 .materials { margin-top: 24px; padding-top: 16px; border-top: 1px solid var(--color-line); }
@@ -1127,4 +1131,19 @@ select.inp { appearance: none; background: var(--color-card) linear-gradient(45d
   .biz-page .grp-h { font-size: 21px; }
   .biz-page .pb-body, .biz-page .pb-err { padding-left: 0; }
   .biz-page .pb-menu { grid-template-columns: 1fr; }
+}
+
+.profile-page-section { margin-top: 16px; padding: 24px; border: 1px solid var(--color-line); border-radius: 16px; background: var(--color-card); }
+.profile-editor-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 24px; padding-bottom: 16px; border-bottom: 1px solid var(--color-line); }
+.profile-editor-head h2 { font-size: 20px; line-height: 1.3; font-weight: 650; letter-spacing: -.02em; }
+.profile-editor-head p { margin-top: 4px; color: var(--color-gray); font-size: 12px; }
+.ed.is-embedded .ed-col { max-width: none; margin: 0; padding: 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; }
+.profile-editor-actions { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-top: 24px; padding-top: 16px; border-top: 1px solid var(--color-line); }
+.profile-editor-actions p { color: var(--color-gray); font-size: 13px; }
+.profile-editor-actions .btn { min-height: 40px; padding: 0 16px; border-radius: 10px; font-size: 14px; }
+@media (max-width: 639px) {
+  .profile-page-section { padding: 20px 16px; border-radius: 14px; }
+  .profile-editor-head { align-items: stretch; flex-direction: column; }
+  .profile-editor-actions { align-items: stretch; flex-direction: column; }
+  .profile-editor-actions .btn { width: 100%; }
 }

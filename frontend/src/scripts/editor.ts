@@ -6,7 +6,7 @@
 import type { components } from '../lib/api.gen';
 import { $, $$, api, busy, clearErrs, setErr } from '../lib/client';
 import { confirmDialog, fmtNum, guard, parseNum, toast } from '../lib/ui';
-import { CARD_RULES, DUE_RANGE, GOALS, PLATFORM_TITLE, TASK_RULES, type BlockKind } from '../content/app';
+import { CARD_RULES, CONTENT_LANGUAGES, DUE_RANGE, GOALS, PLATFORM_TITLE, TASK_RULES, type BlockKind } from '../content/app';
 import { CityCombobox } from './editor/city';
 import { SelectCombobox } from './editor/select';
 import { formatsTitle, goal, until } from '../lib/format';
@@ -26,7 +26,8 @@ type Card = components['schemas']['Card'];
 type Item = components['schemas']['CategoryItem'];
 type ApiError = components['schemas']['Error']['error'];
 
-interface GoalState { goal: string; target: number; rewardKopecks: number; paymentMode: 'fixed' | 'proportional'; link: string }
+interface GoalState { goal: string; target: number; rewardKopecks: number; paymentMode: 'fixed' | 'proportional'; rateKopecks: number; minResult: number; link: string }
+interface PublicationState { format: string; count: number; minCount: number; maxCount: number }
 interface Init {
   kind: 'task' | 'card';
   id: number | null;
@@ -39,6 +40,7 @@ interface Init {
   formats?: string[];
   goals?: GoalState[];
   bizType?: string;
+  publications?: PublicationState[];
   videos?: EdVideo[];
   categories: { common: Item[]; own: Item[] };
   brand: string;
@@ -90,6 +92,13 @@ function restore(form: HTMLFormElement, init: Init, d: Partial<Snap>) {
     rightsButton.dataset.value = rights;
     const label = $('.select-value', rightsButton);
     if (label) label.textContent = rights === 'ads' ? 'Органика, репосты и реклама' : rights === 'reposts' ? 'Органика и репосты' : 'Только органика';
+  }
+  const language = d.fields?.language;
+  const languageButton = $('[data-select="language"]', form);
+  if (language && languageButton && CONTENT_LANGUAGES.includes(language)) {
+    languageButton.dataset.value = language;
+    const label = $('.select-value', languageButton);
+    if (label) label.textContent = language;
   }
   const nation = $('[data-nationwide]', form);
   if (nation && typeof d.nationwide === 'boolean') nation.setAttribute('aria-checked', String(d.nationwide));
@@ -184,12 +193,17 @@ async function start(form: HTMLFormElement) {
   const renderPublications = () => {
     const box = $('[data-publications]', form);
     if (!box || !fmts) return;
-    const old = new Map($$<HTMLInputElement>('[data-publication]', box).map((i) => [i.dataset.publication!, i.value]));
+    const old = new Map($$<HTMLInputElement>('[data-publication]', box).map((i) => [i.name, i.value]));
     box.replaceChildren(...fmts.value().map((id) => {
+      const saved = init.publications?.find((p) => p.format === id);
+      const title = formatsTitle([id]);
+      const minName = `publicationMin.${id}`;
+      const maxName = `publicationMax.${id}`;
       const row = h('div', { class: 'publication-row' });
-      const label = h('label', { class: 'lbl', for: `pub-${id}` }, `${formatsTitle([id])}, публикаций`);
-      const input = h('input', { class: 'inp', id: `pub-${id}`, name: `publication.${id}`, type: 'number', min: '1', max: '100', value: old.get(id) ?? '1', 'data-publication': id });
-      row.append(label, input);
+      const label = h('label', { class: 'lbl', for: `pub-min-${id}` }, `${title}, публикаций`);
+      const min = h('input', { class: 'inp', id: `pub-min-${id}`, name: minName, type: 'number', min: '0', max: '100', value: old.get(minName) ?? String(saved?.minCount ?? saved?.count ?? 1), 'aria-label': `${title}, от`, 'data-publication': id });
+      const max = h('input', { class: 'inp', id: `pub-max-${id}`, name: maxName, type: 'number', min: '0', max: '100', value: old.get(maxName) ?? String(saved?.maxCount ?? saved?.count ?? 1), 'aria-label': `${title}, до`, 'data-publication': id });
+      row.append(label, h('div', { class: 'publication-range' }, h('span', { class: 'publication-prefix' }, 'от'), min, h('span', { class: 'publication-prefix' }, 'до'), max));
       return row;
     }));
   };
@@ -249,11 +263,13 @@ async function start(form: HTMLFormElement) {
   const selectedGoals = () => goalChecks.filter((b) => b.getAttribute('aria-pressed') === 'true' && !b.closest<HTMLElement>('[data-goal-item]')!.hidden).map((b) => b.value);
   const modeVal = (id: string) => $<HTMLButtonElement>(`[data-payment-mode="${id}"] [aria-checked="true"]`, form)?.dataset.v === 'proportional' ? 'proportional' as const : 'fixed' as const;
   const goalValues = (): GoalState[] => selectedGoals().map((id) => ({
-    goal: id, target: parseNum(val(`target.${id}`)), rewardKopecks: parseNum(val(`reward.${id}`)) * 100, paymentMode: modeVal(id), link: val(`link.${id}`),
+    goal: id, target: parseNum(val(`target.${id}`)), rewardKopecks: parseNum(val(`reward.${id}`)) * 100, paymentMode: modeVal(id), rateKopecks: parseNum(val(`rate.${id}`)) * 100, minResult: parseNum(val(`minResult.${id}`)), link: val(`link.${id}`),
   }));
   const applyPayment = () => {
     for (const id of selectedGoals().filter((x) => x !== 'barter')) {
       const proportional = modeVal(id) === 'proportional';
+      const rateFields = $(`[data-rate-fields="${id}"]`, form);
+      if (rateFields) rateFields.hidden = !proportional;
       const label = $(`[data-goal-item="${id}"] [data-reward-label]`, form);
       if (label) label.textContent = 'Бюджет';
       const g = goalValues().find((x) => x.goal === id)!;
@@ -366,6 +382,9 @@ async function start(form: HTMLFormElement) {
     { value: 'female', title: 'Преимущественно женская' },
     { value: 'male', title: 'Преимущественно мужская' },
   ], changed);
+  const languageSelect = $('[data-select="language"]', form);
+  const languageList = $('[data-language-list]', form);
+  if (languageSelect && languageList) new SelectCombobox(languageSelect, languageList, CONTENT_LANGUAGES.map((title) => ({ value: title, title })), changed);
   const rightsSelect = $('[data-select="usageRights"]', form);
   const rightsList = $('[data-rights-list]', form);
   const syncUsageDays = () => {
@@ -437,7 +456,11 @@ async function start(form: HTMLFormElement) {
           audience: { ageFrom: Number(val('ageFrom')) || 0, ageTo: Number(val('ageTo')) || 0, gender: val('gender') || 'any', language: val('language') },
           minFollowers: parseNum(val('minFollowers')), requirements: val('requirements'), script: val('script'), barter: val('barter'), responseDays: Number(val('responseDays')) || 0,
           address: bizVal() === 'offline' ? val('address') : '', delivery: bizVal() === 'online' ? val('delivery') : '',
-          publications: (fmts?.value() ?? []).map((format) => ({ format, count: Number(val(`publication.${format}`)) || 1 })),
+          publications: (fmts?.value() ?? []).map((format) => {
+            const minCount = Number(val(`publicationMin.${format}`)) || 0;
+            const maxCount = Number(val(`publicationMax.${format}`)) || 0;
+            return { format, minCount, maxCount, count: maxCount };
+          }),
           usageRights: val('usageRights') || 'organic', usageDays: val('usageRights') === 'ads' ? Number(val('usageDays')) || 90 : 0,
           publishBy: isoDue(), publishTime: timeOk() ? val('publishTime') : '', blocks: blocks.value(),
           cover: cover.value()[0] ?? '', photos: photos.value(),
@@ -474,6 +497,8 @@ async function start(form: HTMLFormElement) {
       if (!(p.categories as string[]).length) out.set('categories', r('categories'));
       if (!p.nationwide && (p.city as string).length < 2) out.set('city', r('city'));
       if (!(p.formats as string[]).length) out.set('formats', r('formats'));
+      const publications = p.publications as PublicationState[];
+      if (publications.some((item) => item.minCount > item.maxCount)) out.set('formats', 'Публикации: «от» не может быть больше «до»');
       const gs = p.goals as GoalState[];
       if (!gs.length) out.set('goals', 'Выберите хотя бы одну цель');
       for (const g of gs) {
@@ -784,7 +809,7 @@ async function start(form: HTMLFormElement) {
   function renderReview() {
     const box = $('[data-review-summary]', form);
     if (!box) return;
-    const t = payload() as unknown as { title: string; city: string; nationwide: boolean; formats: string[]; goals: GoalState[]; publishBy: string; blocks: Block[]; barter: string; address: string; delivery: string; publications: { format: string; count: number }[]; usageRights: string; usageDays: number };
+    const t = payload() as unknown as { title: string; city: string; nationwide: boolean; formats: string[]; goals: GoalState[]; publishBy: string; blocks: Block[]; barter: string; address: string; delivery: string; publications: PublicationState[]; usageRights: string; usageDays: number };
     const row = (label: string, value: string) => h('div', { class: 'review-row' }, h('span', {}, label), h('strong', {}, value || '—'));
     const goalsEl = h('div', { class: 'review-goals' });
     t.goals.forEach((g) => {
@@ -807,7 +832,7 @@ async function start(form: HTMLFormElement) {
       row('Лимит бюджета', moneyKopecks(t.goals.reduce((sum, g) => sum + g.rewardKopecks, 0))),
       ...(t.address ? [row('Адрес', t.address)] : []),
       ...(t.delivery ? [row('Доставка', t.delivery)] : []),
-      ...(t.publications.length ? [row('Публикации', t.publications.map((p) => `${formatsTitle([p.format])}: ${p.count}`).join(' · '))] : []),
+      ...(t.publications.length ? [row('Публикации', t.publications.map((p) => `${formatsTitle([p.format])}: от ${p.minCount} до ${p.maxCount}`).join(' · '))] : []),
       row('Права', t.usageRights === 'ads' ? `Органика, репосты и реклама · ${t.usageDays} дней` : t.usageRights === 'reposts' ? 'Органика и репосты' : 'Только органика'),
       row('Срок', t.publishBy ? until(t.publishBy, val('publishTime')) : ''),
     );

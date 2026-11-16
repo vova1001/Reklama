@@ -1,7 +1,6 @@
 ---
-// Мои задания (бизнес): цветные переключатели сверху — активные (зелёный), просроченные (жёлтый, можно опубликовать
-// снова), заблокированные (красный — отклонил модератор), архивные (серый — убирает только владелец), черновики.
-// Переключатель оставляет свою секцию, «Все» — все; пустая секция видна с пометкой.
+// Мои задания (бизнес): по умолчанию показаны все; фильтры оставляют выбранный статус.
+// Для каждого статуса сохраняются свои действия; пустая секция видна с пометкой.
 import App from '../../../layouts/App.astro';
 import Icon from '../../../components/Icon.astro';
 import TaskItem from '../../../components/app/TaskItem.astro';
@@ -34,15 +33,16 @@ const sections = [
     </div>
   ) : (
     <div data-my class="tasks-board">
-      <div class="tasks-board-head"><h2>Статусы</h2><a class="btn pill-emerald" href="/app/tasks/new"><Icon name="plus" size={18} />Создать задание</a></div>
-      <div class="filt my-filt" role="group" aria-label="Статус заданий" data-filter>
+      <div class="tasks-board-head"><h2>Все задания</h2><a class="btn pill-emerald" href="/app/tasks/new"><Icon name="plus" size={18} />Создать задание</a></div>
+      <div class="filt my-filt" role="group" aria-label="Фильтр по статусу" data-filter>
+        <button type="button" aria-pressed="true" data-f="">Все</button>
         {sections.map((s) => (
           <button type="button" class={`is-${s.id}`} aria-pressed="false" data-f={s.id}>{s.title}</button>
         ))}
       </div>
       {sections.map((s) => (
-        <section class={`mysec is-${s.id}`} data-sec-list={s.id} hidden>
-          <div class="mysec-top"><h2 class="mysec-h">{s.title}</h2><button class="btn pill-text" type="button" data-back-status>← Назад ко статусам</button></div>
+        <section class={`mysec is-${s.id}`} data-sec-list={s.id}>
+          <div class="mysec-top"><h2 class="mysec-h">{s.title}</h2></div>
           {s.items.length === 0 ? (
             <p class="mysec-none">Пока пусто</p>
           ) : (

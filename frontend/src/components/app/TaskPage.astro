@@ -30,7 +30,7 @@ if (t.requirements) blocks.push({ kind: 'text', title: 'Требования к 
       </>;
     })}
     {t.formats.length > 0 && <div><dt><Icon name="video" size={18} />Форматы</dt><dd>{formatsTitle(t.formats)}</dd></div>}
-    {t.publications?.length > 0 && <div><dt><Icon name="list-checks" size={18} />Публикации</dt><dd>{t.publications.map((p) => `${formatsTitle([p.format])}: ${p.count}`).join(' · ')}</dd></div>}
+    {t.publications?.length > 0 && <div><dt><Icon name="list-checks" size={18} />Публикации</dt><dd>{t.publications.map((p) => `${formatsTitle([p.format])}: от ${p.minCount ?? p.count} до ${p.maxCount ?? p.count}`).join(' · ')}</dd></div>}
     {t.address && <div><dt><Icon name="map-pin" size={18} />Адрес</dt><dd>{t.address}</dd></div>}
     {t.delivery && <div><dt><Icon name="map-pin" size={18} />Доставка</dt><dd>{t.delivery}</dd></div>}
     <div><dt><Icon name="link" size={18} />Права</dt><dd>{t.usageRights === 'ads' ? `Органика, репосты и реклама · ${t.usageDays} дней` : t.usageRights === 'reposts' ? 'Органика и репосты' : 'Только органика'}</dd></div>

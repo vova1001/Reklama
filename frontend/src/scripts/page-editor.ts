@@ -342,7 +342,7 @@ async function start(form: HTMLFormElement) {
     }
     dirty = false;
     await sync.clear();
-    location.assign(`/app/page?kind=${kind}&sent=1`);
+    location.assign(form.dataset.embedded === 'true' ? '/app/profile?sent=1' : `/app/page?kind=${kind}&sent=1`);
   });
 
   $<HTMLAnchorElement>('[data-close]', form)?.addEventListener('click', async (e) => {

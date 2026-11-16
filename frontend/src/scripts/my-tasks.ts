@@ -1,6 +1,5 @@
-// Мои задания: цветные переключатели статусов (своя секция на весь экран, «Все» — все), действия — удалить
-// черновик/архивное (спрашиваем), вернуть с проверки, убрать в архив и вернуть, опубликовать просроченное снова
-// (в черновик и сразу на проверку).
+// Мои задания: по умолчанию видны все, фильтр показывает выбранный статус. Действия — удалить
+// черновик/архивное (спрашиваем), вернуть с проверки, убрать в архив и опубликовать просроченное снова.
 import { $, $$, api, busy } from '../lib/client';
 import { confirmDialog, guard, toast } from '../lib/ui';
 
@@ -15,13 +14,7 @@ if (filt && root) {
     const f = b.dataset.f!;
     selected = selected === f ? '' : f;
     $$<HTMLButtonElement>('button', filt).forEach((x) => x.setAttribute('aria-pressed', String(x.dataset.f === selected)));
-    $$<HTMLElement>('[data-sec-list]', root).forEach((s) => (s.hidden = !selected || s.dataset.secList !== selected));
-  });
-  root.addEventListener('click', (e) => {
-    if (!(e.target as HTMLElement).closest('[data-back-status]')) return;
-    selected = '';
-    $$<HTMLButtonElement>('button', filt).forEach((x) => x.setAttribute('aria-pressed', 'false'));
-    $$<HTMLElement>('[data-sec-list]', root).forEach((s) => (s.hidden = true));
+    $$<HTMLElement>('[data-sec-list]', root).forEach((s) => (s.hidden = !!selected && s.dataset.secList !== selected));
   });
 }
 

@@ -6,7 +6,7 @@
 import Icon from '../Icon.astro';
 import EditorBar from './EditorBar.astro';
 import ReviewNote from './ReviewNote.astro';
-import { PAGE_GROUPS, PAGE_START, PAGE_PATH } from '../../content/app';
+import { PAGE_GROUPS, PAGE_START, PAGE_PATH, PAGE_TITLE } from '../../content/app';
 import type { BusinessProfile, CategoryItem, CreatorProfile, PageKind, ProfilePage, User } from '../../lib/auth';
 interface Props {
   kind: PageKind;
@@ -16,8 +16,9 @@ interface Props {
   user: User;
   categories: { common: CategoryItem[]; own: CategoryItem[] };
   revision?: ProfilePage['revision'] | null;
+  embedded?: boolean;
 }
-const { kind, page: p, suggestedSlug, profile, user, categories, revision = null } = Astro.props;
+const { kind, page: p, suggestedSlug, profile, user, categories, revision = null, embedded = false } = Astro.props;
 const creator = kind === 'creator';
 const origin = (process.env.PUBLIC_URL ?? 'http://localhost:8000').replace(/\/+$/, '');
 const empty = (type: string) => ({ type, title: '', text: '', items: [], photos: [], videos: [], links: [], contacts: type === 'contacts' ? { city: profile?.city ?? '', address: '', hours: '', site: '', phone: '', socials: [] } : null });
@@ -38,9 +39,12 @@ const json = JSON.stringify(init).replace(/</g, '\\u003c');
 const G = PAGE_GROUPS;
 const published = p?.status === 'published';
 ---
-<form class={`ed${creator ? '' : ' biz-page'}`} novalidate autocomplete="off" data-page-editor={kind}>
+<form class={`ed${creator ? '' : ' biz-page'}${embedded ? ' is-embedded' : ''}`} novalidate autocomplete="off" data-page-editor={kind} data-embedded={embedded ? 'true' : 'false'}>
   <script type="application/json" data-init set:html={json} />
-  <EditorBar close={p ? `/app/page?kind=${kind}` : '/app/profile'} state={published ? 'Правка' : p ? 'Черновик' : 'Сохранится само'} />
+  {embedded ? <>
+    <div class="profile-editor-head"><div><h2>{PAGE_TITLE[kind]}</h2><p data-state aria-live="polite">{published ? 'Редактирование' : p ? 'Черновик сохранён' : 'Сохраняется автоматически'}</p></div><div class="tw-view" role="tablist" aria-label="Вид страницы"><button type="button" role="tab" aria-selected="true" data-view="edit">Редактирование</button><button type="button" role="tab" aria-selected="false" tabindex="-1" data-view="preview">Просмотр</button></div></div>
+    <p class="tw-left" data-left hidden></p>
+  </> : <EditorBar close={p ? `/app/page?kind=${kind}` : '/app/profile'} state={published ? 'Правка' : p ? 'Черновик' : 'Сохранится само'} />}
 
   <div class="ed-col">
     {published && <p class="banner" role="note"><Icon name="eye" size={20} /><span>Правка страницы: пока её не проверят, все видят прежнюю версию.</span></p>}
@@ -102,5 +106,6 @@ const published = p?.status === 'published';
 
     <div data-pane="preview" hidden><div class="pv" data-preview></div></div>
   </div>
+  {embedded && <div class="profile-editor-actions"><p>Проверьте страницу перед публикацией.</p><button class="btn pill-emerald" type="button" data-submit>Опубликовать</button></div>}
 </form>
 <script src="../../scripts/page-editor.ts"></script>
