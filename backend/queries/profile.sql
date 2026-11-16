@@ -11,10 +11,10 @@ SELECT * FROM business_profiles WHERE user_id = $1;
 SELECT * FROM creator_profiles WHERE user_id = $1;
 
 -- name: UpsertBusinessProfile :one
-INSERT INTO business_profiles (user_id, name, city, spheres)
-VALUES ($1, $2, $3, $4)
+INSERT INTO business_profiles (user_id, name, city, spheres, inn)
+VALUES ($1, $2, $3, $4, $5)
 ON CONFLICT (user_id) DO UPDATE
-SET name = EXCLUDED.name, city = EXCLUDED.city, spheres = EXCLUDED.spheres, updated_at = now()
+SET name = EXCLUDED.name, city = EXCLUDED.city, spheres = EXCLUDED.spheres, inn = EXCLUDED.inn, updated_at = now()
 RETURNING *;
 
 -- name: UpsertCreatorProfile :one

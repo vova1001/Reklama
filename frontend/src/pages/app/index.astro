@@ -30,7 +30,6 @@ const filtered = !!(q.category.length || q.city || q.format.length);
   <section aria-labelledby="feed-t" class="feed">
     <div class="head">
       <h1 id="feed-t">{isCreator ? 'Задания' : 'Авторы'}</h1>
-      {!isCreator && <a class="btn pill-emerald" href="/app/tasks/new" data-create-task><Icon name="plus" size={20} />Создать задание</a>}
     </div>
     <FeedFilters kind={isCreator ? 'tasks' : 'cards'} categories={categories.common} category={q.category} city={q.city} format={q.format} />
 

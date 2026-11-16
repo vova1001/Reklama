@@ -38,6 +38,7 @@ type BusinessProfile struct {
 	Spheres   []string
 	CreatedAt pgtype.Timestamptz
 	UpdatedAt pgtype.Timestamptz
+	Inn       string
 }
 
 type Category struct {

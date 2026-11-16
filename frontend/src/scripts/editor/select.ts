@@ -51,7 +51,7 @@ export class SelectCombobox {
       }
     });
     document.addEventListener('click', (e) => {
-      if (!list.contains(e.target as Node) && e.target !== button) close();
+      if (!list.contains(e.target as Node) && !button.contains(e.target as Node)) close();
     });
     highlight();
   }

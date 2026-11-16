@@ -31,7 +31,10 @@ const picks = [
   })}
   <label class="ff-city" data-on={city ? '1' : undefined}>
     <Icon name="map-pin" size={16} />
-    <input name="city" value={city} maxlength="80" placeholder="Город" aria-label="Город" autocomplete="address-level2" enterkeyhint="search" />
+    <div class="city-box">
+      <input id="feed-city" name="city" value={city} maxlength="80" placeholder="Город" aria-label="Город" autocomplete="address-level2" enterkeyhint="search" role="combobox" aria-expanded="false" aria-controls="feed-cities" />
+      <ul class="cb-list city-list" id="feed-cities" role="listbox" hidden data-city-list></ul>
+    </div>
     {city && <a class="ff-x" href="/app" aria-label="Сбросить город" data-clear-city><Icon name="x" size={14} /></a>}
   </label>
   <span class="ff-sort"><Icon name="clock" size={16} />Новые</span>

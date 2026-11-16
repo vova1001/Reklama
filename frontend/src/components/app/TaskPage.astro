@@ -30,6 +30,10 @@ if (t.requirements) blocks.push({ kind: 'text', title: 'Требования к 
       </>;
     })}
     {t.formats.length > 0 && <div><dt><Icon name="video" size={18} />Форматы</dt><dd>{formatsTitle(t.formats)}</dd></div>}
+    {t.publications?.length > 0 && <div><dt><Icon name="list-checks" size={18} />Публикации</dt><dd>{t.publications.map((p) => `${formatsTitle([p.format])}: ${p.count}`).join(' · ')}</dd></div>}
+    {t.address && <div><dt><Icon name="map-pin" size={18} />Адрес</dt><dd>{t.address}</dd></div>}
+    {t.delivery && <div><dt><Icon name="map-pin" size={18} />Доставка</dt><dd>{t.delivery}</dd></div>}
+    <div><dt><Icon name="link" size={18} />Права</dt><dd>{t.usageRights === 'ads' ? `Органика, репосты и реклама · ${t.usageDays} дней` : t.usageRights === 'reposts' ? 'Органика и репосты' : 'Только органика'}</dd></div>
     {t.publishBy && <div><dt><Icon name="calendar" size={18} />Срок</dt><dd>{until(t.publishBy, t.publishTime)}</dd></div>}
     {t.minFollowers > 0 && <div><dt><Icon name="users" size={18} />Автор</dt><dd>От {t.minFollowers.toLocaleString('ru-RU')} подписчиков{t.responseDays ? ` · ответ за ${t.responseDays} дн.` : ''}</dd></div>}
     <div><dt><Icon name={t.access === 'approval' ? 'user-round-check' : 'zap'} size={18} />Кто берёт</dt><dd>{t.access === 'approval' ? 'С одобрения бизнеса' : 'Первый подходящий'}</dd></div>

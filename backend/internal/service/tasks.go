@@ -486,6 +486,9 @@ func (s *Tasks) shape(ctx context.Context, userID, id int64, in TaskInput) (doma
 	t.Details.Requirements = squash(t.Details.Requirements)
 	t.Details.Script = squash(t.Details.Script)
 	t.Details.Barter = squash(t.Details.Barter)
+	t.Details.Address = squash(t.Details.Address)
+	t.Details.Delivery = squash(t.Details.Delivery)
+	t.Details.UsageRights = squash(t.Details.UsageRights)
 	t.Details.Audience.Gender = squash(t.Details.Audience.Gender)
 	t.Details.Audience.Language = squash(t.Details.Audience.Language)
 	for i := range t.Details.Goals {
@@ -558,6 +561,22 @@ func (s *Tasks) shape(ctx context.Context, userID, id int64, in TaskInput) (doma
 	maxLen(ve, "requirements", t.Details.Requirements, 5000, "Требования — до 5000 символов")
 	maxLen(ve, "script", t.Details.Script, 10000, "Сценарий — до 10000 символов")
 	maxLen(ve, "barter", t.Details.Barter, 2000, "Условия бартера — до 2000 символов")
+	maxLen(ve, "address", t.Details.Address, 300, "Адрес — до 300 символов")
+	maxLen(ve, "delivery", t.Details.Delivery, 300, "Доставка — до 300 символов")
+	if t.Details.UsageRights != "" && t.Details.UsageRights != "organic" && t.Details.UsageRights != "reposts" && t.Details.UsageRights != "ads" {
+		ve.add("usageRights", "Выберите права использования из списка")
+	}
+	if t.Details.UsageDays < 0 || t.Details.UsageDays > 3650 {
+		ve.add("usageDays", "Срок использования — до 3650 дней")
+	}
+	if len(t.Details.Publications) > 10 {
+		ve.add("publications", "Площадок — не больше десяти")
+	}
+	for _, p := range t.Details.Publications {
+		if p.Count < 0 || p.Count > 100 {
+			ve.add("publications", "Публикаций по площадке — до 100")
+		}
+	}
 	maxLen(ve, "language", t.Details.Audience.Language, 60, "Язык — до 60 символов")
 	if t.Details.Audience.Gender != "" && t.Details.Audience.Gender != "any" && t.Details.Audience.Gender != "female" && t.Details.Audience.Gender != "male" {
 		ve.add("audience", "Выберите аудиторию из списка")

@@ -34,31 +34,41 @@ type taskAudienceDTO struct {
 	Language string `json:"language"`
 }
 
+type taskPublicationDTO struct {
+	Format string `json:"format"`
+	Count  int    `json:"count"`
+}
+
 type taskIn struct {
-	Title         string          `json:"title"`
-	City          string          `json:"city"`
-	Nationwide    bool            `json:"nationwide"`
-	Categories    []string        `json:"categories"`
-	Formats       []string        `json:"formats"`
-	Access        string          `json:"access"`
-	Goal          string          `json:"goal"`
-	Link          string          `json:"link"`
-	MinViews      int64           `json:"minViews"`
-	RewardKopecks int64           `json:"rewardKopecks"`
-	PublishBy     string          `json:"publishBy"`
-	PublishTime   string          `json:"publishTime"`
-	Blocks        []blockDTO      `json:"blocks"`
-	Cover         string          `json:"cover"`
-	Photos        []string        `json:"photos"`
-	Videos        []string        `json:"videos"`
-	BizType       string          `json:"bizType"`
-	Goals         []taskGoalDTO   `json:"goals"`
-	Audience      taskAudienceDTO `json:"audience"`
-	MinFollowers  int64           `json:"minFollowers"`
-	Requirements  string          `json:"requirements"`
-	Script        string          `json:"script"`
-	Barter        string          `json:"barter"`
-	ResponseDays  int             `json:"responseDays"`
+	Title         string               `json:"title"`
+	City          string               `json:"city"`
+	Nationwide    bool                 `json:"nationwide"`
+	Categories    []string             `json:"categories"`
+	Formats       []string             `json:"formats"`
+	Access        string               `json:"access"`
+	Goal          string               `json:"goal"`
+	Link          string               `json:"link"`
+	MinViews      int64                `json:"minViews"`
+	RewardKopecks int64                `json:"rewardKopecks"`
+	PublishBy     string               `json:"publishBy"`
+	PublishTime   string               `json:"publishTime"`
+	Blocks        []blockDTO           `json:"blocks"`
+	Cover         string               `json:"cover"`
+	Photos        []string             `json:"photos"`
+	Videos        []string             `json:"videos"`
+	BizType       string               `json:"bizType"`
+	Goals         []taskGoalDTO        `json:"goals"`
+	Audience      taskAudienceDTO      `json:"audience"`
+	MinFollowers  int64                `json:"minFollowers"`
+	Requirements  string               `json:"requirements"`
+	Script        string               `json:"script"`
+	Barter        string               `json:"barter"`
+	ResponseDays  int                  `json:"responseDays"`
+	Address       string               `json:"address"`
+	Delivery      string               `json:"delivery"`
+	Publications  []taskPublicationDTO `json:"publications"`
+	UsageRights   string               `json:"usageRights"`
+	UsageDays     int                  `json:"usageDays"`
 }
 
 type cardIn struct {
@@ -79,41 +89,46 @@ type photoDTO struct {
 }
 
 type taskDTO struct {
-	ID             int64           `json:"id"`
-	Status         string          `json:"status"`
-	RejectReason   string          `json:"rejectReason"`
-	Title          string          `json:"title"`
-	City           string          `json:"city"`
-	Nationwide     bool            `json:"nationwide"`
-	Categories     []string        `json:"categories"`
-	CategoryTitles []string        `json:"categoryTitles,omitempty"`
-	Formats        []string        `json:"formats"`
-	Access         string          `json:"access"`
-	Goal           string          `json:"goal"`
-	Link           string          `json:"link"`
-	MinViews       int64           `json:"minViews"`
-	RewardKopecks  int64           `json:"rewardKopecks"`
-	PublishBy      *string         `json:"publishBy"`
-	PublishTime    string          `json:"publishTime"`
-	DeadlineAt     *time.Time      `json:"deadlineAt"`
-	Blocks         []blockDTO      `json:"blocks"`
-	Cover          *photoDTO       `json:"cover"`
-	Photos         []photoDTO      `json:"photos"`
-	Videos         []videoDTO      `json:"videos"`
-	BizType        string          `json:"bizType"`
-	Goals          []taskGoalDTO   `json:"goals"`
-	Audience       taskAudienceDTO `json:"audience"`
-	MinFollowers   int64           `json:"minFollowers"`
-	Requirements   string          `json:"requirements"`
-	Script         string          `json:"script"`
-	Barter         string          `json:"barter"`
-	ResponseDays   int             `json:"responseDays"`
-	Brand          string          `json:"brand,omitempty"`
-	BrandSlug      string          `json:"brandSlug,omitempty"` // адрес страницы бизнеса /b/<slug>
-	CreatedAt      time.Time       `json:"createdAt"`
-	UpdatedAt      time.Time       `json:"updatedAt"`
-	SubmittedAt    *time.Time      `json:"submittedAt"`
-	PublishedAt    *time.Time      `json:"publishedAt"`
+	ID             int64                `json:"id"`
+	Status         string               `json:"status"`
+	RejectReason   string               `json:"rejectReason"`
+	Title          string               `json:"title"`
+	City           string               `json:"city"`
+	Nationwide     bool                 `json:"nationwide"`
+	Categories     []string             `json:"categories"`
+	CategoryTitles []string             `json:"categoryTitles,omitempty"`
+	Formats        []string             `json:"formats"`
+	Access         string               `json:"access"`
+	Goal           string               `json:"goal"`
+	Link           string               `json:"link"`
+	MinViews       int64                `json:"minViews"`
+	RewardKopecks  int64                `json:"rewardKopecks"`
+	PublishBy      *string              `json:"publishBy"`
+	PublishTime    string               `json:"publishTime"`
+	DeadlineAt     *time.Time           `json:"deadlineAt"`
+	Blocks         []blockDTO           `json:"blocks"`
+	Cover          *photoDTO            `json:"cover"`
+	Photos         []photoDTO           `json:"photos"`
+	Videos         []videoDTO           `json:"videos"`
+	BizType        string               `json:"bizType"`
+	Goals          []taskGoalDTO        `json:"goals"`
+	Audience       taskAudienceDTO      `json:"audience"`
+	MinFollowers   int64                `json:"minFollowers"`
+	Requirements   string               `json:"requirements"`
+	Script         string               `json:"script"`
+	Barter         string               `json:"barter"`
+	ResponseDays   int                  `json:"responseDays"`
+	Address        string               `json:"address"`
+	Delivery       string               `json:"delivery"`
+	Publications   []taskPublicationDTO `json:"publications"`
+	UsageRights    string               `json:"usageRights"`
+	UsageDays      int                  `json:"usageDays"`
+	Brand          string               `json:"brand,omitempty"`
+	BrandSlug      string               `json:"brandSlug,omitempty"` // адрес страницы бизнеса /b/<slug>
+	CreatedAt      time.Time            `json:"createdAt"`
+	UpdatedAt      time.Time            `json:"updatedAt"`
+	SubmittedAt    *time.Time           `json:"submittedAt"`
+	PublishedAt    *time.Time           `json:"publishedAt"`
 	// ReviewNotes — замечания модератора по полям (на доработке); Revision — правка опубликованного.
 	ReviewNotes map[string]string `json:"reviewNotes,omitempty"`
 	Revision    *taskRevisionDTO  `json:"revision,omitempty"`
@@ -269,12 +284,28 @@ func taskGoalsOut(in []domain.TaskGoal) []taskGoalDTO {
 	return out
 }
 
+func publicationsIn(in []taskPublicationDTO) []domain.TaskPublication {
+	out := make([]domain.TaskPublication, 0, len(in))
+	for _, p := range in {
+		out = append(out, domain.TaskPublication{Format: p.Format, Count: p.Count})
+	}
+	return out
+}
+
+func publicationsOut(in []domain.TaskPublication) []taskPublicationDTO {
+	out := make([]taskPublicationDTO, 0, len(in))
+	for _, p := range in {
+		out = append(out, taskPublicationDTO{Format: p.Format, Count: p.Count})
+	}
+	return out
+}
+
 func (in taskIn) toService() service.TaskInput {
 	return service.TaskInput{
 		Title: in.Title, City: in.City, Nationwide: in.Nationwide, Categories: in.Categories, Formats: in.Formats,
 		Access: in.Access, Goal: in.Goal, Link: in.Link, MinViews: in.MinViews, RewardKopecks: in.RewardKopecks,
 		PublishBy: in.PublishBy, PublishTime: in.PublishTime, Blocks: blocksIn(in.Blocks), Cover: in.Cover, Photos: in.Photos, Videos: in.Videos,
-		Details: domain.TaskDetails{BizType: in.BizType, Goals: taskGoalsIn(in.Goals), Audience: domain.TaskAudience{AgeFrom: in.Audience.AgeFrom, AgeTo: in.Audience.AgeTo, Gender: in.Audience.Gender, Language: in.Audience.Language}, MinFollowers: in.MinFollowers, Requirements: in.Requirements, Script: in.Script, Barter: in.Barter, ResponseDays: in.ResponseDays},
+		Details: domain.TaskDetails{BizType: in.BizType, Goals: taskGoalsIn(in.Goals), Audience: domain.TaskAudience{AgeFrom: in.Audience.AgeFrom, AgeTo: in.Audience.AgeTo, Gender: in.Audience.Gender, Language: in.Audience.Language}, MinFollowers: in.MinFollowers, Requirements: in.Requirements, Script: in.Script, Barter: in.Barter, ResponseDays: in.ResponseDays, Address: in.Address, Delivery: in.Delivery, Publications: publicationsIn(in.Publications), UsageRights: in.UsageRights, UsageDays: in.UsageDays},
 	}
 }
 
@@ -317,7 +348,7 @@ func toTaskDTO(t domain.Task) taskDTO {
 		Categories: nonNilStr(t.Categories), CategoryTitles: t.CategoryTitles, Formats: nonNilStr(t.Formats), Access: t.Access,
 		Goal: t.Goal, Link: t.Link, MinViews: t.MinViews, RewardKopecks: t.RewardKopecks, PublishBy: by, PublishTime: t.PublishTime, DeadlineAt: utcPtr(t.DeadlineAt), Blocks: toBlocksDTO(t.Blocks),
 		Cover: photo(t.Cover), Photos: photos(t.Photos), Videos: videosOf(t.Videos), Brand: t.Brand, BrandSlug: t.BrandSlug,
-		BizType: t.Details.BizType, Goals: taskGoalsOut(t.Details.Goals), Audience: taskAudienceDTO{AgeFrom: t.Details.Audience.AgeFrom, AgeTo: t.Details.Audience.AgeTo, Gender: t.Details.Audience.Gender, Language: t.Details.Audience.Language}, MinFollowers: t.Details.MinFollowers, Requirements: t.Details.Requirements, Script: t.Details.Script, Barter: t.Details.Barter, ResponseDays: t.Details.ResponseDays,
+		BizType: t.Details.BizType, Goals: taskGoalsOut(t.Details.Goals), Audience: taskAudienceDTO{AgeFrom: t.Details.Audience.AgeFrom, AgeTo: t.Details.Audience.AgeTo, Gender: t.Details.Audience.Gender, Language: t.Details.Audience.Language}, MinFollowers: t.Details.MinFollowers, Requirements: t.Details.Requirements, Script: t.Details.Script, Barter: t.Details.Barter, ResponseDays: t.Details.ResponseDays, Address: t.Details.Address, Delivery: t.Details.Delivery, Publications: publicationsOut(t.Details.Publications), UsageRights: t.Details.UsageRights, UsageDays: t.Details.UsageDays,
 		CreatedAt: t.CreatedAt.UTC(), UpdatedAt: t.UpdatedAt.UTC(), SubmittedAt: utcPtr(t.SubmittedAt), PublishedAt: utcPtr(t.PublishedAt),
 	}
 	if len(t.ReviewNotes) > 0 {

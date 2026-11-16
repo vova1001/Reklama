@@ -1,70 +1,67 @@
 ---
-// Профиль: общие данные и публичные страницы. Режим переключается только в основной навигации.
+// Профиль и публичная страница — только текущий режим; переключатель меняет страницу целиком.
 import App from '../../layouts/App.astro';
 import Icon from '../../components/Icon.astro';
 import Avatar from '../../components/Avatar.astro';
 import { FORM_GROUPS } from '../../content/app';
-import { fetchMyPage } from '../../lib/auth';
+import { fetchMyPage, fetchProfiles } from '../../lib/auth';
 import { PAGE_PATH, PAGE_TITLE, STATUS } from '../../content/app';
+import { getHome, type Category } from '../../lib/api';
 
 const me = Astro.locals.me;
 if (!me) return Astro.redirect('/login', 303);
 const u = me.user;
-const [bizPage, crePage] = await Promise.all([fetchMyPage(Astro.request, 'business'), fetchMyPage(Astro.request, 'creator')]);
-const pages = ([['business', bizPage?.page ?? null], ['creator', crePage?.page ?? null]] as const);
+const businessMode = u.mode === 'business';
+const [{ business }, pageResult, categories] = await Promise.all([
+  fetchProfiles(Astro.request),
+  fetchMyPage(Astro.request, u.mode),
+  businessMode ? getHome().then((h) => h.categories).catch((): Category[] => []) : Promise.resolve([]),
+]);
+const page = pageResult?.page ?? null;
+const spheres = new Set(business?.spheres ?? []);
 const G = FORM_GROUPS.profile;
 ---
 <App title="Профиль" page="profile">
-  <div class="head">
-    <h1>Профиль</h1>
-    <button class="btn pill-ghost" type="button" data-logout><Icon name="log-out" size={20} />Выйти</button>
-  </div>
+  <div class="head"><h1>Профиль</h1><button class="btn pill-ghost" type="button" data-logout><Icon name="log-out" size={20} />Выйти</button></div>
 
   <section class="sec" aria-labelledby="basics-t">
     <div class="who">
       <div class="ava-up" data-avatar data-photo={u.avatarUrl.startsWith('/media/') ? u.avatarUrl : ''}><Avatar user={u} size={64} /></div>
-      <div>
-        <h2 id="basics-t" class="grp-h">{G.basics.title}</h2>
-        <p class="grp-d">{G.basics.hint}</p>
-        <p class="muted">{u.email ?? 'Почта не указана'}</p>
-      </div>
+      <div><h2 id="basics-t" class="grp-h">{G.basics.title}</h2><p class="grp-d">{G.basics.hint}</p><p class="muted">{u.email ?? 'Почта не указана'}</p></div>
     </div>
     <form class="form" novalidate data-form="basics">
       <div class="row2">
-        <div class="field">
-          <label class="lbl" for="b-name">Как вас называть</label>
-          <input class="inp" id="b-name" name="name" autocomplete="name" maxlength="80" value={u.name} aria-describedby="b-name-err" data-input="name" />
-          <p class="ferr" id="b-name-err" data-err="name" aria-live="polite"></p>
-        </div>
-        <div class="field">
-          <label class="lbl" for="b-city">Город</label>
-          <div class="city-box">
-            <input class="inp" id="b-city" name="city" autocomplete="address-level2" maxlength="80" value={u.city} placeholder="Например, Казань" aria-describedby="b-city-err" role="combobox" aria-expanded="false" aria-controls="b-cities" data-input="city" />
-            <ul class="cb-list city-list" id="b-cities" role="listbox" hidden data-city-list></ul>
-          </div>
-          <p class="ferr" id="b-city-err" data-err="city" aria-live="polite"></p>
-        </div>
+        <div class="field"><label class="lbl" for="b-name">Как вас называть</label><input class="inp" id="b-name" name="name" autocomplete="name" maxlength="80" value={u.name} aria-describedby="b-name-err" data-input="name" /><p class="ferr" id="b-name-err" data-err="name" aria-live="polite"></p></div>
+        <div class="field"><label class="lbl" for="b-city">Город</label><div class="city-box"><input class="inp" id="b-city" name="city" autocomplete="address-level2" maxlength="80" value={u.city} placeholder="Например, Казань" aria-describedby="b-city-err" role="combobox" aria-expanded="false" aria-controls="b-cities" data-input="city" /><ul class="cb-list city-list" id="b-cities" role="listbox" hidden data-city-list></ul></div><p class="ferr" id="b-city-err" data-err="city" aria-live="polite"></p></div>
       </div>
       <p class="ferr" data-err="form" role="alert"></p>
       <div class="form-act"><button class="btn pill-dark" type="submit" data-submit><span>Сохранить</span></button><p class="saved" role="status" data-saved></p></div>
     </form>
   </section>
 
-  <section class="sec" aria-labelledby="pages-t">
-    <h2 id="pages-t" class="grp-h">Страницы</h2>
-    <p class="grp-d">Витрина бизнеса и профиль автора — по ссылке для всех</p>
-    <ul class="rows pg-rows">
-      {pages.map(([k, pg]) => (
-        <li data-my-page={k}>
-          <Icon name={k === 'business' ? 'store' : 'user-round'} size={20} />
-          <div>
-            <p class="row-t">{PAGE_TITLE[k]}</p>
-            <p class="row-s">{pg ? <><span class="st" data-s={pg.status}>{STATUS[pg.status]}</span>{pg.status === 'published' && <> · <a href={`${PAGE_PATH[k]}${pg.slug}`}>{PAGE_PATH[k]}{pg.slug}</a></>}</> : 'Ещё не оформлена'}</p>
-          </div>
-          <a class="btn pill-ghost" href={`/app/page?kind=${k}`}>{pg ? 'Открыть' : 'Оформить'}</a>
-        </li>
-      ))}
-    </ul>
+  {businessMode && <section class="sec" aria-labelledby="company-t">
+    <h2 id="company-t" class="grp-h">Компания</h2>
+    <p class="grp-d">Контакты, описание, фото и адрес страницы — в редакторе ниже.</p>
+    <form class="form" novalidate data-form="business">
+      <div class="row2">
+        <div class="field"><label class="lbl" for="bz-name">Название</label><input class="inp" id="bz-name" name="name" autocomplete="organization" maxlength="80" value={business?.name ?? ''} placeholder="Кофейня «Зерно»" data-input="name" /><p class="ferr" data-err="name"></p></div>
+        <div class="field"><label class="lbl" for="bz-city">Город</label><div class="city-box"><input class="inp" id="bz-city" name="city" maxlength="80" value={business?.city ?? u.city} placeholder="Казань" role="combobox" aria-expanded="false" aria-controls="bz-cities" data-input="city" /><ul class="cb-list city-list" id="bz-cities" role="listbox" hidden data-city-list></ul></div><p class="ferr" data-err="city"></p></div>
+      </div>
+      <div class="field"><label class="lbl" for="bz-inn">ИНН <span class="hint">· необязательно, 10 или 12 цифр</span></label><input class="inp" id="bz-inn" name="inn" inputmode="numeric" maxlength="12" value={business?.inn ?? ''} placeholder="1234567890" data-input="inn" /><p class="ferr" data-err="inn"></p></div>
+      <div class="field"><span class="lbl">Сферы <span class="hint">· до 5</span></span><div class="chips" role="group" data-spheres>{categories.map((c) => <button type="button" class="chip" aria-pressed={spheres.has(c.slug) ? 'true' : 'false'} data-slug={c.slug}><Icon name={c.icon} size={18} />{c.title}</button>)}</div><p class="ferr" data-err="spheres"></p></div>
+      <p class="ferr" data-err="form" role="alert"></p>
+      <div class="form-act"><button class="btn pill-dark" type="submit" data-submit><span>Сохранить</span></button><p class="saved" role="status" data-saved></p></div>
+    </form>
+  </section>}
+
+  <section class="sec" aria-labelledby="page-t">
+    <h2 id="page-t" class="grp-h">{PAGE_TITLE[u.mode]}</h2>
+    <p class="grp-d">{businessMode ? 'Логотип, описание, контакты, адрес и ссылки компании' : 'Фото, описание и примеры работ автора'}</p>
+    <ul class="rows pg-rows"><li data-my-page={u.mode}>
+      <Icon name={businessMode ? 'store' : 'user-round'} size={20} />
+      <div><p class="row-t">{PAGE_TITLE[u.mode]}</p><p class="row-s">{page ? <><span class="st" data-s={page.status}>{STATUS[page.status]}</span>{page.status === 'published' && <> · <a href={`${PAGE_PATH[u.mode]}${page.slug}`}>{PAGE_PATH[u.mode]}{page.slug}</a></>}</> : 'Ещё не оформлена'}</p></div>
+      <a class="btn pill-ghost" href={`/app/page?kind=${u.mode}`}>{page ? 'Редактировать' : 'Оформить'}</a>
+    </li></ul>
   </section>
 </App>
 <script src="../../scripts/avatar.ts"></script>

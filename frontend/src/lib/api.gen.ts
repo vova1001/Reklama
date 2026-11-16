@@ -1846,6 +1846,8 @@ export interface components {
             city: string;
             /** @description slug тем */
             spheres: string[];
+            /** @description Необязательный ИНН: 10 или 12 цифр */
+            inn?: string;
         };
         CreatorProfileInput: {
             /** @description Имя или псевдоним */
@@ -1860,6 +1862,7 @@ export interface components {
             name: string;
             city: string;
             spheres: string[];
+            inn?: string;
             /** Format: date-time */
             updatedAt: string;
         };
@@ -1953,6 +1956,10 @@ export interface components {
             /** @description Уже использован бизнесом */
             own: boolean;
         };
+        TaskPublication: {
+            format: string;
+            count: number;
+        };
         TaskGoal: {
             /** @enum {string} */
             goal: "views" | "subscribers" | "clicks" | "guests" | "barter";
@@ -2031,6 +2038,14 @@ export interface components {
             /** @description Что получит автор; обязательно при выбранном бартере */
             barter?: string;
             responseDays?: number;
+            /** @description Адрес офлайн-точки */
+            address?: string;
+            /** @description Условия и география доставки онлайн-товара */
+            delivery?: string;
+            publications?: components["schemas"]["TaskPublication"][];
+            /** @enum {string} */
+            usageRights?: "organic" | "reposts" | "ads" | "";
+            usageDays?: number;
         };
         Task: {
             /** Format: int64 */
@@ -2084,6 +2099,12 @@ export interface components {
             script: string;
             barter: string;
             responseDays: number;
+            address?: string;
+            delivery?: string;
+            publications?: components["schemas"]["TaskPublication"][];
+            /** @enum {string} */
+            usageRights?: "organic" | "reposts" | "ads" | "";
+            usageDays?: number;
             /** @description Название бизнеса (только в ленте) */
             brand?: string;
             /** @description Адрес опубликованной страницы бизнеса (/b/<slug>); нет — не приходит */

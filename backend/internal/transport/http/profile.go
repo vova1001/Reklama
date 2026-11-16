@@ -60,7 +60,7 @@ func (s *Server) putBusiness(w http.ResponseWriter, r *http.Request) {
 	if !decode(w, r, &in) {
 		return
 	}
-	p, err := s.profiles.SaveBusiness(r.Context(), currentUser(r), domain.BusinessProfile{Name: in.Name, City: in.City, Spheres: in.Spheres})
+	p, err := s.profiles.SaveBusiness(r.Context(), currentUser(r), domain.BusinessProfile{Name: in.Name, City: in.City, Spheres: in.Spheres, INN: in.INN})
 	if err != nil {
 		s.fail(w, r, err)
 		return

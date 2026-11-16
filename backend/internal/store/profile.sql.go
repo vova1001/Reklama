@@ -21,7 +21,7 @@ func (q *Queries) CountActiveCategories(ctx context.Context, slugs []string) (in
 }
 
 const getBusinessProfile = `-- name: GetBusinessProfile :one
-SELECT user_id, name, city, spheres, created_at, updated_at FROM business_profiles WHERE user_id = $1
+SELECT user_id, name, city, spheres, created_at, updated_at, inn FROM business_profiles WHERE user_id = $1
 `
 
 func (q *Queries) GetBusinessProfile(ctx context.Context, userID int64) (BusinessProfile, error) {
@@ -34,6 +34,7 @@ func (q *Queries) GetBusinessProfile(ctx context.Context, userID int64) (Busines
 		&i.Spheres,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Inn,
 	)
 	return i, err
 }
@@ -91,11 +92,11 @@ func (q *Queries) SetUserMode(ctx context.Context, arg SetUserModeParams) (User,
 }
 
 const upsertBusinessProfile = `-- name: UpsertBusinessProfile :one
-INSERT INTO business_profiles (user_id, name, city, spheres)
-VALUES ($1, $2, $3, $4)
+INSERT INTO business_profiles (user_id, name, city, spheres, inn)
+VALUES ($1, $2, $3, $4, $5)
 ON CONFLICT (user_id) DO UPDATE
-SET name = EXCLUDED.name, city = EXCLUDED.city, spheres = EXCLUDED.spheres, updated_at = now()
-RETURNING user_id, name, city, spheres, created_at, updated_at
+SET name = EXCLUDED.name, city = EXCLUDED.city, spheres = EXCLUDED.spheres, inn = EXCLUDED.inn, updated_at = now()
+RETURNING user_id, name, city, spheres, created_at, updated_at, inn
 `
 
 type UpsertBusinessProfileParams struct {
@@ -103,6 +104,7 @@ type UpsertBusinessProfileParams struct {
 	Name    string
 	City    string
 	Spheres []string
+	Inn     string
 }
 
 func (q *Queries) UpsertBusinessProfile(ctx context.Context, arg UpsertBusinessProfileParams) (BusinessProfile, error) {
@@ -111,6 +113,7 @@ func (q *Queries) UpsertBusinessProfile(ctx context.Context, arg UpsertBusinessP
 		arg.Name,
 		arg.City,
 		arg.Spheres,
+		arg.Inn,
 	)
 	var i BusinessProfile
 	err := row.Scan(
@@ -120,6 +123,7 @@ func (q *Queries) UpsertBusinessProfile(ctx context.Context, arg UpsertBusinessP
 		&i.Spheres,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Inn,
 	)
 	return i, err
 }

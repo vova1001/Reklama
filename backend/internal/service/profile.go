@@ -172,6 +172,10 @@ func (s *Profiles) SaveBusiness(ctx context.Context, u domain.User, p domain.Bus
 	checkLen(ve, "name", p.Name, 2, 80, "Название — от 2 до 80 символов")
 	checkLen(ve, "city", p.City, 2, 80, "Город — от 2 до 80 символов")
 	p.Spheres = checkSpheres(ve, p.Spheres)
+	p.INN = squash(p.INN)
+	if p.INN != "" && (len(p.INN) != 10 && len(p.INN) != 12 || !regexp.MustCompile(`^\d+$`).MatchString(p.INN)) {
+		ve.add("inn", "ИНН — 10 или 12 цифр")
+	}
 	if err := ve.orNil(); err != nil {
 		return domain.BusinessProfile{}, err
 	}

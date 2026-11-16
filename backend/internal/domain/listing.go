@@ -148,15 +148,25 @@ type TaskAudience struct {
 	Language string `json:"language"`
 }
 
+type TaskPublication struct {
+	Format string `json:"format"`
+	Count  int    `json:"count"`
+}
+
 type TaskDetails struct {
-	BizType      string       `json:"bizType"`
-	Goals        []TaskGoal   `json:"goals"`
-	Audience     TaskAudience `json:"audience"`
-	MinFollowers int64        `json:"minFollowers"`
-	Requirements string       `json:"requirements"`
-	Script       string       `json:"script"`
-	Barter       string       `json:"barter"`
-	ResponseDays int          `json:"responseDays"`
+	BizType      string            `json:"bizType"`
+	Goals        []TaskGoal        `json:"goals"`
+	Audience     TaskAudience      `json:"audience"`
+	MinFollowers int64             `json:"minFollowers"`
+	Requirements string            `json:"requirements"`
+	Script       string            `json:"script"`
+	Barter       string            `json:"barter"`
+	ResponseDays int               `json:"responseDays"`
+	Address      string            `json:"address"`
+	Delivery     string            `json:"delivery"`
+	Publications []TaskPublication `json:"publications"`
+	UsageRights  string            `json:"usageRights"`
+	UsageDays    int               `json:"usageDays"`
 }
 
 // Task — задание бизнеса.

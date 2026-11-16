@@ -51,7 +51,7 @@ async function setMode(mode: Mode) {
   // страница одного режима (редактор задания, анкета) в другом не нужна — в ленту
   const only = app.dataset.pageMode;
   if (only && only !== mode) return location.assign('/app');
-  if (app.dataset.page === 'feed') return location.reload();
+  if (app.dataset.page === 'feed' || app.dataset.page === 'profile') return location.reload();
   toast(`Режим: ${MODE_TITLE[mode]}`);
 }
 
@@ -263,6 +263,7 @@ function initForms() {
       const name = $<HTMLInputElement>('[name="name"]', form)!.value.trim();
       const city = $<HTMLInputElement>('[name="city"]', form)!.value.trim();
       const body: Record<string, unknown> = { name, city };
+      if (kind === 'business') body.inn = $<HTMLInputElement>('[name="inn"]', form)?.value.trim() ?? '';
       let bad = false;
       const need = (cond: boolean, f: string, msg: string) => {
         if (cond) {
@@ -272,6 +273,7 @@ function initForms() {
       };
       need(name.length < 2, 'name', 'От 2 символов');
       need(city.length < 2, 'city', 'Укажите город');
+      if (kind === 'business') need(!!body.inn && !/^(\d{10}|\d{12})$/.test(String(body.inn)), 'inn', 'ИНН — 10 или 12 цифр');
       if (kind !== 'basics') {
         body.spheres = spheres();
         need((body.spheres as string[]).length === 0, 'spheres', 'Выберите хотя бы одну');

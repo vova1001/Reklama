@@ -41,7 +41,7 @@ func (r *Profiles) CreatorProfile(ctx context.Context, userID int64) (domain.Cre
 // SaveBusinessProfile — создать или обновить профиль бизнеса.
 func (r *Profiles) SaveBusinessProfile(ctx context.Context, userID int64, p domain.BusinessProfile) (domain.BusinessProfile, error) {
 	out, err := r.q.UpsertBusinessProfile(ctx, store.UpsertBusinessProfileParams{
-		UserID: userID, Name: p.Name, City: p.City, Spheres: nonNil(p.Spheres),
+		UserID: userID, Name: p.Name, City: p.City, Spheres: nonNil(p.Spheres), Inn: p.INN,
 	})
 	return businessOf(out), dbErr("сохранение профиля бизнеса", err)
 }
@@ -61,7 +61,7 @@ func (r *Profiles) CountCategories(ctx context.Context, slugs []string) (int, er
 }
 
 func businessOf(p store.BusinessProfile) domain.BusinessProfile {
-	return domain.BusinessProfile{Name: p.Name, City: p.City, Spheres: nonNil(p.Spheres), UpdatedAt: p.UpdatedAt.Time}
+	return domain.BusinessProfile{Name: p.Name, City: p.City, Spheres: nonNil(p.Spheres), INN: p.Inn, UpdatedAt: p.UpdatedAt.Time}
 }
 
 func creatorOf(p store.CreatorProfile) domain.CreatorProfile {

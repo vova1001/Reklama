@@ -134,6 +134,15 @@ const saveState = t?.status === 'published' ? 'Редактирование' : t
         <div class="sec" data-sec="formats">
           <span class="lbl">Форматы и площадки <span class="hint">· можно несколько</span></span>
           <div data-formats data-input="formats"></div><p class="ferr" data-err="formats"></p>
+          <div class="publication-grid" data-publications></div>
+        </div>
+        <div class="sec field" data-offline-fields hidden={t?.bizType !== 'offline'}>
+          <label class="lbl" for="t-address">Адрес точки <span class="hint">· по желанию</span></label>
+          <input class="inp" id="t-address" name="address" maxlength="300" value={t?.address ?? ''} placeholder="Улица, дом, ориентир" />
+        </div>
+        <div class="sec field" data-online-fields hidden={t?.bizType !== 'online'}>
+          <label class="lbl" for="t-delivery">Доставка товара <span class="hint">· условия и география, по желанию</span></label>
+          <input class="inp" id="t-delivery" name="delivery" maxlength="300" value={t?.delivery ?? ''} placeholder="Например: СДЭК по России, за счёт бизнеса" />
         </div>
       </section>
 
@@ -149,7 +158,11 @@ const saveState = t?.status === 'published' ? 'Редактирование' : t
           <div class="field"><label class="lbl" for="t-response">Дней на ответ автора</label><input class="inp" id="t-response" name="responseDays" type="number" min="0" max="30" value={t?.responseDays || ''} placeholder="3" /></div>
         </div>
         <p class="ferr" data-err="audience"></p><p class="ferr" data-err="requirements"></p>
-        <div class="sec field"><label class="lbl" for="t-requirements">Требования к автору <span class="hint">· по желанию</span></label><textarea class="inp compact-area" id="t-requirements" name="requirements" rows="3" maxlength="5000" placeholder="Опыт, стиль, примеры работ, что нужно прислать в отклике">{t?.requirements ?? ''}</textarea></div>
+        <div class="sec field"><label class="lbl" for="t-requirements">Требования к автору и отклику <span class="hint">· по желанию</span></label><textarea class="inp compact-area" id="t-requirements" name="requirements" rows="3" maxlength="5000" placeholder="Опыт, стиль, примеры работ, что нужно прислать в отклике">{t?.requirements ?? ''}</textarea></div>
+        <div class="sec usage-grid">
+          <div class="field"><span class="lbl" id="rights-label">Права на контент</span><div class="select-box"><button class="select-button" type="button" aria-labelledby="rights-label" aria-haspopup="listbox" aria-expanded="false" aria-controls="rights-options" data-select="usageRights" data-value={t?.usageRights || 'organic'}><span class="select-value">{t?.usageRights === 'ads' ? 'Органика, репосты и реклама' : t?.usageRights === 'reposts' ? 'Органика и репосты' : 'Только органика'}</span><span class="select-chevron" aria-hidden="true"></span></button><input type="hidden" name="usageRights" value={t?.usageRights || 'organic'} /><ul class="cb-list select-list" id="rights-options" role="listbox" hidden data-rights-list></ul></div></div>
+          <div class="field" data-usage-days hidden={t?.usageRights !== 'ads'}><label class="lbl" for="t-usage-days">Дней на использование</label><input class="inp" id="t-usage-days" name="usageDays" type="number" min="0" max="3650" value={t?.usageDays || 90} /></div>
+        </div>
         <div class="sec"><span class="lbl" id="acc-l">Как выбираете автора</span><div class="mseg" role="radiogroup" aria-labelledby="acc-l" data-access>
           <button type="button" role="radio" aria-checked={access === 'open' ? 'true' : 'false'} tabindex={access === 'open' ? 0 : -1} data-v="open">Первый подходящий</button>
           <button type="button" role="radio" aria-checked={access === 'approval' ? 'true' : 'false'} tabindex={access === 'approval' ? 0 : -1} data-v="approval">После моего одобрения</button>

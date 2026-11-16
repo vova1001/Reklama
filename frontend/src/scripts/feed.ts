@@ -2,6 +2,7 @@
 // с поля) и следующие страницы по курсору — без перезагрузки (готовая разметка с сервера: /app/more), сами, когда
 // «Показать ещё» близко к экрану.
 import { $, $$ } from '../lib/client';
+import { CityCombobox } from './editor/city';
 
 const form = $<HTMLFormElement>('[data-filters]');
 if (form) {
@@ -17,6 +18,8 @@ if (form) {
   });
   const city = $<HTMLInputElement>('[name="city"]', form)!;
   const initial = city.value;
+  const cityList = $('[data-city-list]', form);
+  if (cityList) new CityCombobox(city, cityList, go);
   city.addEventListener('change', () => city.value.trim() !== initial && go());
   $('[data-clear-city]', form)?.addEventListener('click', (e) => {
     e.preventDefault();

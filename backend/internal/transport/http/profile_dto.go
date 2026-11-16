@@ -22,6 +22,7 @@ type businessIn struct {
 	Name    string   `json:"name"`
 	City    string   `json:"city"`
 	Spheres []string `json:"spheres"`
+	INN     string   `json:"inn"`
 }
 
 type creatorIn struct {
@@ -53,6 +54,7 @@ type businessDTO struct {
 	Name      string    `json:"name"`
 	City      string    `json:"city"`
 	Spheres   []string  `json:"spheres"`
+	INN       string    `json:"inn"`
 	UpdatedAt time.Time `json:"updatedAt"`
 }
 
@@ -92,7 +94,7 @@ func toBusinessDTO(p *domain.BusinessProfile) *businessDTO {
 	if p == nil {
 		return nil
 	}
-	return &businessDTO{Name: p.Name, City: p.City, Spheres: nonNilStr(p.Spheres), UpdatedAt: p.UpdatedAt.UTC()}
+	return &businessDTO{Name: p.Name, City: p.City, Spheres: nonNilStr(p.Spheres), INN: p.INN, UpdatedAt: p.UpdatedAt.UTC()}
 }
 
 func toCreatorDTO(p *domain.CreatorProfile) *creatorDTO {

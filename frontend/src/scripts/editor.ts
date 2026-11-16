@@ -84,6 +84,13 @@ function restore(form: HTMLFormElement, init: Init, d: Partial<Snap>) {
     const label = $('.select-value', genderButton);
     if (label) label.textContent = gender === 'female' ? 'Преимущественно женская' : gender === 'male' ? 'Преимущественно мужская' : 'Любая';
   }
+  const rights = d.fields?.usageRights;
+  const rightsButton = $('[data-select="usageRights"]', form);
+  if (rights && rightsButton) {
+    rightsButton.dataset.value = rights;
+    const label = $('.select-value', rightsButton);
+    if (label) label.textContent = rights === 'ads' ? 'Органика, репосты и реклама' : rights === 'reposts' ? 'Органика и репосты' : 'Только органика';
+  }
   const nation = $('[data-nationwide]', form);
   if (nation && typeof d.nationwide === 'boolean') nation.setAttribute('aria-checked', String(d.nationwide));
   if (d.formats) init.formats = strs(d.formats).map((f) => f.slice(0, 30)).slice(0, 10);
@@ -173,7 +180,20 @@ async function start(form: HTMLFormElement) {
   const picker = new CategoryPicker($('[data-cats]', form)!, init.categories.common, init.categories.own, init.selected, {
     multi: true, max: 5, maxCustom: 3, label: isTask ? 'Сфера' : 'Темы', addLabel: 'Своя', onChange: changed,
   });
-  const fmts = isTask ? new FormatPicker($('[data-formats]', form)!, init.formats ?? [], { max: 10, custom: false, onChange: changed }) : null;
+  const renderPublications = () => {
+    const box = $('[data-publications]', form);
+    if (!box || !fmts) return;
+    const old = new Map($$<HTMLInputElement>('[data-publication]', box).map((i) => [i.dataset.publication!, i.value]));
+    box.replaceChildren(...fmts.value().map((id) => {
+      const row = h('div', { class: 'publication-row' });
+      const label = h('label', { class: 'lbl', for: `pub-${id}` }, `${formatsTitle([id])}, публикаций`);
+      const input = h('input', { class: 'inp', id: `pub-${id}`, name: `publication.${id}`, type: 'number', min: '1', max: '100', value: old.get(id) ?? '1', 'data-publication': id });
+      row.append(label, input);
+      return row;
+    }));
+  };
+  const fmts = isTask ? new FormatPicker($('[data-formats]', form)!, init.formats ?? [], { max: 10, custom: false, onChange: () => { renderPublications(); changed(); } }) : null;
+  renderPublications();
   const dueBox = $('[data-due]', form);
   const duePick = dueBox ? new DuePicker(dueBox, changed) : null;
   const onBusy = (b: boolean) => {
@@ -271,6 +291,10 @@ async function start(form: HTMLFormElement) {
         item.hidden = !biz || !(item.dataset.kinds ?? '').split(' ').includes(biz);
         if (item.hidden) b.setAttribute('aria-pressed', 'false');
       });
+      const offline = $('[data-offline-fields]', form);
+      if (offline) offline.hidden = biz !== 'offline';
+      const online = $('[data-online-fields]', form);
+      if (online) online.hidden = biz !== 'online';
       const box = $('[data-recommendations]', form);
       if (box) box.hidden = !biz;
       const text = $('[data-rec-text]', form);
@@ -327,6 +351,18 @@ async function start(form: HTMLFormElement) {
     { value: 'female', title: 'Преимущественно женская' },
     { value: 'male', title: 'Преимущественно мужская' },
   ], changed);
+  const rightsSelect = $('[data-select="usageRights"]', form);
+  const rightsList = $('[data-rights-list]', form);
+  const syncUsageDays = () => {
+    const box = $('[data-usage-days]', form);
+    if (box) box.hidden = rightsSelect?.dataset.value !== 'ads';
+  };
+  if (rightsSelect && rightsList) new SelectCombobox(rightsSelect, rightsList, [
+    { value: 'organic', title: 'Только органика' },
+    { value: 'reposts', title: 'Органика и репосты' },
+    { value: 'ads', title: 'Органика, репосты и реклама' },
+  ], () => { syncUsageDays(); changed(); });
+  syncUsageDays();
 
   // срок — пилюли и «+ Свой» с календарём и временем ЧЧ:ММ (scripts/editor/due.ts)
   const dueTime = $<HTMLInputElement>('[name="publishTime"]', form);
@@ -385,6 +421,9 @@ async function start(form: HTMLFormElement) {
           goals: goalValues(), bizType: bizVal(),
           audience: { ageFrom: Number(val('ageFrom')) || 0, ageTo: Number(val('ageTo')) || 0, gender: val('gender') || 'any', language: val('language') },
           minFollowers: parseNum(val('minFollowers')), requirements: val('requirements'), script: val('script'), barter: val('barter'), responseDays: Number(val('responseDays')) || 0,
+          address: bizVal() === 'offline' ? val('address') : '', delivery: bizVal() === 'online' ? val('delivery') : '',
+          publications: (fmts?.value() ?? []).map((format) => ({ format, count: Number(val(`publication.${format}`)) || 1 })),
+          usageRights: val('usageRights') || 'organic', usageDays: val('usageRights') === 'ads' ? Number(val('usageDays')) || 90 : 0,
           publishBy: isoDue(), publishTime: timeOk() ? val('publishTime') : '', blocks: blocks.value(),
           cover: cover.value()[0] ?? '', photos: photos.value(),
           videos: (videos?.value() ?? []).flatMap((v) => (v.media ? [v.media] : [])),
@@ -730,7 +769,7 @@ async function start(form: HTMLFormElement) {
   function renderReview() {
     const box = $('[data-review-summary]', form);
     if (!box) return;
-    const t = payload() as unknown as { title: string; city: string; nationwide: boolean; formats: string[]; goals: GoalState[]; publishBy: string; blocks: Block[]; barter: string };
+    const t = payload() as unknown as { title: string; city: string; nationwide: boolean; formats: string[]; goals: GoalState[]; publishBy: string; blocks: Block[]; barter: string; address: string; delivery: string; publications: { format: string; count: number }[]; usageRights: string; usageDays: number };
     const row = (label: string, value: string) => h('div', { class: 'review-row' }, h('span', {}, label), h('strong', {}, value || '—'));
     const goalsEl = h('div', { class: 'review-goals' });
     t.goals.forEach((g) => {
@@ -751,6 +790,10 @@ async function start(form: HTMLFormElement) {
       row('Форматы', formatsTitle(t.formats)),
       goalsEl,
       row('Лимит бюджета', moneyKopecks(t.goals.reduce((sum, g) => sum + g.rewardKopecks, 0))),
+      ...(t.address ? [row('Адрес', t.address)] : []),
+      ...(t.delivery ? [row('Доставка', t.delivery)] : []),
+      ...(t.publications.length ? [row('Публикации', t.publications.map((p) => `${formatsTitle([p.format])}: ${p.count}`).join(' · '))] : []),
+      row('Права', t.usageRights === 'ads' ? `Органика, репосты и реклама · ${t.usageDays} дней` : t.usageRights === 'reposts' ? 'Органика и репосты' : 'Только органика'),
       row('Срок', t.publishBy ? until(t.publishBy, val('publishTime')) : ''),
     );
   }

@@ -88,6 +88,7 @@ type BusinessProfile struct {
 	Name      string // название компании или бренда
 	City      string
 	Spheres   []string // slug тем из справочника
+	INN       string   // необязательный ИНН, 10 или 12 цифр
 	UpdatedAt time.Time
 }
 
