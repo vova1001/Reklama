@@ -20,13 +20,15 @@ type blockDTO struct {
 }
 
 type taskGoalDTO struct {
-	Goal          string `json:"goal"`
-	Target        int64  `json:"target"`
-	RewardKopecks int64  `json:"rewardKopecks"`
-	PaymentMode   string `json:"paymentMode"`
-	RateKopecks   int64  `json:"rateKopecks"`
-	MinResult     int64  `json:"minResult"`
-	Link          string `json:"link"`
+	Goal               string `json:"goal"`
+	Target             int64  `json:"target"`
+	RewardKopecks      int64  `json:"rewardKopecks"`
+	PaymentMode        string `json:"paymentMode"`
+	RateKopecks        int64  `json:"rateKopecks"`
+	QuotaResult        int64  `json:"quotaResult"`
+	QuotaRewardKopecks int64  `json:"quotaRewardKopecks"`
+	MinResult          int64  `json:"minResult"`
+	Link               string `json:"link"`
 }
 
 type taskAudienceDTO struct {
@@ -275,7 +277,7 @@ func toBlocksDTO(bs []domain.Block) []blockDTO {
 func taskGoalsIn(in []taskGoalDTO) []domain.TaskGoal {
 	out := make([]domain.TaskGoal, 0, len(in))
 	for _, g := range in {
-		out = append(out, domain.TaskGoal{Goal: g.Goal, Target: g.Target, RewardKopecks: g.RewardKopecks, PaymentMode: g.PaymentMode, RateKopecks: g.RateKopecks, MinResult: g.MinResult, Link: g.Link})
+		out = append(out, domain.TaskGoal{Goal: g.Goal, Target: g.Target, RewardKopecks: g.RewardKopecks, PaymentMode: g.PaymentMode, RateKopecks: g.RateKopecks, QuotaResult: g.QuotaResult, QuotaRewardKopecks: g.QuotaRewardKopecks, MinResult: g.MinResult, Link: g.Link})
 	}
 	return out
 }
@@ -283,7 +285,7 @@ func taskGoalsIn(in []taskGoalDTO) []domain.TaskGoal {
 func taskGoalsOut(in []domain.TaskGoal) []taskGoalDTO {
 	out := make([]taskGoalDTO, 0, len(in))
 	for _, g := range in {
-		out = append(out, taskGoalDTO{Goal: g.Goal, Target: g.Target, RewardKopecks: g.RewardKopecks, PaymentMode: domain.PaymentModeOrDefault(g.PaymentMode), RateKopecks: g.RateKopecks, MinResult: g.MinResult, Link: g.Link})
+		out = append(out, taskGoalDTO{Goal: g.Goal, Target: g.Target, RewardKopecks: g.RewardKopecks, PaymentMode: domain.PaymentModeOrDefault(g.PaymentMode), RateKopecks: g.RateKopecks, QuotaResult: g.QuotaResult, QuotaRewardKopecks: g.QuotaRewardKopecks, MinResult: g.MinResult, Link: g.Link})
 	}
 	return out
 }

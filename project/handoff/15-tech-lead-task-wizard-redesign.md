@@ -128,4 +128,12 @@
 - Standalone Playwright 1440/320: live rate/min, invalid/valid publication range, language, review, API persistence, tasks default/filter, фактическая публикация и public. BUSINESS: invalid/valid ИНН, city, сохранение, cover/logo crop, контакты/ссылки, reload, embedded preview, business→creator switch. Screenshots `owner-*` и `business-*` / `creator-profile-*` в `.wizard-check`; JS-ошибок и overflow нет. Тестовые наборы не запускались.
 - Production build HEAD+task — успешен. Первая попытка остановилась на Docker Desktop export (`parent snapshot … does not exist`); повтор стандартной команды без очистки завершился успешно.
 
+## Карточки заданий и fixed + quota
+- `TaskItem` и `TaskTile` полностью переписаны: фиксированная обложка 16:9 или нейтральная заглушка, title, компактный badge статуса у own, пять metadata-полей с `Не указано`, действия снизу, mobile stacked. Hover-sheet, иконки metadata и цветные точки статусов удалены. Пустые статусные секции скрываются в «Все», включая состояние после удаления.
+- Основная цель теперь fixed `target + rewardKopecks`. Отдельный switch «Выплата за частичный результат» включает `quotaResult + quotaRewardKopecks + minResult`; live-пример и `Максимум …` не смешиваются с прежним UI. Старые proportional-цели открываются как quota за 1 000, старое `rateKopecks` сохраняется в legacy-поле; API поддерживает оба представления. Расчёты — BigInt/int64, основной budget является cap.
+- Общие goal/form/rate grids используют строки 36px label → 44px control → 18px error, без sibling-сдвига; mobile labels и switch переносятся без overflow.
+- Реального applications/offers flow в backend/API/frontend нет. Поэтому принятие/отказ не имитировались. Public показывает `Дополнительная выплата предлагается автору`; принятие условий появится только после появления откликов.
+- Standalone 1440/320: fixed+quota live, API `paymentMode=fixed`, `quotaResult=10000`, `quotaRewardKopecks=100000`, `minResult=500`, review, фактическая публикация/public, TaskItem/TaskTile, default tasks без пустых секций и фильтр. Screenshots `owner-{rate,review,tasks,tile,public}-{1440,320}.png` осмотрены. Тестовые наборы не запускались.
+- Production build изолированного HEAD+task — успешен.
+
 ## Приёмка (менеджер)

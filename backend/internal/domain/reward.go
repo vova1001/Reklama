@@ -23,6 +23,16 @@ func RewardForResult(g TaskGoal, actual int64) int64 {
 	if actual <= 0 || g.Target <= 0 || g.RewardKopecks <= 0 || actual < g.MinResult {
 		return 0
 	}
+	if g.QuotaResult > 0 && g.QuotaRewardKopecks > 0 {
+		if actual >= g.Target {
+			return g.RewardKopecks
+		}
+		reward := actual / g.QuotaResult * g.QuotaRewardKopecks
+		if reward > g.RewardKopecks {
+			reward = g.RewardKopecks
+		}
+		return reward
+	}
 	if PaymentModeOrDefault(g.PaymentMode) == PaymentFixed {
 		if actual < g.Target {
 			return 0

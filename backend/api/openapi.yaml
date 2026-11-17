@@ -2072,7 +2072,9 @@ components:
         target: { type: integer, format: int64, minimum: 0, maximum: 1000000000 }
         rewardKopecks: { type: integer, format: int64, minimum: 0, maximum: 100000000, description: "Фиксированная оплата или лимит бюджета при пропорциональной" }
         paymentMode: { type: string, enum: [fixed, proportional], default: fixed, description: "fixed — при достижении target; proportional — по ставке за 1000 результатов, не выше бюджета" }
-        rateKopecks: { type: integer, format: int64, minimum: 0, maximum: 100000000, description: "Ставка за 1000 результатов; 0 — вычислить из budget/target для старых целей" }
+        rateKopecks: { type: integer, format: int64, minimum: 0, maximum: 100000000, description: "Старая ставка за 1000 результатов; сохраняется для совместимости" }
+        quotaResult: { type: integer, format: int64, minimum: 0, maximum: 1000000000, description: "Размер частичного результата для дополнительной выплаты" }
+        quotaRewardKopecks: { type: integer, format: int64, minimum: 0, maximum: 100000000, description: "Выплата за quotaResult до достижения основной цели" }
         minResult: { type: integer, format: int64, minimum: 0, maximum: 1000000000, description: "Минимальный результат для оплаты; 0 — без минимума" }
         link: { type: string, maxLength: 200 }
     TaskAudience:

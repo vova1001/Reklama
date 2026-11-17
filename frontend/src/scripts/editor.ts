@@ -10,7 +10,7 @@ import { CARD_RULES, CONTENT_LANGUAGES, DUE_RANGE, GOALS, PLATFORM_TITLE, TASK_R
 import { CityCombobox } from './editor/city';
 import { SelectCombobox } from './editor/select';
 import { formatsTitle, goal, until } from '../lib/format';
-import { moneyKopecks, rewardExample, rewardTerms } from '../lib/reward';
+import { hasQuota, moneyKopecks, rewardExample, rewardTerms } from '../lib/reward';
 import { BlocksEditor, type Block } from './editor/blocks';
 import { CategoryPicker } from './editor/category';
 import { FormatPicker } from './editor/formats';
@@ -26,7 +26,7 @@ type Card = components['schemas']['Card'];
 type Item = components['schemas']['CategoryItem'];
 type ApiError = components['schemas']['Error']['error'];
 
-interface GoalState { goal: string; target: number; rewardKopecks: number; paymentMode: 'fixed' | 'proportional'; rateKopecks: number; minResult: number; link: string }
+interface GoalState { goal: string; target: number; rewardKopecks: number; paymentMode: 'fixed' | 'proportional'; rateKopecks: number; quotaResult: number; quotaRewardKopecks: number; minResult: number; link: string }
 interface PublicationState { format: string; count: number; minCount: number; maxCount: number }
 interface Init {
   kind: 'task' | 'card';
@@ -261,23 +261,25 @@ async function start(form: HTMLFormElement) {
   const bizBtns = $$<HTMLButtonElement>('[data-biz] [role="radio"]', form);
   const goalChecks = $$<HTMLButtonElement>('[data-goal-check]', form);
   const selectedGoals = () => goalChecks.filter((b) => b.getAttribute('aria-pressed') === 'true' && !b.closest<HTMLElement>('[data-goal-item]')!.hidden).map((b) => b.value);
-  const modeVal = (id: string) => $<HTMLButtonElement>(`[data-payment-mode="${id}"] [aria-checked="true"]`, form)?.dataset.v === 'proportional' ? 'proportional' as const : 'fixed' as const;
+  const modeVal = (_id: string) => 'fixed' as const;
+  const quotaOn = (id: string) => $<HTMLButtonElement>(`[data-quota="${id}"]`, form)?.getAttribute('aria-checked') === 'true';
   const goalValues = (): GoalState[] => selectedGoals().map((id) => ({
-    goal: id, target: parseNum(val(`target.${id}`)), rewardKopecks: parseNum(val(`reward.${id}`)) * 100, paymentMode: modeVal(id), rateKopecks: parseNum(val(`rate.${id}`)) * 100, minResult: parseNum(val(`minResult.${id}`)), link: val(`link.${id}`),
+    goal: id, target: parseNum(val(`target.${id}`)), rewardKopecks: parseNum(val(`reward.${id}`)) * 100, paymentMode: modeVal(id), rateKopecks: parseNum(val(`legacyRate.${id}`)) * 100,
+    quotaResult: quotaOn(id) ? parseNum(val(`quotaResult.${id}`)) : 0, quotaRewardKopecks: quotaOn(id) ? parseNum(val(`quotaReward.${id}`)) * 100 : 0,
+    minResult: quotaOn(id) ? parseNum(val(`minResult.${id}`)) : 0, link: val(`link.${id}`),
   }));
   const applyPayment = () => {
     for (const id of selectedGoals().filter((x) => x !== 'barter')) {
-      const proportional = modeVal(id) === 'proportional';
-      const rateFields = $(`[data-rate-fields="${id}"]`, form);
-      if (rateFields) rateFields.hidden = !proportional;
+      const quotaFields = $(`[data-quota-fields="${id}"]`, form);
+      if (quotaFields) quotaFields.hidden = !quotaOn(id);
       const label = $(`[data-goal-item="${id}"] [data-reward-label]`, form);
       if (label) label.textContent = 'Бюджет';
       const g = goalValues().find((x) => x.goal === id)!;
       const complete = g.target > 0 && g.rewardKopecks > 0;
       const calc = $(`[data-reward-calc="${id}"]`, form);
-      if (calc) calc.textContent = proportional ? rewardExample(g) : complete ? `${moneyKopecks(g.rewardKopecks)} при достижении цели` : 'Заполните цель и бюджет.';
+      if (calc) calc.textContent = hasQuota(g) ? rewardExample(g) : complete ? `${moneyKopecks(g.rewardKopecks)} при достижении цели` : 'Заполните цель и бюджет.';
       const summary = $(`[data-reward-summary="${id}"]`, form);
-      if (summary) summary.textContent = complete ? proportional ? `Бюджет до ${moneyKopecks(g.rewardKopecks)}` : '' : '';
+      if (summary) summary.textContent = complete && hasQuota(g) ? `Максимум ${moneyKopecks(g.rewardKopecks)}` : '';
     }
     const total = goalValues().reduce((sum, g) => sum + g.rewardKopecks, 0);
     const out = $('[data-total-budget]', form);
@@ -350,9 +352,8 @@ async function start(form: HTMLFormElement) {
       syncRecommendation(true);
       changed();
     });
-    $$<HTMLButtonElement>('[data-payment-mode] [role="radio"]', form).forEach((b) => b.addEventListener('click', () => {
-      const group = b.closest('[data-payment-mode]')!;
-      $$<HTMLButtonElement>('[role="radio"]', group).forEach((x) => x.setAttribute('aria-checked', String(x === b)));
+    $$<HTMLButtonElement>('[data-quota]', form).forEach((b) => b.addEventListener('click', () => {
+      b.setAttribute('aria-checked', String(b.getAttribute('aria-checked') !== 'true'));
       applyPayment();
       changed();
     }));
@@ -508,6 +509,7 @@ async function start(form: HTMLFormElement) {
         }
         if (!g.target) out.set(`goal.${g.goal}`, r('minViews'));
         if (g.rewardKopecks < 10000) out.set(`reward.${g.goal}`, r('reward'));
+        if (quotaOn(g.goal) && (!g.quotaResult || !g.quotaRewardKopecks || g.minResult > g.target)) out.set('goals', 'Заполните результат и выплату за частичный результат');
         if (g.goal === 'clicks' && !g.link) out.set('link.clicks', 'Укажите ссылку или промокод');
       }
       const ageFrom = p.audience as { ageFrom: number; ageTo: number };
@@ -820,7 +822,7 @@ async function start(form: HTMLFormElement) {
       }
       const proportional = g.paymentMode === 'proportional';
       const summary = goal(g.target, g.goal);
-      const detail = proportional ? `${rewardExample(g)} · Бюджет до ${moneyKopecks(g.rewardKopecks)}` : `${moneyKopecks(g.rewardKopecks)} при достижении цели`;
+      const detail = hasQuota(g) ? `${moneyKopecks(g.rewardKopecks)} при достижении цели · ${rewardExample(g)} · Максимум ${moneyKopecks(g.rewardKopecks)}` : proportional ? `${rewardExample(g)} · Бюджет до ${moneyKopecks(g.rewardKopecks)}` : `${moneyKopecks(g.rewardKopecks)} при достижении цели`;
       goalsEl.append(h('div', { class: 'review-goal' }, h('div', { class: 'review-goal-top' }, h('strong', {}, title), h('span', {}, summary)), h('small', {}, detail)));
     });
     box.replaceChildren(

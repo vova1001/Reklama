@@ -8,14 +8,22 @@ const filt = $('[data-filter]');
 
 if (filt && root) {
   let selected = '';
+  const applyFilter = () => {
+    $$<HTMLButtonElement>('button', filt).forEach((x) => x.setAttribute('aria-pressed', String(x.dataset.f === selected)));
+    $$<HTMLElement>('[data-sec-list]', root).forEach((s) => {
+      const empty = !s.querySelector('.it');
+      s.hidden = !!selected ? s.dataset.secList !== selected : empty;
+    });
+  };
   filt.addEventListener('click', (e) => {
     const b = (e.target as HTMLElement).closest<HTMLButtonElement>('button[data-f]');
     if (!b) return;
     const f = b.dataset.f!;
     selected = selected === f ? '' : f;
-    $$<HTMLButtonElement>('button', filt).forEach((x) => x.setAttribute('aria-pressed', String(x.dataset.f === selected)));
-    $$<HTMLElement>('[data-sec-list]', root).forEach((s) => (s.hidden = !!selected && s.dataset.secList !== selected));
+    applyFilter();
   });
+  root.addEventListener('statuschange', applyFilter);
+  applyFilter();
 }
 
 if (root) {
@@ -51,6 +59,7 @@ if (root) {
         none.textContent = 'Пока пусто';
         sec.append(none);
       }
+      root.dispatchEvent(new Event('statuschange'));
       toast('Удалено');
       return;
     }

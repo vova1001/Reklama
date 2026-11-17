@@ -1981,9 +1981,19 @@ export interface components {
             paymentMode: "fixed" | "proportional";
             /**
              * Format: int64
-             * @description Ставка за 1000 результатов; 0 — вычислить из budget/target для старых целей
+             * @description Старая ставка за 1000 результатов; сохраняется для совместимости
              */
             rateKopecks?: number;
+            /**
+             * Format: int64
+             * @description Размер частичного результата для дополнительной выплаты
+             */
+            quotaResult?: number;
+            /**
+             * Format: int64
+             * @description Выплата за quotaResult до достижения основной цели
+             */
+            quotaRewardKopecks?: number;
             /**
              * Format: int64
              * @description Минимальный результат для оплаты; 0 — без минимума

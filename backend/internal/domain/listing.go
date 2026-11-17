@@ -134,13 +134,15 @@ func ValidGoal(g string) bool {
 }
 
 type TaskGoal struct {
-	Goal          string `json:"goal"`
-	Target        int64  `json:"target"`
-	RewardKopecks int64  `json:"rewardKopecks"`
-	PaymentMode   string `json:"paymentMode"`
-	RateKopecks   int64  `json:"rateKopecks,omitempty"`
-	MinResult     int64  `json:"minResult,omitempty"`
-	Link          string `json:"link"`
+	Goal               string `json:"goal"`
+	Target             int64  `json:"target"`
+	RewardKopecks      int64  `json:"rewardKopecks"`
+	PaymentMode        string `json:"paymentMode"`
+	RateKopecks        int64  `json:"rateKopecks,omitempty"`
+	QuotaResult        int64  `json:"quotaResult,omitempty"`
+	QuotaRewardKopecks int64  `json:"quotaRewardKopecks,omitempty"`
+	MinResult          int64  `json:"minResult,omitempty"`
+	Link               string `json:"link"`
 }
 
 type TaskAudience struct {

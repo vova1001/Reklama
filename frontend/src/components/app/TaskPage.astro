@@ -2,7 +2,7 @@
 import Icon from '../Icon.astro';
 import TaskBody from './TaskBody.astro';
 import { formatsTitle, goal, until } from '../../lib/format';
-import { rewardTerms } from '../../lib/reward';
+import { hasQuota, rewardTerms } from '../../lib/reward';
 import { GOALS } from '../../content/app';
 import type { Task } from '../../lib/auth';
 interface Props { task: Task }
@@ -24,6 +24,7 @@ if (t.requirements) blocks.push({ kind: 'text', title: 'Требования к 
       return <>
         {g.goal === 'barter' ? <div><dt><Icon name="gift" size={18} />Бартер</dt><dd>{t.barter || 'Условия в описании'}</dd></div> : <>
           {g.rewardKopecks > 0 && <div><dt><Icon name="wallet" size={18} />{title}: оплата</dt><dd>{rewardTerms(g)}</dd></div>}
+          {hasQuota(g) && <div><dt><Icon name="wallet" size={18} />{title}: частичный результат</dt><dd>Дополнительная выплата предлагается автору</dd></div>}
           {goal(g.target, g.goal) && <div><dt><Icon name="eye" size={18} />{title}: условие</dt><dd>{goal(g.target, g.goal)}</dd></div>}
         </>}
         {g.link && <div><dt><Icon name="link" size={18} />{title}: ссылка или промокод</dt><dd>{g.link.startsWith('http') ? <a href={g.link} rel="nofollow noopener noreferrer ugc" target="_blank">{g.link.replace(/^https?:\/\//, '')}</a> : g.link}</dd></div>}

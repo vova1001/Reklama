@@ -547,7 +547,7 @@ func (s *Tasks) shape(ctx context.Context, userID, id int64, in TaskInput) (doma
 			ve.add("goals", "Выберите разные цели из списка")
 		}
 		seenGoals[g.Goal] = true
-		if g.Target < 0 || g.Target > 1e9 || g.RewardKopecks < 0 || g.RewardKopecks > maxRewardKop || g.RateKopecks < 0 || g.RateKopecks > maxRewardKop || g.MinResult < 0 || g.MinResult > 1e9 {
+		if g.Target < 0 || g.Target > 1e9 || g.RewardKopecks < 0 || g.RewardKopecks > maxRewardKop || g.RateKopecks < 0 || g.RateKopecks > maxRewardKop || g.QuotaResult < 0 || g.QuotaResult > 1e9 || g.QuotaRewardKopecks < 0 || g.QuotaRewardKopecks > maxRewardKop || g.MinResult < 0 || g.MinResult > 1e9 {
 			ve.add("goals", "Проверьте числа в условиях целей")
 		}
 		if !domain.ValidPaymentMode(g.PaymentMode) {
@@ -649,6 +649,9 @@ func (s *Tasks) complete(t domain.Task) error {
 			}
 			if g.RewardKopecks < minRewardKop {
 				ve.add("reward."+g.Goal, "Оплата — от 100 ₽")
+			}
+			if (g.QuotaResult <= 0) != (g.QuotaRewardKopecks <= 0) || (g.QuotaResult > 0 && g.MinResult > g.Target) {
+				ve.add("goals", "Проверьте результат и оплату за частичный результат")
 			}
 			if g.Goal == domain.GoalClicks && g.Link == "" {
 				ve.add("link."+g.Goal, "Укажите ссылку или промокод")

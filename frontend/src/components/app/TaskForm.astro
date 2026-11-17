@@ -90,18 +90,20 @@ const saveState = t?.status === 'published' ? 'Редактирование' : t
                       <div class="sfx"><input class="inp" id={`t-reward-${g.id}`} name={`reward.${g.id}`} inputmode="numeric" maxlength="9" value={savedGoal?.rewardKopecks ? Math.round(savedGoal.rewardKopecks / 100) : ''} placeholder="3 000" data-num /><span class="sfx-t">₽</span></div>
                       <p class="ferr" data-err={`reward.${g.id}`}></p>
                     </div>
-                    <div class="payment-mode" role="radiogroup" aria-label={`Способ оплаты: ${g.title}`} data-payment-mode={g.id}>
-                      <button type="button" role="radio" aria-checked={(savedGoal?.paymentMode ?? 'fixed') === 'fixed' ? 'true' : 'false'} data-v="fixed">За цель</button>
-                      <button type="button" role="radio" aria-checked={savedGoal?.paymentMode === 'proportional' ? 'true' : 'false'} data-v="proportional">По ставке</button>
-                    </div>
-                    <div class="rate-fields" data-rate-fields={g.id} hidden={savedGoal?.paymentMode !== 'proportional'}>
+                    <input type="hidden" name={`legacyRate.${g.id}`} value={savedGoal?.rateKopecks ? Math.round(savedGoal.rateKopecks / 100) : ''} />
+                    <button class="sw quota-toggle" type="button" role="switch" aria-checked={!!savedGoal?.quotaRewardKopecks || savedGoal?.paymentMode === 'proportional' ? 'true' : 'false'} data-quota={g.id}><span class="sw-k" aria-hidden="true"></span>Выплата за частичный результат</button>
+                    <div class="rate-fields quota-fields" data-quota-fields={g.id} hidden={!savedGoal?.quotaRewardKopecks && savedGoal?.paymentMode !== 'proportional'}>
                       <div class="field">
-                        <label class="lbl" for={`t-rate-${g.id}`}>Ставка за 1 000, ₽</label>
-                        <input class="inp" id={`t-rate-${g.id}`} name={`rate.${g.id}`} inputmode="numeric" maxlength="9" value={savedGoal?.rateKopecks ? Math.round(savedGoal.rateKopecks / 100) : ''} placeholder="100" data-num />
+                        <label class="lbl" for={`t-quota-result-${g.id}`}>За сколько результата, {g.short}</label>
+                        <input class="inp" id={`t-quota-result-${g.id}`} name={`quotaResult.${g.id}`} inputmode="numeric" maxlength="13" value={savedGoal?.quotaResult ?? (savedGoal?.paymentMode === 'proportional' ? 1000 : '')} placeholder="10 000" data-num />
                       </div>
                       <div class="field">
-                        <label class="lbl" for={`t-min-result-${g.id}`}>Оплата от, {g.short}</label>
-                        <input class="inp" id={`t-min-result-${g.id}`} name={`minResult.${g.id}`} inputmode="numeric" maxlength="13" value={savedGoal?.minResult || ''} placeholder="500" data-num />
+                        <label class="lbl" for={`t-quota-reward-${g.id}`}>Сколько платить, ₽</label>
+                        <input class="inp" id={`t-quota-reward-${g.id}`} name={`quotaReward.${g.id}`} inputmode="numeric" maxlength="9" value={savedGoal?.quotaRewardKopecks ? Math.round(savedGoal.quotaRewardKopecks / 100) : savedGoal?.rateKopecks ? Math.round(savedGoal.rateKopecks / 100) : ''} placeholder="1 000" data-num />
+                      </div>
+                      <div class="field">
+                        <label class="lbl" for={`t-min-result-${g.id}`}>Оплата от, {g.short} <span class="hint">· необязательно</span></label>
+                        <input class="inp" id={`t-min-result-${g.id}`} name={`minResult.${g.id}`} inputmode="numeric" maxlength="13" value={savedGoal?.minResult || ''} placeholder="5 000" data-num />
                       </div>
                     </div>
                     <p class="reward-calc" data-reward-calc={g.id} aria-live="polite"></p>
